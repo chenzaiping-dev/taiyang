@@ -2,6 +2,8 @@ from decimal import Decimal, ROUND_HALF_UP
 from sqlalchemy import select, case, func, or_
 from app.extensions import db
 from app.generated.models.warehouses import Warehouse
+from app.generated.models.employees import Employee
+from app.generated.models.process_orders import ProcessOrder
 
 from app.generated.models.finished_goods_batches import FinishedGoodsBatch
 from app.generated.models.finished_goods_documents import FinishedGoodsDocument
@@ -9,6 +11,57 @@ from app.generated.models.finished_goods_document_lines import FinishedGoodsDocu
 from app.generated.models.finished_goods_inventory import FinishedGoodsInventory
 from app.generated.models.finished_goods_transactions import FinishedGoodsTransaction
 
+
+def _infer_source_entry(row: dict) -> str:
+    doc_no = row.get("document_no") or ""
+    doc_type = row.get("document_type") or ""
+    remark = row.get("document_remark") or ""
+
+    if "[PROCESS_ORDER_RECEIVE]" in remark:
+        return "工艺单入库"
+    if doc_type == "PRODUCTION_IN":
+        return "成品入库页"
+    if doc_type == "CUSTOMER_RETURN":
+        return "成品入库页-退货"
+    if doc_type == "ADJUSTMENT":
+        return "成品入库页-盘点"
+    if doc_type == "OUTBOUND":
+        return "成品出库页"
+    if doc_type == "TRANSFER":
+        return "成品调拨"
+    return "未知入口"
+
+def _infer_source_entry_old(row: dict) -> str:
+    """
+    推断这张成品流水是从哪个入口生成的：
+    - document_no 前缀 + 批次是否有 process_order 决定
+    """
+    doc_no = row.get("document_no") or ""
+    doc_type = row.get("document_type") or ""
+    batch_has_process = row.get("process_order_id") is not None
+
+    if doc_type == "PRODUCTION_IN":
+        # 工艺单入库：document_no 约定为 FG-IN-<工艺单号>，且批次带 process_order_id
+        if batch_has_process and doc_no.startswith("FG-IN-"):
+            # 进一步判断是否"工艺单页面直接入库"
+            # 工艺单入库时，document_no 是 FG-IN-POxxx；而成品入库页面是 FG-IN<时间戳>
+            if doc_no.startswith("FG-IN-PO") or doc_no.startswith("FG-IN-"):
+                # 通过工艺单号判断：若后缀等于工艺单号，则为工艺单入库
+                po_no = row.get("process_order_no")
+                if po_no and doc_no.endswith(po_no):
+                    return "工艺单入库"
+        # 成品入库页面（手工录入）
+        if doc_no.startswith("FG-IN"):
+            return "成品入库页"
+    if doc_type == "CUSTOMER_RETURN":
+        return "成品入库页-退货"
+    if doc_type == "ADJUSTMENT":
+        return "成品入库页-盘点"
+    if doc_type == "OUTBOUND":
+        return "成品出库页"
+    if doc_type == "TRANSFER":
+        return "成品调拨"
+    return "未知入口"
 
 class FinishedGoodsQueryService:
 
@@ -57,6 +110,8 @@ class FinishedGoodsQueryService:
     def list_transactions(warehouse_id=None, batch_id=None, tx_type=None,
                           document_no=None, date_from=None, date_to=None,
                           page=1, page_size=50):
+        creator = db.aliased(Employee)   # ⭐ 单据制单人
+
         stmt = (
             select(
                 FinishedGoodsTransaction.id,
@@ -70,20 +125,34 @@ class FinishedGoodsQueryService:
                 FinishedGoodsBatch.batch_no,
                 FinishedGoodsBatch.product_name,
                 FinishedGoodsBatch.unit,
+
+                # ⭐ 批次来源工艺单
+                FinishedGoodsBatch.process_order_id,
+                ProcessOrder.process_order_no,
+
+                # ⭐ 单据（含制单人）
                 FinishedGoodsDocument.id.label("document_id"),
                 FinishedGoodsDocument.document_no,
                 FinishedGoodsDocument.document_type,
                 FinishedGoodsDocument.status.label("document_status"),
                 FinishedGoodsDocument.remark.label("document_remark"),
+                creator.real_name.label("creator_name"),
             )
             .join(Warehouse, Warehouse.id == FinishedGoodsTransaction.warehouse_id)
             .join(FinishedGoodsBatch,
                   FinishedGoodsBatch.id == FinishedGoodsTransaction.batch_id)
             .join(FinishedGoodsDocument,
                   FinishedGoodsDocument.id == FinishedGoodsTransaction.document_id)
+            .join(ProcessOrder,
+                  ProcessOrder.id == FinishedGoodsBatch.process_order_id,
+                  isouter=True)                     # 批次可能非工艺单来源
+            .join(creator,
+                  creator.id == FinishedGoodsDocument.created_by,
+                  isouter=True)                     # 制单人为空允许
             .order_by(FinishedGoodsTransaction.transaction_time.desc(),
                       FinishedGoodsTransaction.id.desc())
         )
+
         if warehouse_id:
             stmt = stmt.where(FinishedGoodsTransaction.warehouse_id == warehouse_id)
         if batch_id:
@@ -101,7 +170,13 @@ class FinishedGoodsQueryService:
             select(func.count()).select_from(stmt.subquery())
         ).scalar() or 0
         stmt = stmt.offset((page - 1) * page_size).limit(page_size)
-        return [dict(r) for r in db.session.execute(stmt).mappings().all()], total
+
+        rows = [dict(r) for r in db.session.execute(stmt).mappings().all()]
+
+        # ⭐ 在 Python 里推断"操作入口"
+        for r in rows:
+            r["source_entry"] = _infer_source_entry(r)
+        return rows, total
 
     @staticmethod
     def list_available_batches(warehouse_id):

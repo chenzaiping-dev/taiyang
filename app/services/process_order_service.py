@@ -614,7 +614,7 @@ class ProcessOrderService:
                 document_no=f"FG-IN-{order.process_order_no}",  # 幂等单号
                 document_time=now_beijing_naive(),
                 created_by=operator_id,
-                remark=remark or f"工艺单成品入库 - {order.process_order_no}",
+                remark=f"[PROCESS_ORDER_RECEIVE] 工艺单入库 {order.process_order_no}",
                 auto_confirm=True,
                 commit=False,          # ⭐ 交给外层提交
             )

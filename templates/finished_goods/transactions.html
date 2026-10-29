@@ -30,6 +30,7 @@
 </form>
 
 <table style="width:100%;border-collapse:collapse;font-size:12px;">
+  <!-- 表头 -->
   <thead>
     <tr style="background:#f5f5f5;">
       <th style="width:60px;">ID</th>
@@ -42,6 +43,10 @@
       <th style="width:130px;text-align:right;">数量变化</th>
       <th>单据号</th>
       <th>单据类型</th>
+      <!-- ⭐ 新增三列 -->
+      <th style="width:150px;">来源工艺单</th>
+      <th style="width:140px;">操作入口</th>
+      <th style="width:100px;">操作人</th>
     </tr>
   </thead>
   <tbody>
@@ -67,10 +72,26 @@
         <td>{{ {'PRODUCTION_IN':'生产入库','OUTBOUND':'出库',
                 'TRANSFER':'调拨','CUSTOMER_RETURN':'客户退货',
                 'ADJUSTMENT':'库存调整'}.get(r.document_type, r.document_type) }}</td>
+        <td>
+          {% if r.process_order_no %}
+            <a href="{{ url_for('process_order.detail_page', order_id=r.process_order_id) }}"
+              title="查看工艺单">
+              {{ r.process_order_no }}
+            </a>
+          {% else %}
+            <span style="color:#999;">-</span>
+          {% endif %}
+        </td>
+        <td>
+          <span class="entry-badge entry-{{ r.source_entry | replace(' ', '_') | lower }}">
+            {{ r.source_entry }}
+          </span>
+        </td>
+        <td>{{ r.creator_name or "-" }}</td>
       </tr>
       {% endfor %}
     {% else %}
-      <tr><td colspan="10" style="text-align:center;color:#999;padding:24px;">暂无记录</td></tr>
+      <tr><td colspan="13" style="text-align:center;color:#999;padding:24px;">暂无记录</td></tr>
     {% endif %}
   </tbody>
 </table>
@@ -93,5 +114,16 @@
   .tx-adjustment    { background:#e3f2fd;color:#1565c0; }
   .tx-transfer_in   { background:#f3e5f5;color:#6a1b9a; }
   .tx-transfer_out  { background:#fce4ec;color:#ad1457; }
+
+  .entry-badge {
+    display: inline-block; padding: 1px 8px; border-radius: 10px;
+    font-size: 11px; white-space: nowrap;
+  }
+  .entry-badge.entry-工艺单入库      { background:#e8f5e9;color:#2e7d32; }
+  .entry-badge.entry-成品入库页      { background:#e3f2fd;color:#1565c0; }
+  .entry-badge.entry-成品入库页-退货 { background:#ede7f6;color:#4527a0; }
+  .entry-badge.entry-成品入库页-盘点 { background:#fff3e0;color:#ef6c00; }
+  .entry-badge.entry-成品出库页      { background:#fdecea;color:#c62828; }
+  .entry-badge.entry-未知入口        { background:#eee;color:#666; }
 </style>
 {% endblock %}
