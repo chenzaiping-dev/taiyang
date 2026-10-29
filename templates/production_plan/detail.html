@@ -1,0 +1,176 @@
+{% extends "inventory/base.html" %}
+{% block title %}生产计划详情{% endblock %}
+
+{% block content %}
+<h2>
+  生产计划详情
+  <span style="color:#888;font-size:14px;">#{{ plan.plan_no }}</span>
+  <a class="btn" style="float:right;"
+     href="{{ url_for('production_plan.edit_page', plan_id=plan.id) }}">
+    编辑
+  </a>
+  <a class="btn" style="float:right;margin-right:8px;"
+     href="{{ url_for('production_plan.list_page') }}">返回列表</a>
+</h2>
+
+<fieldset>
+  <legend>基本信息</legend>
+  <div class="form-row"><label>ID：</label>{{ plan.id }}</div>
+  <div class="form-row"><label>生产计划单号：</label>{{ plan.plan_no }}</div>
+  <div class="form-row"><label>业绩单：</label>
+    {% if performance %}
+      <a href="{{ url_for('production_plan.list_page',
+           performance_id=performance.id) }}">
+        {{ performance.performance_no }} - {{ performance.company_name }}
+        / {{ performance.product_name }}
+      </a>
+    {% else %}
+      #{{ plan.performance_id }}
+    {% endif %}
+  </div>
+  <div class="form-row"><label>总生产数量：</label>{{ plan.total_quantity }}</div>
+  <div class="form-row"><label>计划生产数量：</label>{{ plan.process_quantity }}</div>
+  <div class="form-row"><label>锁定总数量：</label>
+    <strong>{{ locked_total }}</strong>
+  </div>
+  <div class="form-row"><label>计划单状态：</label>
+    <span class="status-badge status-{{ plan.status|lower }}">
+      {{ status_labels.get(plan.status, plan.status) }}
+    </span>
+  </div>
+  <div class="form-row"><label>工艺单状态：</label>
+    {{ {'NOT_REQUIRED':'无需生成','PLANNED':'已计划','CREATED':'已生成'}
+       .get(plan.process_order_status, plan.process_order_status) }}
+  </div>
+  <div class="form-row"><label>创建人：</label>
+    {{ creator.real_name if creator else "-" }}
+  </div>
+  <div class="form-row"><label>创建时间：</label>
+    {{ plan.created_at.strftime("%Y-%m-%d %H:%M:%S") if plan.created_at else "-" }}
+  </div>
+  <div class="form-row"><label>备注：</label>{{ plan.remark or "-" }}</div>
+</fieldset>
+
+<fieldset>
+  <legend>锁定数量（{{ reservations|length }} 条）</legend>
+  <table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead>
+      <tr style="background:#f5f5f5;">
+        <th style="width:50px;">#</th>
+        <th>预留编号</th>
+        <th>仓库</th>
+        <th>批次号</th>
+        <th>产品名称</th>
+        <th>规格</th>
+        <th style="width:60px;">单位</th>
+        <th style="width:120px;text-align:right;">原始锁定</th>
+        <th style="width:120px;text-align:right;">剩余锁定</th>
+        <th style="width:90px;">状态</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if reservations %}
+        {% for r in reservations %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td>{{ r.reservation_no }}</td>
+          <td>{{ r.warehouse_code }} - {{ r.warehouse_name }}</td>
+          <td>{{ r.batch_no }}</td>
+          <td>{{ r.product_name }}</td>
+          <td>{{ r.product_specification or "-" }}</td>
+          <td>{{ r.unit or "" }}</td>
+          <td style="text-align:right;">{{ r.reserved_quantity }}</td>
+          <td style="text-align:right;font-weight:600;">
+            {{ r.remaining_quantity }}
+          </td>
+          <td>
+            <span class="res-badge res-{{ r.status|lower }}">
+              {{ res_status_labels.get(r.status, r.status) }}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td colspan="10" style="text-align:center;color:#999;padding:16px;">
+          暂无锁定记录
+        </td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</fieldset>
+
+<fieldset>
+  <legend>关联工艺单（{{ process_orders|length }} 条）</legend>
+  <table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead>
+      <tr style="background:#f5f5f5;">
+        <th style="width:50px;">#</th>
+        <th>工艺单号</th>
+        <th>加工厂</th>
+        <th>生产批号</th>
+        <th>产品名称</th>
+        <th style="width:60px;">单位</th>
+        <th style="width:120px;text-align:right;">计划生产数量</th>
+        <th style="width:120px;text-align:right;">实际生产数量</th>
+        <th style="width:120px;text-align:right;">已完工数量</th>
+        <th style="width:100px;">状态</th>
+        <th style="width:140px;">下单时间</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if process_orders %}
+        {% for po in process_orders %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td>
+            <a href="{{ url_for('process_order.detail_page',
+                 order_id=po.process_order_id) }}">
+              {{ po.process_order_no }}
+            </a>
+          </td>
+          <td>{{ po.factory_name or "-" }}</td>
+          <td>{{ po.batch_no }}</td>
+          <td>{{ po.product_name }}</td>
+          <td>{{ po.unit or "" }}</td>
+          <td style="text-align:right;">{{ po.planned_quantity }}</td>
+          <td style="text-align:right;">{{ po.quantity }}</td>
+          <td style="text-align:right;">{{ po.completed_quantity }}</td>
+          <td>
+            <span class="po-badge po-{{ po.po_status|lower }}">
+              {{ po_status_labels.get(po.po_status, po.po_status) }}
+            </span>
+          </td>
+          <td>{{ po.order_time.strftime("%Y-%m-%d %H:%M") if po.order_time else "-" }}</td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td colspan="11" style="text-align:center;color:#999;padding:16px;">
+          暂无关联工艺单
+        </td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</fieldset>
+
+<style>
+  .status-badge { display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px; }
+  .status-draft       { background:#eee;color:#555; }
+  .status-confirmed   { background:#e3f2fd;color:#1565c0; }
+  .status-in_progress { background:#fff3e0;color:#ef6c00; }
+  .status-completed   { background:#e8f5e9;color:#2e7d32; }
+  .status-cancelled   { background:#fdecea;color:#c62828; }
+
+  .res-badge { display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px; }
+  .res-active   { background:#e8f5e9;color:#2e7d32; }
+  .res-released { background:#eee;color:#555; }
+  .res-consumed { background:#e3f2fd;color:#1565c0; }
+
+  .po-badge { display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px; }
+  .po-draft      { background:#eee;color:#555; }
+  .po-ordered    { background:#e3f2fd;color:#1565c0; }
+  .po-producing  { background:#fff3e0;color:#ef6c00; }
+  .po-completed  { background:#e8f5e9;color:#2e7d32; }
+  .po-received   { background:#ede7f6;color:#4527a0; }
+  .po-cancelled  { background:#fdecea;color:#c62828; }
+</style>
+{% endblock %}

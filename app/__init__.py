@@ -46,6 +46,9 @@ def create_app(test_config=None):
     from app.controllers.finished_goods_controller import bp as fg_bp
     app.register_blueprint(fg_bp)
 
+    from app.controllers.production_plan_controller import bp as pp_bp
+    app.register_blueprint(pp_bp)
+
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(documents_bp)

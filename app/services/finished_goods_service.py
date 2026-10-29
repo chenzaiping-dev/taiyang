@@ -1,5 +1,6 @@
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, timezone, timedelta
+from sqlalchemy import select, case, func, or_
 
 from app.extensions import db
 from app.generated.models.warehouses import Warehouse
@@ -10,6 +11,7 @@ from app.generated.models.finished_goods_documents import FinishedGoodsDocument
 from app.generated.models.finished_goods_document_lines import FinishedGoodsDocumentLine
 from app.generated.models.finished_goods_inventory import FinishedGoodsInventory
 from app.generated.models.finished_goods_transactions import FinishedGoodsTransaction
+from app.generated.models.finished_goods_reservations import FinishedGoodsReservation
 from app.utils.datetime_utils import now_beijing
 
 Q6 = Decimal("0.000001")
@@ -250,10 +252,22 @@ class FinishedGoodsService:
             inv = FinishedGoodsInventory.query.filter_by(
                 warehouse_id=warehouse_id, batch_id=batch_id
             ).with_for_update().first()
-            if not inv or inv.quantity < qty:
-                available = inv.quantity if inv else Decimal("0")
+
+            locked = (
+                db.session.query(func.coalesce(
+                    func.sum(FinishedGoodsReservation.remaining_quantity), 0))
+                .filter(
+                    FinishedGoodsReservation.warehouse_id == warehouse_id,
+                    FinishedGoodsReservation.batch_id == batch_id,
+                    FinishedGoodsReservation.status == "ACTIVE",
+                )
+                .scalar()
+            ) or Decimal("0")
+
+            available = (inv.quantity or Decimal("0")) - locked
+            if qty > available:
                 raise FinishedGoodsError(
-                    f"批次 [{batch.batch_no}] 库存不足：可用 {available}，需要 {qty}"
+                    f"批次 [{batch.batch_no}] 可用量不足：可用 {available}，需要 {qty}"
                 )
 
             line = FinishedGoodsDocumentLine(

@@ -32,6 +32,9 @@
           text-decoration: none; color: #333; background: #fff; cursor: pointer; }
     .btn-primary { background: #1976d2; color: #fff; border-color: #1976d2; }
     .btn-danger  { background: #e53935; color: #fff; border-color: #e53935; }    
+    .flash { padding:8px 12px;border-radius:4px;margin-bottom:12px;font-size:13px; }
+    .flash-success { background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9; }
+    .flash-error   { background:#fdecea;color:#b3261e;border:1px solid #f5c2c0; }
   </style>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/po_suggest.css') }}">
 </head>
@@ -42,6 +45,9 @@
     <a href="{{ url_for('inventory_query.material_transactions_page') }}">出入库流水</a>
     <a href="{{ url_for('purchase_in.purchase_in_page') }}">原料入库</a>
     <a href="{{ url_for('stock_out.stock_out_page') }}">原料出库</a>
+
+    <a href="{{ url_for('production_plan.list_page') }}">生产计划</a>
+
     <a href="{{ url_for('process_order.list_page') }}">工艺单列表</a>
 
     <a href="{{ url_for('finished_goods.warehouses_page') }}">成品库存</a>
@@ -50,6 +56,13 @@
     <a href="{{ url_for('finished_goods.inbound_page') }}">成品入库</a>
     <a href="{{ url_for('finished_goods.outbound_page') }}">成品出库</a>
   </nav>  
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for cat, msg in messages %}
+        <div class="flash flash-{{ cat }}">{{ msg }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
   {% block content %}{% endblock %}
 </body>
 </html>

@@ -10,6 +10,7 @@ from app.generated.models.finished_goods_documents import FinishedGoodsDocument
 from app.generated.models.finished_goods_document_lines import FinishedGoodsDocumentLine
 from app.generated.models.finished_goods_inventory import FinishedGoodsInventory
 from app.generated.models.finished_goods_transactions import FinishedGoodsTransaction
+from app.generated.models.finished_goods_reservations import FinishedGoodsReservation
 
 
 def _infer_source_entry(row: dict) -> str:
@@ -68,7 +69,28 @@ class FinishedGoodsQueryService:
     @staticmethod
     def list_warehouse_stock(warehouse_id=None, batch_keyword=None,
                              page=1, page_size=50):
-        """成品库仓库列表：按 (warehouse, batch) 展示现存"""
+        """成品库仓库列表：按 (warehouse, batch) 展示现存 + 锁定 + 可用"""
+        # ⭐ 锁定汇总子查询
+        locked_subq = (
+            select(
+                FinishedGoodsReservation.warehouse_id.label("wh_id"),
+                FinishedGoodsReservation.batch_id.label("bt_id"),
+                func.coalesce(
+                    func.sum(FinishedGoodsReservation.remaining_quantity), 0
+                ).label("locked_qty"),
+            )
+            .where(
+                FinishedGoodsReservation.status == "ACTIVE",
+            )
+            .group_by(
+                FinishedGoodsReservation.warehouse_id,
+                FinishedGoodsReservation.batch_id,
+            )
+            .subquery()
+        )
+
+        locked_qty_col = func.coalesce(locked_subq.c.locked_qty, 0)
+
         stmt = (
             select(
                 FinishedGoodsInventory.id,
@@ -82,11 +104,18 @@ class FinishedGoodsQueryService:
                 FinishedGoodsBatch.unit,
                 FinishedGoodsBatch.quality_status,
                 FinishedGoodsInventory.quantity,
+                # ⭐ 锁定数量 & 可用数量
+                locked_qty_col.label("locked_qty"),
+                (FinishedGoodsInventory.quantity - locked_qty_col).label("available_qty"),
                 FinishedGoodsInventory.updated_at,
             )
             .join(Warehouse, Warehouse.id == FinishedGoodsInventory.warehouse_id)
             .join(FinishedGoodsBatch,
                   FinishedGoodsBatch.id == FinishedGoodsInventory.batch_id)
+            .join(locked_subq,
+                  (locked_subq.c.wh_id == FinishedGoodsInventory.warehouse_id)
+                  & (locked_subq.c.bt_id == FinishedGoodsInventory.batch_id),
+                  isouter=True)
             .where(FinishedGoodsInventory.quantity > 0)
             .order_by(Warehouse.warehouse_code.asc(),
                       FinishedGoodsBatch.batch_no.asc())
@@ -104,7 +133,9 @@ class FinishedGoodsQueryService:
             select(func.count()).select_from(stmt.subquery())
         ).scalar() or 0
         stmt = stmt.offset((page - 1) * page_size).limit(page_size)
-        return [dict(r) for r in db.session.execute(stmt).mappings().all()], total
+
+        rows = [dict(r) for r in db.session.execute(stmt).mappings().all()]
+        return rows, total
 
     @staticmethod
     def list_transactions(warehouse_id=None, batch_id=None, tx_type=None,
@@ -180,7 +211,25 @@ class FinishedGoodsQueryService:
 
     @staticmethod
     def list_available_batches(warehouse_id):
-        """供人工选批次出库使用：该仓库当前有库存的批次"""
+        """供人工选批次出库使用：该仓库可用数量 > 0 的批次"""
+        locked_subq = (
+            select(
+                FinishedGoodsReservation.batch_id.label("bt_id"),
+                func.coalesce(
+                    func.sum(FinishedGoodsReservation.remaining_quantity), 0
+                ).label("locked_qty"),
+            )
+            .where(
+                FinishedGoodsReservation.warehouse_id == warehouse_id,
+                FinishedGoodsReservation.status == "ACTIVE",
+            )
+            .group_by(FinishedGoodsReservation.batch_id)
+            .subquery()
+        )
+
+        locked = func.coalesce(locked_subq.c.locked_qty, 0)
+        available = FinishedGoodsInventory.quantity - locked
+
         rows = (
             db.session.query(
                 FinishedGoodsBatch.id,
@@ -189,13 +238,18 @@ class FinishedGoodsQueryService:
                 FinishedGoodsBatch.product_specification,
                 FinishedGoodsBatch.unit,
                 FinishedGoodsBatch.quality_status,
-                FinishedGoodsInventory.quantity,
+                FinishedGoodsInventory.quantity.label("total_qty"),
+                locked.label("locked_qty"),
+                available.label("available_qty"),
             )
             .join(FinishedGoodsInventory,
-                  FinishedGoodsInventory.batch_id == FinishedGoodsBatch.id)
+                FinishedGoodsInventory.batch_id == FinishedGoodsBatch.id)
+            .join(locked_subq,
+                locked_subq.c.bt_id == FinishedGoodsBatch.id,
+                isouter=True)
             .filter(
                 FinishedGoodsInventory.warehouse_id == warehouse_id,
-                FinishedGoodsInventory.quantity > 0,
+                available > 0,           # ⭐ 只列可用的
             )
             .order_by(FinishedGoodsBatch.batch_no.asc())
             .all()

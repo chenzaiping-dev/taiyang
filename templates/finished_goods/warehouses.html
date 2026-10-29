@@ -30,7 +30,9 @@
       <th>规格</th>
       <th style="width:60px;">单位</th>
       <th style="width:90px;">质量</th>
-      <th style="width:140px;text-align:right;">库存数量</th>
+      <th style="width:130px;text-align:right;">库存总量</th>
+      <th style="width:130px;text-align:right;background:#fff8e1;">锁定数量</th>
+      <th style="width:130px;text-align:right;background:#e8f5e9;">可用数量</th>
       <th style="width:150px;">更新时间</th>
     </tr>
   </thead>
@@ -45,14 +47,34 @@
         <td>{{ r.product_specification or "-" }}</td>
         <td>{{ r.unit or "" }}</td>
         <td>{{ quality_labels.get(r.quality_status, r.quality_status) }}</td>
-        <td style="text-align:right;font-weight:600;">{{ r.quantity }}</td>
+        <td style="text-align:right;">{{ r.quantity }}</td>
+        <td style="text-align:right;color:#ef6c00;font-weight:600;">
+          {{ r.locked_qty }}
+        </td>
+        <td style="text-align:right;font-weight:600;
+                  color:{{ '#c62828' if r.available_qty <= 0 else '#2e7d32' }};">
+          {{ r.available_qty }}
+        </td>
         <td>{{ r.updated_at.strftime("%Y-%m-%d %H:%M") if r.updated_at else "-" }}</td>
       </tr>
       {% endfor %}
-    {% else %}
-      <tr><td colspan="9" style="text-align:center;color:#999;padding:24px;">暂无库存</td></tr>
-    {% endif %}
+      {% else %}
+        <tr><td colspan="11" style="text-align:center;color:#999;padding:24px;">暂无库存</td></tr>
+      {% endif %}
   </tbody>
+  <tfoot>
+    <tr style="background:#fafafa;font-weight:600;">
+      <td colspan="7" style="text-align:right;">本页合计：</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='quantity') }}</td>
+      <td style="text-align:right;color:#ef6c00;">
+        {{ rows|sum(attribute='locked_qty') }}
+      </td>
+      <td style="text-align:right;color:#2e7d32;">
+        {{ rows|sum(attribute='available_qty') }}
+      </td>
+      <td></td>
+    </tr>
+  </tfoot>
 </table>
 
 <div style="margin-top:16px;display:flex;gap:8px;align-items:center;">
