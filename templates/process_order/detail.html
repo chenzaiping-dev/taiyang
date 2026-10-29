@@ -18,6 +18,15 @@
   <legend>基本信息</legend>
   <div class="form-row"><label>ID：</label>{{ order.id }}</div>
   <div class="form-row"><label>工艺单编号：</label>{{ order.process_order_no }}</div>
+
+  <div class="form-row">
+    <label>生产批号：</label>
+    <a href="{{ url_for('finished_goods.transactions_page',
+                        document_no='FG-IN-' ~ order.process_order_no) }}">
+      {{ order.batch_no }}
+    </a>
+  </div>
+
   <div class="form-row"><label>加工厂：</label>
     {% if factory %}{{ factory.factory_code }} - {{ factory.factory_name }}{% else %}-{% endif %}
   </div>

@@ -1,5 +1,5 @@
 from datetime import datetime
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 
 from app.extensions import db
 from app.generated.models.warehouses import Warehouse
@@ -9,6 +9,7 @@ from app.generated.models.finished_goods_documents import FinishedGoodsDocument
 from app.generated.models.finished_goods_document_lines import FinishedGoodsDocumentLine
 from app.generated.models.finished_goods_inventory import FinishedGoodsInventory
 from app.generated.models.finished_goods_transactions import FinishedGoodsTransaction
+from app.generated.models.process_orders import ProcessOrder
 
 from app.services.finished_goods_query_service import FinishedGoodsQueryService
 from app.services.finished_goods_service import FinishedGoodsError, FinishedGoodsService
@@ -51,13 +52,65 @@ def _parse_qty(s):
         return None
 
 
+@bp.get("/api/process-orders/search")
+def api_search_process_orders():
+    """
+    成品入库页工艺单搜索。
+    ?q=关键词  返回状态为 ORDERED/COMPLETED 的工艺单（最多 20 条）
+    ?id=123    返回单条工艺单（用于回显已保存的 process_order_id）
+    """
+    po_id = request.args.get("id", "").strip()
+    if po_id.isdigit():
+        po = db.session.get(ProcessOrder, int(po_id))
+        if not po:
+            return jsonify({"code": 0, "data": []})
+        return jsonify({
+            "code": 0,
+            "data": [_serialize_po(po)],
+        })
+
+    kw = request.args.get("q", "").strip()
+    q = ProcessOrder.query.filter(
+        ProcessOrder.status.in_(["ORDERED", "PRODUCING", "RECEIVED", "COMPLETED"])
+    )
+    if kw:
+        like = f"%{kw}%"
+        q = q.filter(
+            (ProcessOrder.process_order_no.like(like)) |
+            (ProcessOrder.product_name.like(like)) |
+            (ProcessOrder.batch_no.like(like))
+        )
+    items = q.order_by(ProcessOrder.id.desc()).limit(20).all()
+    return jsonify({"code": 0, "data": [_serialize_po(po) for po in items]})
+
+
+def _serialize_po(po):
+    return {
+        "id": po.id,
+        "process_order_no": po.process_order_no,
+        "batch_no": po.batch_no,
+        "product_name": po.product_name,
+        "product_specification": po.product_specification,
+        "quantity": str(po.quantity),
+        "unit": po.unit or "KG",
+    }
+
 # ==================== 入库 ====================
 @bp.get("/inbound")
 def inbound_page():
+    # ⭐ 候选工艺单：优先推荐已下单/已完工但还没入成品库的
+    process_orders = (
+        ProcessOrder.query
+        .filter(ProcessOrder.status.in_(["ORDERED", "COMPLETED"]))
+        .order_by(ProcessOrder.id.desc())
+        .limit(500)
+        .all()
+    )
     return render_template(
         "finished_goods/inbound.html",
         warehouses=_fg_warehouses(),
         inbound_types=INBOUND_TYPE_LABELS,
+        process_orders=process_orders,          # ⭐
         form_data={
             "warehouse_id": "", "inbound_type": "PRODUCTION_IN",
             "document_time": datetime.now().strftime("%Y-%m-%dT%H:%M"),
@@ -87,6 +140,17 @@ def inbound_submit():
             line_idx += 1
             continue
         batch_id_raw = request.form.get(prefix + "[batch_id]", "").strip()
+
+        # ⭐ 来源工艺单：支持直接传 ID，或传「工艺单号文本」由后端反查
+        po_raw = (request.form.get(prefix + "[process_order_id]", "") or "").strip()
+        process_order_id = None
+        if po_raw.isdigit():
+            process_order_id = int(po_raw)
+        elif po_raw:
+            po = ProcessOrder.query.filter_by(process_order_no=po_raw).first()
+            if po:
+                process_order_id = po.id
+
         lines.append({
             "batch_id": int(batch_id_raw) if batch_id_raw else None,
             "batch_no": request.form.get(prefix + "[batch_no]", "").strip(),
@@ -94,8 +158,8 @@ def inbound_submit():
             "product_specification": request.form.get(
                 prefix + "[product_specification]", "").strip() or None,
             "unit": request.form.get(prefix + "[unit]", "KG").strip() or "KG",
-            "quality_status": request.form.get(prefix + "[quality_status]",
-                                              "QUALIFIED"),
+            "quality_status": request.form.get(prefix + "[quality_status]", "QUALIFIED"),
+            "process_order_id": process_order_id,       # ⭐ 透传
             "process_order_id": None,
             "quantity": request.form.get(prefix + "[quantity]").strip(),
             "unit_cost": request.form.get(prefix + "[unit_cost]", "").strip() or None,
@@ -118,10 +182,23 @@ def inbound_submit():
         return redirect(url_for("finished_goods.transactions_page",
                                 document_no=result["document_no"]))
     except FinishedGoodsError as e:
+        # ⭐ 失败回显时补上 process_order_no，供 po-suggest 展示
+        for ln in lines:
+            pid = ln.get("process_order_id")
+            if pid and not ln.get("process_order_no"):
+                po = db.session.get(ProcessOrder, int(pid))
+                if po:
+                    ln["process_order_no"] = po.process_order_no
+
         return render_template(
             "finished_goods/inbound.html",
             warehouses=_fg_warehouses(),
             inbound_types=INBOUND_TYPE_LABELS,
+            process_orders=(
+                ProcessOrder.query
+                .filter(ProcessOrder.status.in_(["ORDERED", "COMPLETED"]))
+                .order_by(ProcessOrder.id.desc()).limit(500).all()
+            ),
             form_data={
                 "warehouse_id": wh_raw, "inbound_type": inbound_type,
                 "document_time": doc_time_str, "remark": remark or "",

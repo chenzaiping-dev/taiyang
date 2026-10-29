@@ -99,6 +99,19 @@ class FinishedGoodsService:
                 batch = db.session.get(FinishedGoodsBatch, int(l["batch_id"]))
                 if not batch:
                     raise FinishedGoodsError(f"第 {idx} 行批次不存在")
+
+                # ⭐ 批次已存在时校验来源工艺单一致性
+                incoming_po_id = l.get("process_order_id")
+                if incoming_po_id is not None:
+                    if (batch.process_order_id is not None
+                            and int(batch.process_order_id) != int(incoming_po_id)):
+                        raise FinishedGoodsError(
+                            f"第 {idx} 行批次 [{batch.batch_no}] 已有来源工艺单，"
+                            f"不能改为其他工艺单"
+                        )
+                    # 原本为空则允许补写（例如先前手工入库未关联，现在补上）
+                    if batch.process_order_id is None:
+                        batch.process_order_id = int(incoming_po_id)
             else:
                 batch_no = (l.get("batch_no") or "").strip()
                 if not batch_no:
@@ -107,20 +120,32 @@ class FinishedGoodsService:
                 if not batch:
                     batch = FinishedGoodsBatch(
                         batch_no=batch_no,
-                        process_order_id=l.get("process_order_id"),
+                        process_order_id=l.get("process_order_id"),   # ⭐ 新建时写入
                         product_name=l.get("product_name") or "未命名",
                         product_specification=l.get("product_specification"),
                         unit=l.get("unit") or "KG",
                         batch_source=(
                             "RETURN" if inbound_type == "CUSTOMER_RETURN"
                             else ("PRODUCTION" if inbound_type == "PRODUCTION_IN"
-                                  else "OTHER")
+                                else "OTHER")
                         ),
                         quality_status=l.get("quality_status") or "QUALIFIED",
                         remark=l.get("remark"),
                     )
                     db.session.add(batch)
                     db.session.flush()
+                else:
+                    # 批次已存在（按批次号找的），同样要做一致性校验
+                    incoming_po_id = l.get("process_order_id")
+                    if incoming_po_id is not None:
+                        if (batch.process_order_id is not None
+                                and int(batch.process_order_id) != int(incoming_po_id)):
+                            raise FinishedGoodsError(
+                                f"第 {idx} 行批次 [{batch.batch_no}] 已有来源工艺单，"
+                                f"不能改为其他工艺单"
+                            )
+                        if batch.process_order_id is None:
+                            batch.process_order_id = int(incoming_po_id)
 
             line = FinishedGoodsDocumentLine(
                 document_id=document.id,

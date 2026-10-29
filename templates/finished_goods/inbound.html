@@ -58,6 +58,7 @@
         <th>质量</th>
         <th style="width:120px;">数量 *</th>
         <th style="width:100px;">单价</th>
+        <th style="width:180px;">来源工艺单</th>   <!-- ⭐ 新增 -->
         <th>备注</th>
         <th style="width:60px;">操作</th>
       </tr>
@@ -90,6 +91,15 @@
         <td><input type="number" step="0.000001" min="0"
                    name="lines[{{ loop.index0 }}][unit_cost]"
                    value="{{ l.unit_cost or '' }}"></td>
+
+        <!-- ⭐ 来源工艺单 -->
+        <td>
+          <div class="po-suggest"
+              data-input-name="lines[{{ loop.index0 }}][process_order_id]"
+              data-initial-id="{{ l.process_order_id or '' }}"
+              data-initial-no="{{ l.process_order_no or '' }}"></div>
+        </td>
+
         <td><input type="text" name="lines[{{ loop.index0 }}][remark]"
                    value="{{ l.remark or '' }}"></td>
         <td><button type="button" class="btn btn-danger btn-remove-row">删除</button></td>
@@ -125,11 +135,31 @@
                name="lines[__IDX__][quantity]" required></td>
     <td><input type="number" step="0.000001" min="0"
                name="lines[__IDX__][unit_cost]"></td>
+    <td>
+      <div class="po-suggest"
+           data-input-name="lines[__IDX__][process_order_id]"
+           data-initial-id=""
+           data-initial-no=""></div>
+    </td>
     <td><input type="text" name="lines[__IDX__][remark]"></td>
     <td><button type="button" class="btn btn-danger btn-remove-row">删除</button></td>
   </tr>
 </template>
 
+<script src="{{ url_for('static', filename='js/po_suggest.js') }}"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    POSuggest.initAll();
+    // 页面新增行时也初始化一下
+    const addBtn = document.getElementById("add-line-btn");
+    if (addBtn) {
+      addBtn.addEventListener("click", () => {
+        // 等 DOM 插入完成后初始化新增的 .po-suggest
+        setTimeout(() => POSuggest.initAll(), 0);
+      });
+    }
+  });
+</script>
 <script>
 (function () {
   const tbody = document.querySelector("#fg-inbound-form tbody");
