@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}管理首页{% endblock %}
+{% block content %}
+<h2 class="mb-4">管理首页</h2>
+<div class="row g-3">
+{% for module, entries in groups.items() %}
+  <div class="col-xl-4 col-md-6">
+    <div class="card h-100">
+      <div class="card-header fw-bold">{{ module }}</div>
+      <div class="list-group list-group-flush">
+      {% for name, cfg in entries %}
+        <a class="list-group-item list-group-item-action d-flex justify-content-between"
+           href="{{ url_for('admin.table_list', table_name=name) }}">
+          {{ cfg.label }} <span class="badge text-bg-secondary">{{ cfg.mode }}</span>
+        </a>
+      {% endfor %}
+      </div>
+    </div>
+  </div>
+{% endfor %}
+</div>
+{% endblock %}

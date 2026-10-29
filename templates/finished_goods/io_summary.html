@@ -1,0 +1,122 @@
+{% extends "inventory/base.html" %}
+{% block title %}成品库出入库汇总{% endblock %}
+{% block content %}
+<h2>成品库累计出入库汇总</h2>
+
+<form method="get" action="{{ url_for('finished_goods.io_summary_page') }}"
+      style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+  <input type="text" name="batch_keyword" value="{{ batch_keyword }}"
+         placeholder="批次号/产品名称" maxlength="50">
+
+  <select name="warehouse_id">
+    <option value="">-- 全部成品仓 --</option>
+    {% for w in warehouses %}
+      <option value="{{ w.id }}"
+        {% if warehouse_id|string == w.id|string %}selected{% endif %}>
+        {{ w.warehouse_code }} - {{ w.warehouse_name }}
+      </option>
+    {% endfor %}
+  </select>
+
+  <label style="font-size:13px;">汇总维度</label>
+  <select name="group_by">
+    <option value="batch" {% if group_by == 'batch' %}selected{% endif %}>按批次</option>
+    <option value="product" {% if group_by == 'product' %}selected{% endif %}>按产品</option>
+  </select>
+
+  <label style="font-size:12px;color:#666;">
+    从 <input type="date" name="date_from" value="{{ date_from }}">
+    到 <input type="date" name="date_to" value="{{ date_to }}">
+  </label>
+
+  <button type="submit" class="btn btn-primary">查询</button>
+  <a class="btn" href="{{ url_for('finished_goods.io_summary_page') }}">重置</a>
+</form>
+
+<table style="width:100%;border-collapse:collapse;font-size:13px;">
+  <thead>
+    <tr style="background:#f5f5f5;">
+      {% if group_by == 'batch' %}
+        <th style="width:60px;">批次ID</th>
+        <th>批次号</th>
+      {% else %}
+        <th>产品名称</th>
+      {% endif %}
+      <th>产品规格</th>
+      <th>仓库</th>
+      <th style="width:60px;">单位</th>
+      {% if group_by == 'batch' %}
+        <th style="width:80px;">质量</th>
+      {% endif %}
+      <th style="width:130px;text-align:right;background:#e8f5e9;">累计入库</th>
+      <th style="width:130px;text-align:right;background:#fff3e0;">累计出库</th>
+      <th style="width:130px;text-align:right;">净变动</th>
+      <th style="width:130px;text-align:right;">当前库存</th>
+      <th style="width:90px;text-align:right;">对账</th>
+      <th style="width:110px;text-align:right;">生产入库</th>
+      <th style="width:100px;text-align:right;">退货</th>
+      <th style="width:100px;text-align:right;">调整</th>
+      <th style="width:110px;text-align:right;">销售出库</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if rows %}
+      {% for r in rows %}
+      <tr>
+        {% if group_by == 'batch' %}
+          <td>{{ r.batch_id }}</td>
+          <td>{{ r.batch_no }}</td>
+        {% else %}
+          <td>{{ r.product_name }}</td>
+        {% endif %}
+        <td>{{ r.product_specification or "-" }}</td>
+        <td>{{ r.warehouse_code }} - {{ r.warehouse_name }}</td>
+        <td>{{ r.unit or "" }}</td>
+        {% if group_by == 'batch' %}
+          <td>{{ quality_labels.get(r.quality_status, r.quality_status) }}</td>
+        {% endif %}
+        <td style="text-align:right;color:#2e7d32;font-weight:600;">{{ r.total_in }}</td>
+        <td style="text-align:right;color:#c62828;font-weight:600;">{{ r.total_out }}</td>
+        <td style="text-align:right;">{{ r.net_qty }}</td>
+        <td style="text-align:right;">{{ r.current_qty }}</td>
+        <td style="text-align:right;
+                   color:{{ '#999' if r.diff == 0 else '#c62828' }};">
+          {% if r.diff == 0 %}
+            ✓
+          {% else %}
+            {{ r.diff }}
+          {% endif %}
+        </td>
+        <td style="text-align:right;color:#666;">{{ r.in_production }}</td>
+        <td style="text-align:right;color:#666;">{{ r.in_return }}</td>
+        <td style="text-align:right;color:#666;">{{ r.in_adjustment }}</td>
+        <td style="text-align:right;color:#666;">{{ r.out_outbound }}</td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr><td colspan="{{ 14 if group_by == 'batch' else 13 }}"
+              style="text-align:center;color:#999;padding:24px;">没有符合条件的汇总数据</td></tr>
+    {% endif %}
+  </tbody>
+</table>
+
+<div style="margin-top:16px;display:flex;gap:8px;align-items:center;">
+  <span>共 {{ total }} 条，第 {{ page }}/{{ total_pages }} 页</span>
+  {% if page > 1 %}
+    <a class="btn" href="{{ url_for('finished_goods.io_summary_page',
+         batch_keyword=batch_keyword, warehouse_id=warehouse_id,
+         group_by=group_by, date_from=date_from, date_to=date_to,
+         page=page-1) }}">上一页</a>
+  {% endif %}
+  {% if page < total_pages %}
+    <a class="btn" href="{{ url_for('finished_goods.io_summary_page',
+         batch_keyword=batch_keyword, warehouse_id=warehouse_id,
+         group_by=group_by, date_from=date_from, date_to=date_to,
+         page=page+1) }}">下一页</a>
+  {% endif %}
+</div>
+
+<p style="color:#999;font-size:12px;margin-top:12px;">
+  对账列：净变动（累计入库 − 累计出库）与当前库存应一致，显示 ✓ 表示一致；不一致时显示差值。
+</p>
+{% endblock %}

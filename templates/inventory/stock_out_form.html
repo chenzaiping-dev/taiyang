@@ -1,0 +1,134 @@
+{% extends "inventory/base.html" %}
+{% block title %}原料出库{% endblock %}
+
+{% block content %}
+<h2>原料出库（FIFO）</h2>
+
+{% if errors %}
+  <div class="error-box">
+    <ul style="margin:0;padding-left:20px;">
+      {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+<form id="stock-out-form"
+      method="post"
+      action="{{ url_for('stock_out.stock_out_submit') }}"
+      data-next-index="{{ form_data.lines|length }}">
+
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="form-row">
+    <label for="warehouse_id">仓库</label>
+    <select id="warehouse_id" name="warehouse_id" required>
+      <option value="">-- 请选择 --</option>
+      {% for w in warehouses %}
+        <option value="{{ w.id }}"
+          {% if form_data.warehouse_id|string == w.id|string %}selected{% endif %}>
+          {{ w.warehouse_code }} - {{ w.warehouse_name }}
+        </option>
+      {% endfor %}
+    </select>
+
+    <label for="out_type">出库类型</label>
+    <select id="out_type" name="out_type">
+      <option value="PRODUCTION_OUT"
+        {% if form_data.out_type == "PRODUCTION_OUT" %}selected{% endif %}>生产领料</option>
+      <option value="STOCKTAKE_LOSS"
+        {% if form_data.out_type == "STOCKTAKE_LOSS" %}selected{% endif %}>盘点盘亏</option>
+    </select>
+  </div>
+
+  <div class="form-row">
+    <label for="document_time">出库时间</label>
+    <input type="datetime-local" id="document_time"
+           name="document_time" value="{{ form_data.document_time }}">
+
+    <label for="process_order_id">关联工艺单ID</label>
+    <input type="number" id="process_order_id" name="process_order_id"
+           min="1" value="{{ form_data.process_order_id }}">
+  </div>
+
+  <div class="form-row">
+    <label for="remark">备注</label>
+    <input type="text" id="remark" name="remark" maxlength="500"
+           style="flex:1;" value="{{ form_data.remark }}">
+  </div>
+
+  <div class="form-row">
+    <label style="width:auto;">
+      <input type="checkbox" name="auto_confirm"
+             {% if form_data.auto_confirm %}checked{% endif %}>
+      直接确认（立即扣减 FIFO 成本层）
+    </label>
+    <label style="width:auto;">
+      <input type="checkbox" name="allow_partial"
+             {% if form_data.allow_partial %}checked{% endif %}>
+      允许部分出库（库存不足时不报错）
+    </label>
+  </div>
+
+  <h3>出库明细</h3>
+  <table id="line-table">
+    <thead>
+      <tr>
+        <th style="width:40px;">#</th>
+        <th>原料</th>
+        <th style="width:140px;">数量</th>
+        <th style="width:80px;">操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for line in form_data.lines %}
+      <tr class="line-row">
+        <td class="row-no">{{ loop.index }}</td>
+        <td>
+          <select name="lines[{{ loop.index0 }}][material_id]" required>
+            <option value="">-- 选择原料 --</option>
+            {% for m in materials %}
+              <option value="{{ m.id }}"
+                {% if line.material_id|string == m.id|string %}selected{% endif %}>
+                {{ m.material_code }} - {{ m.material_name }} ({{ m.unit }})
+              </option>
+            {% endfor %}
+          </select>
+        </td>
+        <td>
+          <input type="number" step="0.000001" min="0"
+                 name="lines[{{ loop.index0 }}][quantity]"
+                 value="{{ line.quantity }}" required>
+        </td>
+        <td>
+          <button type="button" class="btn btn-danger btn-remove-row">删除</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <button type="button" id="add-row-btn" class="btn">+ 添加明细行</button>
+
+  <div style="margin-top:24px;">
+    <button type="submit" class="btn btn-primary">提交出库</button>
+  </div>
+</form>
+
+<template id="line-template">
+  <tr class="line-row">
+    <td class="row-no"></td>
+    <td>
+      <select name="lines[__IDX__][material_id]" required>
+        <option value="">-- 选择原料 --</option>
+        {% for m in materials %}
+          <option value="{{ m.id }}">{{ m.material_code }} - {{ m.material_name }} ({{ m.unit }})</option>
+        {% endfor %}
+      </select>
+    </td>
+    <td><input type="number" step="0.000001" min="0" name="lines[__IDX__][quantity]" required></td>
+    <td><button type="button" class="btn btn-danger btn-remove-row">删除</button></td>
+  </tr>
+</template>
+
+<script src="{{ url_for('static', filename='js/stock_out.js') }}"></script>
+{% endblock %}

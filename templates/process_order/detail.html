@@ -1,0 +1,99 @@
+{% extends "inventory/base.html" %}
+{% block title %}工艺单详情{% endblock %}
+
+{% block content %}
+<h2>
+  工艺单详情
+  <a class="btn" style="float:right;"
+     href="{{ url_for('process_order.edit_page', order_id=order.id) }}">
+    编辑
+  </a>
+  <a class="btn" style="float:right;margin-right:8px;"
+     href="{{ url_for('process_order.list_page') }}">
+    返回列表
+  </a>
+</h2>
+
+<fieldset>
+  <legend>基本信息</legend>
+  <div class="form-row"><label>ID：</label>{{ order.id }}</div>
+  <div class="form-row"><label>工艺单编号：</label>{{ order.process_order_no }}</div>
+  <div class="form-row"><label>加工厂：</label>
+    {% if factory %}{{ factory.factory_code }} - {{ factory.factory_name }}{% else %}-{% endif %}
+  </div>
+  <div class="form-row"><label>产品名称：</label>{{ order.product_name }}</div>
+  <div class="form-row"><label>产品规格：</label>{{ order.product_specification or "-" }}</div>
+  <div class="form-row"><label>数量：</label>
+    {{ order.quantity }}{% if order.unit %} {{ order.unit }}{% endif %}
+  </div>
+  <div class="form-row"><label>业绩单号：</label>
+    {{ performance.performance_no if performance else "-" }}
+  </div>
+  <div class="form-row"><label>下单时间：</label>
+    {{ order.order_time.strftime("%Y-%m-%d %H:%M") if order.order_time else "-" }}
+  </div>
+  <div class="form-row"><label>跟单人：</label>
+    {{ follow.real_name if follow else "-" }}
+  </div>
+  <div class="form-row"><label>创建人：</label>
+    {{ creator.real_name if creator else "-" }}
+  </div>
+  <div class="form-row"><label>成本价格：</label>{{ order.cost_price }}</div>
+  <div class="form-row"><label>总成本：</label>{{ order.total_cost }}</div>
+  <div class="form-row"><label>实际总成本：</label>{{ order.actual_total_cost }}</div>
+  <div class="form-row"><label>状态：</label>
+    <span class="status-badge status-{{ order.status|lower }}">{{ order.status }}</span>
+  </div>
+  <div class="form-row"><label>备注：</label>{{ order.remark or "-" }}</div>
+</fieldset>
+
+<fieldset>
+  <legend>原料配比明细</legend>
+  <table style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr style="background:#f5f5f5;">
+        <th style="width:60px;">ID</th>
+        <th style="width:140px;">原料编码</th>
+        <th>原料名称</th>
+        <th style="width:150px;">配比</th>
+        <th style="width:150px;">数量</th>
+        <th style="width:150px;">成本</th>
+        <th>备注</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in materials %}
+        {% set mat = material_map.get(m.material_id) %}
+        <tr>
+          <td>{{ m.id }}</td>
+          <td>
+            {% if mat %}
+              {{ mat.material_code }}
+            {% else %}
+              <span style="color:#999;">#{{ m.material_id }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if mat %}
+              {{ mat.material_name }}
+              {% if mat.unit %}<span style="color:#999;font-size:12px;">({{ mat.unit }})</span>{% endif %}
+            {% else %}
+              <span style="color:#999;">-</span>
+            {% endif %}
+          </td>
+          <td>{{ m.ratio_value }}</td>
+          <td>{{ m.quantity }}</td>
+          <td>{{ m.cost }}</td>
+          <td>{{ m.remark or "-" }}</td>
+        </tr>
+      {% else %}
+        <tr>
+          <td colspan="7" style="text-align:center;color:#999;padding:16px;">
+            暂无原料配比
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</fieldset>
+{% endblock %}

@@ -1,0 +1,238 @@
+{% extends "inventory/base.html" %}
+{% block title %}工艺单列表{% endblock %}
+
+{% block content %}
+<h2>工艺单列表</h2>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for cat, msg in messages %}
+      <div class="flash flash-{{ cat }}">{{ msg }}</div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<form method="get" action="{{ url_for('process_order.list_page') }}"
+      style="margin-bottom:16px;">
+  <!-- 过滤条件：保持不变 -->
+  <input type="text" name="keyword" value="{{ keyword }}" placeholder="单号/产品/批号">
+  <select name="status">
+    <option value="">-- 全部状态 --</option>
+    {% for code, label in [
+      ('DRAFT','草稿'),('ORDERED','已下单'),('PRODUCING','生产中'),
+      ('COMPLETED','已完工'),('RECEIVED','已出库'),('CANCELLED','已取消')
+    ] %}
+      <option value="{{ code }}" {% if status == code %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <select name="factory_id">
+    <option value="">-- 全部加工厂 --</option>
+    {% for f in factories %}
+      <option value="{{ f.id }}" {% if factory_id|string == f.id|string %}selected{% endif %}>
+        {{ f.factory_name }}
+      </option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="btn btn-primary">查询</button>
+  <a class="btn" href="{{ url_for('process_order.list_page') }}">重置</a>
+  <a class="btn btn-primary" href="{{ url_for('process_order.new_page') }}"
+     style="float:right;">+ 新建工艺单</a>
+</form>
+
+<table style="width:100%;border-collapse:collapse;font-size:13px;">
+  <thead>
+    <tr style="background:#f5f5f5;">
+      <th style="width:50px;">ID</th>
+      <th>工艺单编号</th>
+      <th>加工厂</th>
+      <th>产品名称</th>
+      <th style="width:110px;">数量</th>
+      <th>业绩单号</th>
+      <th style="width:140px;">下单时间</th>
+      <th>跟单人</th>
+      <th>创建人</th>
+      <th style="width:100px;">成本价格</th>
+      <th style="width:90px;">状态</th>
+      <th style="width:60px;">编辑</th>
+      <th style="width:60px;">下单</th>
+      <th style="width:60px;">生产</th>
+      <th style="width:60px;">完工入库</th>
+      <th style="width:60px;">取消</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if items %}
+      {% for it in items %}
+      <tr>
+        <td>{{ it.id }}</td>
+        <td>
+          <a href="{{ url_for('process_order.detail_page', order_id=it.id) }}">
+            {{ it.process_order_no }}
+          </a>
+        </td>
+        <td>
+          {% if it.factory_name %}{{ it.factory_name }}
+          {% else %}<span style="color:#999;">#{{ it.factory_id }}</span>{% endif %}
+        </td>
+        <td>{{ it.product_name }}</td>
+        <td style="text-align:right;">
+          {{ it.quantity }}
+          {% if it.unit %}<span style="color:#999;font-size:11px;">{{ it.unit }}</span>{% endif %}
+        </td>
+        <td>{{ it.performance_no or "-" }}</td>
+        <td>{{ it.order_time.strftime("%Y-%m-%d %H:%M") if it.order_time else "-" }}</td>
+        <td>{{ it.followup_employee_name or "-" }}</td>
+        <td>{{ it.created_by_name or "-" }}</td>
+        <td style="text-align:right;">{{ it.cost_price }}</td>
+        <td>
+          <span class="status-badge status-{{ it.status|lower }}">
+            {{ {
+              'DRAFT':'草稿','ORDERED':'已下单','PRODUCING':'生产中',
+              'COMPLETED':'已完工','RECEIVED':'已入库','CANCELLED':'已取消'
+            }.get(it.status, it.status) }}
+          </span>
+        </td>
+
+        <!-- ===== 编辑：仅 DRAFT ===== -->
+        <td style="text-align:center;">
+        {% if it.status == 'DRAFT' %}
+            <a class="btn btn-small"
+            href="{{ url_for('process_order.edit_page', order_id=it.id) }}">编辑</a>
+        {% else %}
+            <button type="button" class="btn btn-small"
+                    data-locked-status="{{ it.status }}"
+                    onclick="alertEditLocked(this)"
+                    title="仅草稿可编辑">编辑</button>
+        {% endif %}
+        </td>
+
+        <!-- ===== 下单：仅 DRAFT ===== -->
+        <td style="text-align:center;white-space:nowrap;">
+        {% if it.status == 'DRAFT' %}
+            <form method="post"
+                action="{{ url_for('process_order.place_order', order_id=it.id) }}"
+                onsubmit="return confirm('确认下单？将自动生成原料领料出库单。');"
+                style="display:inline-flex;gap:4px;align-items:center;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <select name="warehouse_id" required
+                    style="font-size:11px;padding:2px;max-width:110px;">
+                {% for w in warehouses %}
+                <option value="{{ w.id }}">{{ w.warehouse_name }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-small btn-primary">下单</button>
+            </form>
+        {% else %}
+            <button class="btn btn-small" disabled title="仅草稿可下单">下单</button>
+        {% endif %}
+        </td>        
+
+        <!-- ===== 出库：仅 ORDERED ===== -->
+        <td style="text-align:center;">
+          {% if it.status == 'ORDERED' %}
+            <form method="post"
+                  action="{{ url_for('process_order.produce', order_id=it.id) }}"
+                  onsubmit="return confirm('确认生产？');"
+                  style="display:inline;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-small btn-warn">生产</button>
+            </form>
+          {% else %}
+            <button class="btn btn-small" disabled title="仅已下单可生产">生产</button>
+          {% endif %}
+        </td>
+
+        <!-- ===== 入库：仅 PRODUCING ===== -->
+        <td style="text-align:center;white-space:nowrap;">
+          {% if it.status == 'PRODUCING' %}
+            <form method="post"
+                  action="{{ url_for('process_order.receive', order_id=it.id) }}"
+                  onsubmit="return confirm('确认入库到成品库？批次号 {{ it.batch_no or '' }}');"
+                  style="display:inline-flex;gap:2px;align-items:center;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <select name="warehouse_id" required
+                      style="font-size:11px;padding:1px;max-width:90px;">
+                {% for w in fg_warehouses %}
+                  <option value="{{ w.id }}">{{ w.warehouse_name }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="btn btn-small btn-primary">入库</button>
+            </form>
+          {% else %}
+            <button class="btn btn-small" disabled>入库</button>
+          {% endif %}
+        </td>
+
+        <!-- ===== 取消：DRAFT / ORDERED ===== -->
+        <td style="text-align:center;">
+          {% if it.status in ['DRAFT', 'ORDERED'] %}
+            <form method="post"
+                  action="{{ url_for('process_order.cancel', order_id=it.id) }}"
+                  onsubmit="return confirm('确认取消该工艺单？取消后不可恢复。');"
+                  style="display:inline;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-small btn-danger">取消</button>
+            </form>
+          {% else %}
+            <button class="btn btn-small" disabled title="当前状态不可取消">取消</button>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr>
+        <td colspan="15" style="text-align:center;color:#999;padding:24px;">
+          暂无数据
+        </td>
+      </tr>
+    {% endif %}
+  </tbody>
+</table>
+
+<!-- 分页（保持不变） -->
+<div style="margin-top:16px;display:flex;align-items:center;gap:8px;">
+  <span>共 {{ total }} 条，第 {{ page }}/{{ total_pages }} 页</span>
+  {% if page > 1 %}
+    <a class="btn" href="{{ url_for('process_order.list_page',
+         keyword=keyword, status=status, factory_id=factory_id, page=page-1) }}">上一页</a>
+  {% endif %}
+  {% if page < total_pages %}
+    <a class="btn" href="{{ url_for('process_order.list_page',
+         keyword=keyword, status=status, factory_id=factory_id, page=page+1) }}">下一页</a>
+  {% endif %}
+</div>
+
+<style>
+  .status-badge { display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px; }
+  .status-draft      { background:#eee;    color:#555; }
+  .status-ordered    { background:#e3f2fd; color:#1565c0; }
+  .status-producing  { background:#fff3e0; color:#ef6c00; }
+  .status-completed  { background:#e8f5e9; color:#2e7d32; }
+  .status-received   { background:#ede7f6; color:#4527a0; }
+  .status-cancelled  { background:#fdecea; color:#c62828; }
+
+  .btn-small { padding:2px 8px;font-size:12px; }
+  .btn-warn  { background:#ff9800;color:#fff;border-color:#ff9800; }
+  .btn[disabled] { opacity:.4;cursor:not-allowed; }
+  .flash { padding:8px 12px;border-radius:4px;margin-bottom:12px;font-size:13px; }
+  .flash-success { background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9; }
+  .flash-error   { background:#fdecea;color:#b3261e;border:1px solid #f5c2c0; }
+</style>
+{% endblock %}
+
+<script>
+  const STATUS_LABELS = {
+    DRAFT: "草稿",
+    ORDERED: "已下单",
+    PRODUCING: "生产中",
+    COMPLETED: "已完工",
+    RECEIVED: "已入库",
+    CANCELLED: "已取消"
+  };
+
+  function alertEditLocked(btn) {
+    const st = btn.dataset.lockedStatus || "";
+    const label = STATUS_LABELS[st] || st;
+    alert(`当前状态为【${label}】，仅【草稿】状态可以编辑。`);
+  }
+</script>

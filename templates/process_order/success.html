@@ -1,0 +1,35 @@
+{% extends "inventory/base.html" %}
+{% block title %}工艺单创建成功{% endblock %}
+
+{% block content %}
+<h2>✅ 工艺单创建成功</h2>
+
+<div class="form-row"><label>单号：</label>{{ result.process_order_no }}</div>
+<div class="form-row"><label>状态：</label>{{ result.status }}</div>
+<div class="form-row"><label>下单时间：</label>{{ result.order_time }}</div>
+<div class="form-row"><label>原料条数：</label>{{ result.material_count }}</div>
+
+<h3>原料配比明细</h3>
+<table>
+  <thead>
+    <tr>
+      <th>明细ID</th><th>原料ID</th><th>配比</th><th>数量</th><th>成本</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for m in result.materials %}
+    <tr>
+      <td>{{ m.id }}</td>
+      <td>{{ m.material_id }}</td>
+      <td>{{ m.ratio_value }}</td>
+      <td>{{ m.quantity }}</td>
+      <td>{{ m.cost }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div style="margin-top:20px;">
+  <a class="btn btn-primary" href="{{ url_for('process_order.new_page') }}">继续新建</a>
+</div>
+{% endblock %}

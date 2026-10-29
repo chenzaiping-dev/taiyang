@@ -1,0 +1,161 @@
+{% extends "inventory/base.html" %}
+{% block title %}成品入库{% endblock %}
+{% block content %}
+<h2>成品入库</h2>
+
+{% if errors %}
+  <div class="error-box">
+    <ul style="margin:0;padding-left:20px;">
+      {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+<form method="post" action="{{ url_for('finished_goods.inbound_submit') }}"
+      id="fg-inbound-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="form-row">
+    <label>仓库 *</label>
+    <select name="warehouse_id" required>
+      <option value="">-- 请选择成品仓 --</option>
+      {% for w in warehouses %}
+        <option value="{{ w.id }}"
+          {% if form_data.warehouse_id|string == w.id|string %}selected{% endif %}>
+          [{{ {'finished_goods':'成品','general':'普通'}.get(w.warehouse_type,w.warehouse_type) }}]
+          {{ w.warehouse_code }} - {{ w.warehouse_name }}
+        </option>
+      {% endfor %}
+    </select>
+
+    <label>入库类型 *</label>
+    <select name="inbound_type" required>
+      {% for code, label in inbound_types.items() %}
+        <option value="{{ code }}"
+          {% if form_data.inbound_type == code %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="form-row">
+    <label>入库时间</label>
+    <input type="datetime-local" name="document_time"
+           value="{{ form_data.document_time }}">
+    <label>备注</label>
+    <input type="text" name="remark" maxlength="500" style="flex:1;"
+           value="{{ form_data.remark }}">
+  </div>
+
+  <h3>入库明细</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead>
+      <tr style="background:#f5f5f5;">
+        <th style="width:40px;">#</th>
+        <th>批次号 *</th>
+        <th>产品名称 *</th>
+        <th>规格</th>
+        <th style="width:70px;">单位</th>
+        <th>质量</th>
+        <th style="width:120px;">数量 *</th>
+        <th style="width:100px;">单价</th>
+        <th>备注</th>
+        <th style="width:60px;">操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for l in form_data.lines %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td><input type="text" name="lines[{{ loop.index0 }}][batch_no]"
+                   value="{{ l.batch_no or '' }}" required></td>
+        <td><input type="text" name="lines[{{ loop.index0 }}][product_name]"
+                   value="{{ l.product_name or '' }}" required></td>
+        <td><input type="text" name="lines[{{ loop.index0 }}][product_specification]"
+                   value="{{ l.product_specification or '' }}"></td>
+        <td><input type="text" name="lines[{{ loop.index0 }}][unit]"
+                   value="{{ l.unit or 'KG' }}"></td>
+        <td>
+          <select name="lines[{{ loop.index0 }}][quality_status]">
+            {% for code, label in [('QUALIFIED','合格'),('PENDING','待检'),('REJECTED','不合格')] %}
+              <option value="{{ code }}"
+                {% if (l.quality_status or 'QUALIFIED') == code %}selected{% endif %}>
+                {{ label }}
+              </option>
+            {% endfor %}
+          </select>
+        </td>
+        <td><input type="number" step="0.000001" min="0"
+                   name="lines[{{ loop.index0 }}][quantity]"
+                   value="{{ l.quantity or '' }}" required></td>
+        <td><input type="number" step="0.000001" min="0"
+                   name="lines[{{ loop.index0 }}][unit_cost]"
+                   value="{{ l.unit_cost or '' }}"></td>
+        <td><input type="text" name="lines[{{ loop.index0 }}][remark]"
+                   value="{{ l.remark or '' }}"></td>
+        <td><button type="button" class="btn btn-danger btn-remove-row">删除</button></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div style="margin:12px 0;">
+    <button type="button" id="add-line-btn" class="btn">+ 添加行</button>
+  </div>
+
+  <button type="submit" class="btn btn-primary">保存入库</button>
+  <a class="btn" href="{{ url_for('finished_goods.transactions_page') }}">查看历史</a>
+</form>
+
+<!-- 动态行模板 -->
+<template id="fg-line-tpl">
+  <tr>
+    <td class="row-no"></td>
+    <td><input type="text" name="lines[__IDX__][batch_no]" required></td>
+    <td><input type="text" name="lines[__IDX__][product_name]" required></td>
+    <td><input type="text" name="lines[__IDX__][product_specification]"></td>
+    <td><input type="text" name="lines[__IDX__][unit]" value="KG"></td>
+    <td>
+      <select name="lines[__IDX__][quality_status]">
+        <option value="QUALIFIED">合格</option>
+        <option value="PENDING">待检</option>
+        <option value="REJECTED">不合格</option>
+      </select>
+    </td>
+    <td><input type="number" step="0.000001" min="0"
+               name="lines[__IDX__][quantity]" required></td>
+    <td><input type="number" step="0.000001" min="0"
+               name="lines[__IDX__][unit_cost]"></td>
+    <td><input type="text" name="lines[__IDX__][remark]"></td>
+    <td><button type="button" class="btn btn-danger btn-remove-row">删除</button></td>
+  </tr>
+</template>
+
+<script>
+(function () {
+  const tbody = document.querySelector("#fg-inbound-form tbody");
+  const tpl = document.getElementById("fg-line-tpl");
+  const addBtn = document.getElementById("add-line-btn");
+  let nextIdx = {{ form_data.lines|length }};
+
+  addBtn.addEventListener("click", () => {
+    tbody.insertAdjacentHTML("beforeend",
+      tpl.innerHTML.replaceAll("__IDX__", nextIdx++));
+    renumber();
+  });
+  tbody.addEventListener("click", (e) => {
+    if (e.target.classList.contains("btn-remove-row")) {
+      if (tbody.rows.length <= 1) return;
+      e.target.closest("tr").remove();
+      renumber();
+    }
+  });
+  function renumber() {
+    tbody.querySelectorAll("tr").forEach((tr, i) => {
+      const c = tr.querySelector(".row-no");
+      if (c) c.textContent = i + 1;
+    });
+  }
+  renumber();
+})();
+</script>
+{% endblock %}

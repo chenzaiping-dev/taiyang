@@ -1,0 +1,149 @@
+{% extends "inventory/base.html" %}
+{% block title %}采购入库{% endblock %}
+
+{% block content %}
+<h2>原料采购入库</h2>
+
+{% if errors %}
+  <div class="error-box">
+    <ul style="margin:0;padding-left:20px;">
+      {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+<!-- ↓ 补 id + data-next-index -->
+<form id="purchase-in-form"
+      method="post"
+      action="{{ url_for('purchase_in.purchase_in_submit') }}"
+      data-next-index="{{ form_data.lines|length }}">
+  
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="form-row">
+    <label for="warehouse_id">仓库</label>
+    <select id="warehouse_id" name="warehouse_id" required>
+      <option value="">-- 请选择 --</option>
+      {% for w in warehouses %}
+        <option value="{{ w.id }}"
+          {% if form_data.warehouse_id|string == w.id|string %}selected{% endif %}>
+          {{ w.warehouse_code }} - {{ w.warehouse_name }}
+        </option>
+      {% endfor %}
+    </select>
+
+    <label for="supplier_id">供应商</label>
+    <select id="supplier_id" name="supplier_id" required>
+      <option value="">-- 请选择 --</option>
+      {% for s in suppliers %}
+        <option value="{{ s.id }}"
+          {% if form_data.supplier_id|string == s.id|string %}selected{% endif %}>
+          {{ s.name }}
+        </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="form-row">
+    <label for="document_time">入库时间</label>
+    <input type="datetime-local" id="document_time"
+           name="document_time" value="{{ form_data.document_time }}">
+
+    <label style="width:auto;">
+      <input type="checkbox" name="auto_confirm"
+             {% if form_data.auto_confirm %}checked{% endif %}>
+      直接确认入库（生成成本层）
+    </label>
+  </div>
+
+  <div class="form-row">
+    <label for="remark">备注</label>
+    <input type="text" id="remark" name="remark" maxlength="500"
+           style="flex:1;" value="{{ form_data.remark }}">
+  </div>
+
+  <h3>原料明细</h3>
+  <table id="line-table">
+    <thead>
+      <tr>
+        <th style="width:40px;">#</th>
+        <th>原料</th>
+        <th style="width:140px;">数量</th>
+        <th style="width:140px;">单价</th>
+        <th style="width:140px;">小计</th>
+        <th style="width:80px;">操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for line in form_data.lines %}
+      <tr class="line-row">
+        <td class="row-no">{{ loop.index }}</td>
+        <td>
+          <select name="lines[{{ loop.index0 }}][material_id]" required>
+            <option value="">-- 选择原料 --</option>
+            {% for m in materials %}
+              <option value="{{ m.id }}"
+                {% if line.material_id|string == m.id|string %}selected{% endif %}>
+                {{ m.material_code }} - {{ m.material_name }} ({{ m.unit }})
+              </option>
+            {% endfor %}
+          </select>
+        </td>
+        <td>
+          <input type="number" step="0.000001" min="0"
+                 name="lines[{{ loop.index0 }}][quantity]"
+                 value="{{ line.quantity }}" required>
+        </td>
+        <td>
+          <input type="number" step="0.000001" min="0"
+                 name="lines[{{ loop.index0 }}][unit_cost]"
+                 value="{{ line.unit_cost }}" required>
+        </td>
+        <!-- ↓ 小计单元格，JS 填充 -->
+        <td class="row-total" style="text-align:right;">0</td>
+        <td>
+          <button type="button" class="btn btn-danger btn-remove-row">删除</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <th colspan="2" style="text-align:right;">合计</th>
+        <th id="total-qty" style="text-align:right;">0</th>
+        <th></th>
+        <th id="total-amount" style="text-align:right;">0</th>
+        <th></th>
+      </tr>
+    </tfoot>
+  </table>
+
+  <button type="button" id="add-row-btn" class="btn">+ 添加明细行</button>
+
+  <div style="margin-top:24px;">
+    <button type="submit" class="btn btn-primary">提交入库</button>
+  </div>
+</form>
+
+<!-- 隐藏模板行，JS 复制用 -->
+<template id="line-template">
+  <tr class="line-row">
+    <td class="row-no"></td>
+    <td>
+      <select name="lines[__IDX__][material_id]" required>
+        <option value="">-- 选择原料 --</option>
+        {% for m in materials %}
+          <option value="{{ m.id }}">{{ m.material_code }} - {{ m.material_name }} ({{ m.unit }})</option>
+        {% endfor %}
+      </select>
+    </td>
+    <td><input type="number" step="0.000001" min="0" name="lines[__IDX__][quantity]" required></td>
+    <td><input type="number" step="0.000001" min="0" name="lines[__IDX__][unit_cost]" required></td>
+    <td class="row-total" style="text-align:right;">0</td>
+    <td><button type="button" class="btn btn-danger btn-remove-row">删除</button></td>
+  </tr>
+</template>
+
+<!-- ↓ 引入外部 JS -->
+<script src="{{ url_for('static', filename='js/purchase_in.js') }}"></script>
+{% endblock %}

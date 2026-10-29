@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{{ label }}{% endblock %}
+{% block content %}
+<h2 class="mb-3">{{ label }} - {{ "{{" }} "编辑" if obj else "新增" {{ "}}" }}</h2>
+<form method="post" class="card card-body">
+  <input type="hidden" name="csrf_token" value="{{ "{{" }} csrf_token() {{ "}}" }}">
+  <div class="row g-3">
+  {% for field in form_fields %}
+    <div class="col-md-4">
+      <label class="form-label">{{ field_labels.get(field, field) }}</label>
+      <input class="form-control" name="{{ field }}" value="{{ "{{" }} (obj.{{ field }} if obj else '') or '' {{ "}}" }}">
+    </div>
+  {% endfor %}
+  </div>
+  <div class="mt-4">
+    <button class="btn btn-primary">保存</button>
+    <a class="btn btn-outline-secondary" href="{{ "{{" }} url_for('{{ endpoint_prefix }}.index') {{ "}}" }}">取消</a>
+  </div>
+</form>
+{% endblock %}

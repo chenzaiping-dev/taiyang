@@ -1,0 +1,45 @@
+{% extends "inventory/base.html" %}
+{% block title %}出库成功{% endblock %}
+
+{% block content %}
+<h2>✅ 出库成功</h2>
+
+<div class="form-row"><label>单据号：</label>{{ result.document_no }}</div>
+<div class="form-row"><label>单据类型：</label>{{ result.document_type }}</div>
+<div class="form-row"><label>状态：</label>{{ result.status }}</div>
+<div class="form-row"><label>出库时间：</label>{{ result.document_time }}</div>
+
+<h3>FIFO 成本分配明细</h3>
+<table>
+  <thead>
+    <tr>
+      <th>原料ID</th>
+      <th>出库数量</th>
+      <th>已消耗</th>
+      <th>短缺</th>
+      <th>总成本</th>
+      <th>成本层明细</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for l in result.lines %}
+    <tr>
+      <td>{{ l.material_id }}</td>
+      <td>{{ l.quantity }}</td>
+      <td>{{ l.consumed }}</td>
+      <td>{{ l.shortage }}</td>
+      <td>{{ l.total_cost }}</td>
+      <td>
+        {% for a in l.allocations %}
+          <div>层#{{ a.cost_layer_id }}：{{ a.quantity }} × {{ a.unit_cost }} = {{ a.cost_amount }}</div>
+        {% endfor %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div style="margin-top:20px;">
+  <a class="btn btn-primary" href="{{ url_for('stock_out.stock_out_page') }}">继续出库</a>
+</div>
+{% endblock %}

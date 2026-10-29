@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ label }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2>{{ label }}</h2>
+  {% if mode == "crud" %}<a class="btn btn-primary" href="{{ "{{" }} url_for('{{ endpoint_prefix }}.create') {{ "}}" }}">新增</a>{% endif %}
+</div>
+<form method="get" class="row g-2 mb-3">
+  <div class="col-md-4"><input class="form-control" name="keyword" value="{{ "{{" }} keyword {{ "}}" }}" placeholder="搜索关键词"></div>
+  <div class="col-auto"><button class="btn btn-outline-primary">搜索</button></div>
+</form>
+<div class="table-responsive">
+<table class="table table-striped table-hover">
+<thead><tr>{% for field in display_fields %}<th>{{ "{{" }} config["field_labels"].get(field, field) {{ "}}" }}</th>{% endfor %}
+{% if mode == "crud" %}<th>操作</th>{% endif %}</tr></thead>
+<tbody>
+{% raw %}{% for row in rows %}{% endraw %}
+<tr>
+{% for field in display_fields %}<td>{{ "{{" }} row.{{ field }} {{ "}}" }}</td>{% endfor %}
+{% if mode == "crud" %}<td><a class="btn btn-sm btn-outline-secondary" href="{{ "{{" }} url_for('{{ endpoint_prefix }}.edit', row_id=row.{{ pk_field }}) {{ "}}" }}">编辑</a></td>{% endif %}
+</tr>
+{% raw %}{% else %}<tr><td colspan="99" class="text-center text-muted">暂无数据</td></tr>{% endfor %}{% endraw %}
+</tbody></table></div>
+{% endblock %}

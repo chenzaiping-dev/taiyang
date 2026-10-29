@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}编辑{{ cfg.label }}{% endblock %}
+{% block content %}
+<h2 class="mb-3">编辑{{ cfg.label }} #{{ row[pk_name] }}</h2>
+<form method="post" class="card card-body">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="row g-3">
+  {% for field in form_fields %}
+    {% set col = table.c[field] %}
+    <div class="col-md-4">
+      <label class="form-label">{{ col.comment or field }}</label>
+      {% if field in fk_options %}
+        <select class="form-select" name="{{ field }}">
+          <option value="">请选择</option>
+          {% for opt in fk_options[field] %}
+            <option value="{{ opt.value }}" {% if row[field] == opt.value %}selected{% endif %}>{{ opt.label }}</option>
+          {% endfor %}
+        </select>
+      {% elif field == 'sstatus' %}
+        <select class="form-select" name="{{ field }}">
+          <option value="1" {% if row[field] == 1 %}selected{% endif %}>启用</option>
+          <option value="0" {% if row[field] == 0 %}selected{% endif %}>禁用</option>
+        </select>
+      {% else %}
+        <input class="form-control" name="{{ field }}" value="{{ row[field] if row[field] is not none else '' }}">
+      {% endif %}
+    </div>
+  {% endfor %}
+  </div>
+  <div class="mt-4">
+    <button class="btn btn-primary">保存修改</button>
+    <a class="btn btn-outline-secondary" href="{{ url_for('admin.table_list', table_name=table_name) }}">取消</a>
+  </div>
+</form>
+{% endblock %}

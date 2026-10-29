@@ -1,0 +1,111 @@
+{% extends "inventory/base.html" %}
+{% block title %}原料出入库汇总{% endblock %}
+
+{% block content %}
+<h2>原料累计出入库汇总</h2>
+
+<form method="get"
+      action="{{ url_for('inventory_query.material_io_summary_page') }}"
+      style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+  <input type="text" name="material_code" value="{{ material_code }}"
+         placeholder="原料编码/名称" maxlength="50">
+
+  <select name="warehouse_id" onchange="this.form.submit()">
+    <option value="">-- 全部仓库 --</option>
+    {% for w in warehouses %}
+      <option value="{{ w.id }}"
+        {% if warehouse_id|string == w.id|string %}selected{% endif %}>
+        [{{ {'raw_material':'原料','general':'普通'}.get(w.warehouse_type, w.warehouse_type) }}]
+        {{ w.warehouse_code }} - {{ w.warehouse_name }}
+      </option>
+    {% endfor %}
+  </select>
+
+  <label style="font-size:12px;color:#666;">
+    从 <input type="date" name="date_from" value="{{ date_from }}">
+    到 <input type="date" name="date_to" value="{{ date_to }}">
+  </label>
+
+  <button type="submit" class="btn btn-primary">查询</button>
+  <a class="btn" href="{{ url_for('inventory_query.material_io_summary_page') }}">重置</a>
+</form>
+
+{% if current_wh %}
+  <div style="margin-bottom:12px;padding:8px 12px;background:#e3f2fd;
+              border:1px solid #90caf9;border-radius:4px;font-size:13px;">
+    当前仓库：
+    <strong>{{ current_wh.warehouse_code }} - {{ current_wh.warehouse_name }}</strong>
+    <a style="margin-left:12px;color:#1565c0;"
+       href="{{ url_for('inventory_query.material_io_summary_page',
+            material_code=material_code,
+            date_from=date_from, date_to=date_to) }}">清除仓库筛选</a>
+  </div>
+{% endif %}
+
+<table style="width:100%;border-collapse:collapse;font-size:13px;">
+  <thead>
+    <tr style="background:#f5f5f5;">
+      <th style="width:60px;">ID</th>
+      <th>原料编码</th>
+      <th>原料名称</th>
+      <th style="width:60px;">单位</th>
+      {% if warehouse_id %}<th>仓库</th>{% endif %}
+      <th style="width:130px;text-align:right;background:#e8f5e9;">累计入库</th>
+      <th style="width:130px;text-align:right;background:#fff3e0;">累计出库</th>
+      <th style="width:130px;text-align:right;">净库存</th>
+      <th style="width:120px;text-align:right;">采购/退货入</th>
+      <th style="width:110px;text-align:right;">盘盈入</th>
+      <th style="width:120px;text-align:right;">领料出</th>
+      <th style="width:110px;text-align:right;">盘亏出</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if rows %}
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.material_id }}</td>
+        <td>{{ r.material_code }}</td>
+        <td>{{ r.material_name }}</td>
+        <td>{{ r.unit or "" }}</td>
+        {% if warehouse_id %}
+          <td>{{ r.warehouse_code }} - {{ r.warehouse_name }}</td>
+        {% endif %}
+        <td style="text-align:right;color:#2e7d32;font-weight:600;">
+          {{ r.total_in }}
+        </td>
+        <td style="text-align:right;color:#c62828;font-weight:600;">
+          {{ r.total_out }}
+        </td>
+        <td style="text-align:right;">{{ r.net_qty }}</td>
+        <td style="text-align:right;color:#666;">{{ r.in_purchase }}</td>
+        <td style="text-align:right;color:#666;">{{ r.in_gain }}</td>
+        <td style="text-align:right;color:#666;">{{ r.out_production }}</td>
+        <td style="text-align:right;color:#666;">{{ r.out_loss }}</td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr>
+        <td colspan="{{ 11 if warehouse_id else 10 }}"
+            style="text-align:center;color:#999;padding:24px;">
+          没有符合条件的流水记录
+        </td>
+      </tr>
+    {% endif %}
+  </tbody>
+</table>
+
+<!-- 分页 -->
+<div style="margin-top:16px;display:flex;align-items:center;gap:8px;">
+  <span>共 {{ total }} 条，第 {{ page }}/{{ total_pages }} 页</span>
+  {% if page > 1 %}
+    <a class="btn" href="{{ url_for('inventory_query.material_io_summary_page',
+         material_code=material_code, warehouse_id=warehouse_id,
+         date_from=date_from, date_to=date_to, page=page-1) }}">上一页</a>
+  {% endif %}
+  {% if page < total_pages %}
+    <a class="btn" href="{{ url_for('inventory_query.material_io_summary_page',
+         material_code=material_code, warehouse_id=warehouse_id,
+         date_from=date_from, date_to=date_to, page=page+1) }}">下一页</a>
+  {% endif %}
+</div>
+{% endblock %}

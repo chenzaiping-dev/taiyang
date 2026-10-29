@@ -1,0 +1,142 @@
+{% extends "inventory/base.html" %}
+{% block title %}原料出入库流水{% endblock %}
+
+{% block content %}
+<h2>原料出入库流水</h2>
+
+<form method="get"
+      action="{{ url_for('inventory_query.material_transactions_page') }}"
+      style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+  <input type="text" name="material_code" value="{{ material_code }}"
+         placeholder="原料编码/名称" maxlength="50">
+  <input type="text" name="document_no" value="{{ document_no }}"
+         placeholder="单据号" maxlength="50">
+
+  <select name="warehouse_id">
+    <option value="">-- 全部仓库 --</option>
+    {% for w in warehouses %}
+      <option value="{{ w.id }}"
+        {% if warehouse_id|string == w.id|string %}selected{% endif %}>
+        [{{ {'raw_material':'原料','general':'普通'}.get(w.warehouse_type, w.warehouse_type) }}]
+        {{ w.warehouse_code }} - {{ w.warehouse_name }}
+      </option>
+    {% endfor %}
+  </select>
+
+  <select name="transaction_type">
+    <option value="">-- 全部业务类型 --</option>
+    {% for code, label in transaction_types.items() %}
+      <option value="{{ code }}"
+        {% if transaction_type == code %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+
+  <label style="font-size:12px;color:#666;">
+    从 <input type="date" name="date_from" value="{{ date_from }}">
+    到 <input type="date" name="date_to" value="{{ date_to }}">
+  </label>
+
+  <button type="submit" class="btn btn-primary">查询</button>
+  <a class="btn" href="{{ url_for('inventory_query.material_transactions_page') }}">重置</a>
+</form>
+
+<table style="width:100%;border-collapse:collapse;font-size:12px;">
+  <thead>
+    <tr style="background:#f5f5f5;">
+      <th style="width:60px;">流水ID</th>
+      <th style="width:130px;">业务时间</th>
+      <th style="width:100px;">业务类型</th>
+      <th>原料</th>
+      <th>仓库</th>
+      <th style="width:120px;text-align:right;">数量变动</th>
+      <th style="width:110px;text-align:right;">单价</th>
+      <th style="width:120px;text-align:right;">金额</th>
+      <th style="width:160px;">单据号</th>
+      <th style="width:90px;">单据类型</th>
+      <th>供应商 / 工艺单</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if rows %}
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.id }}</td>
+        <td>{{ r.transaction_time.strftime("%Y-%m-%d %H:%M:%S") if r.transaction_time else "-" }}</td>
+        <td>
+          <span class="tx-badge tx-{{ r.transaction_type|lower }}">
+            {{ transaction_types.get(r.transaction_type, r.transaction_type) }}
+          </span>
+        </td>
+        <td>
+          {{ r.material_code }} - {{ r.material_name }}
+          {% if r.unit %}<span style="color:#999;">({{ r.unit }})</span>{% endif %}
+        </td>
+        <td>{{ r.warehouse_code }} - {{ r.warehouse_name }}</td>
+        <td style="text-align:right;font-weight:600;
+                   color:{{ '#2e7d32' if r.quantity_delta > 0 else '#c62828' }};">
+          {{ '+' if r.quantity_delta > 0 }}{{ r.quantity_delta }}
+        </td>
+        <td style="text-align:right;">{{ r.unit_cost if r.unit_cost is not none else '-' }}</td>
+        <td style="text-align:right;">{{ r.total_cost if r.total_cost is not none else '-' }}</td>
+        <td>
+          <a href="{{ url_for('inventory_query.material_transactions_page',
+                              document_no=r.document_no) }}"
+             title="只看该单据下所有流水">
+            {{ r.document_no }}
+          </a>
+          {% if r.document_status and r.document_status != 'CONFIRMED' %}
+            <span style="color:#999;">[{{ r.document_status }}]</span>
+          {% endif %}
+        </td>
+        <td>{{ document_types.get(r.document_type, r.document_type) }}</td>
+        <td>
+          {% if r.supplier_name %}
+            <span title="供应商">🏭 {{ r.supplier_name }}</span>
+          {% endif %}
+          {% if r.process_order_no %}
+            {% if r.supplier_name %}<br>{% endif %}
+            <a href="{{ url_for('process_order.detail_page', order_id=r.process_order_id) }}"
+               title="查看工艺单">
+              📋 {{ r.process_order_no }}
+            </a>
+          {% endif %}
+          {% if not r.supplier_name and not r.process_order_no %}-{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr>
+        <td colspan="11" style="text-align:center;color:#999;padding:24px;">
+          没有符合条件的流水记录
+        </td>
+      </tr>
+    {% endif %}
+  </tbody>
+</table>
+
+<!-- 分页 -->
+<div style="margin-top:16px;display:flex;align-items:center;gap:8px;">
+  <span>共 {{ total }} 条，第 {{ page }}/{{ total_pages }} 页</span>
+  {% if page > 1 %}
+    <a class="btn" href="{{ url_for('inventory_query.material_transactions_page',
+         material_code=material_code, warehouse_id=warehouse_id,
+         transaction_type=transaction_type, document_no=document_no,
+         date_from=date_from, date_to=date_to, page=page-1) }}">上一页</a>
+  {% endif %}
+  {% if page < total_pages %}
+    <a class="btn" href="{{ url_for('inventory_query.material_transactions_page',
+         material_code=material_code, warehouse_id=warehouse_id,
+         transaction_type=transaction_type, document_no=document_no,
+         date_from=date_from, date_to=date_to, page=page+1) }}">下一页</a>
+  {% endif %}
+</div>
+
+<style>
+  .tx-badge { display:inline-block;padding:1px 6px;border-radius:10px;font-size:11px; }
+  .tx-purchase_in   { background:#e8f5e9;color:#2e7d32; }
+  .tx-production_out{ background:#fff3e0;color:#ef6c00; }
+  .tx-stocktake_gain{ background:#e3f2fd;color:#1565c0; }
+  .tx-stocktake_loss{ background:#fdecea;color:#c62828; }
+  .tx-return_in     { background:#ede7f6;color:#4527a0; }
+</style>
+{% endblock %}

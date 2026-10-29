@@ -1,0 +1,65 @@
+{% extends "inventory/base.html" %}
+{% block title %}成品库库存{% endblock %}
+{% block content %}
+<h2>成品库库存</h2>
+
+<form method="get" action="{{ url_for('finished_goods.warehouses_page') }}"
+      style="margin-bottom:16px;display:flex;gap:8px;align-items:center;">
+  <input type="text" name="batch_keyword" value="{{ batch_keyword }}"
+         placeholder="批次号/产品名称" maxlength="50">
+  <select name="warehouse_id">
+    <option value="">-- 全部成品仓 --</option>
+    {% for w in warehouses %}
+      <option value="{{ w.id }}"
+        {% if warehouse_id|string == w.id|string %}selected{% endif %}>
+        {{ w.warehouse_code }} - {{ w.warehouse_name }}
+      </option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="btn btn-primary">查询</button>
+  <a class="btn" href="{{ url_for('finished_goods.warehouses_page') }}">重置</a>
+</form>
+
+<table style="width:100%;border-collapse:collapse;font-size:13px;">
+  <thead>
+    <tr style="background:#f5f5f5;">
+      <th style="width:50px;">ID</th>
+      <th>仓库</th>
+      <th>批次号</th>
+      <th>产品名称</th>
+      <th>规格</th>
+      <th style="width:60px;">单位</th>
+      <th style="width:90px;">质量</th>
+      <th style="width:140px;text-align:right;">库存数量</th>
+      <th style="width:150px;">更新时间</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if rows %}
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.id }}</td>
+        <td>{{ r.warehouse_code }} - {{ r.warehouse_name }}</td>
+        <td>{{ r.batch_no }}</td>
+        <td>{{ r.product_name }}</td>
+        <td>{{ r.product_specification or "-" }}</td>
+        <td>{{ r.unit or "" }}</td>
+        <td>{{ quality_labels.get(r.quality_status, r.quality_status) }}</td>
+        <td style="text-align:right;font-weight:600;">{{ r.quantity }}</td>
+        <td>{{ r.updated_at.strftime("%Y-%m-%d %H:%M") if r.updated_at else "-" }}</td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr><td colspan="9" style="text-align:center;color:#999;padding:24px;">暂无库存</td></tr>
+    {% endif %}
+  </tbody>
+</table>
+
+<div style="margin-top:16px;display:flex;gap:8px;align-items:center;">
+  <span>共 {{ total }} 条，第 {{ page }}/{{ total_pages }} 页</span>
+  {% if page > 1 %}<a class="btn" href="{{ url_for('finished_goods.warehouses_page',
+    batch_keyword=batch_keyword, warehouse_id=warehouse_id, page=page-1) }}">上一页</a>{% endif %}
+  {% if page < total_pages %}<a class="btn" href="{{ url_for('finished_goods.warehouses_page',
+    batch_keyword=batch_keyword, warehouse_id=warehouse_id, page=page+1) }}">下一页</a>{% endif %}
+</div>
+{% endblock %}

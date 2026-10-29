@@ -1,0 +1,243 @@
+{% extends "inventory/base.html" %}
+{% block title %}{{ '编辑工艺单' if mode == 'edit' else '新建工艺单' }}{% endblock %}
+
+{% block content %}
+<h2>
+  {{ '编辑工艺单' if mode == 'edit' else '新建工艺单' }}
+  {% if mode == 'edit' %}
+    <span style="color:#888;font-size:14px;">
+      #{{ form_data.process_order_no }}
+    </span>
+  {% endif %}
+</h2>
+
+{% if errors %}
+  <div class="error-box">
+    <ul style="margin:0;padding-left:20px;">
+      {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+<!-- ⭐ 关键：action 与 hidden 字段按 mode 切换 -->
+<form id="po-form"
+      method="post"
+      action="{% if mode == 'edit' %}
+                {{ url_for('process_order.update_submit', order_id=order_id) }}
+              {% else %}
+                {{ url_for('process_order.create_submit') }}
+              {% endif %}"
+      data-next-index="{{ form_data.materials|length }}">
+
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  {% if mode == 'edit' %}
+    <input type="hidden" name="process_order_id" value="{{ order_id }}">
+    <input type="hidden" name="created_by" value="{{ form_data.created_by }}">
+  {% else %}
+    <input type="hidden" name="created_by" value="{{ form_data.created_by or 1 }}">
+  {% endif %}
+
+  <fieldset>
+    <legend>基本信息</legend>
+
+    <div class="form-row">
+      <label for="factory_id">加工厂 *</label>
+      <select id="factory_id" name="factory_id" required>
+        <option value="">-- 请选择 --</option>
+        {% for f in factories %}
+          <option value="{{ f.id }}"
+            {% if form_data.factory_id|string == f.id|string %}selected{% endif %}>
+            {{ f.factory_code }} - {{ f.factory_name }}
+          </option>
+        {% endfor %}
+      </select>
+
+      <label for="followup_employee_id">跟单员 *</label>
+      <select id="followup_employee_id" name="followup_employee_id" required>
+        <option value="">-- 请选择 --</option>
+        {% for e in employees %}
+          <option value="{{ e.id }}"
+            {% if form_data.followup_employee_id|string == e.id|string %}selected{% endif %}>
+            {{ e.real_name }} ({{ e.username }})
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-row">
+      <label for="performance_id">业绩单 *</label>
+      <select id="performance_id" name="performance_id" required>
+        <option value="">-- 请选择 --</option>
+        {% for p in performances %}
+          <option value="{{ p.id }}"
+            {% if form_data.performance_id|string == p.id|string %}selected{% endif %}>
+            {{ p.performance_no }} - {{ p.company_name }} / {{ p.product_name }}
+          </option>
+        {% endfor %}
+      </select>
+
+      <label for="order_time">下单时间 *</label>
+      <input type="datetime-local" id="order_time" name="order_time"
+             value="{{ form_data.order_time }}" required>
+    </div>
+
+    <div class="form-row">
+      <label for="process_order_no">工艺单号</label>
+      <!-- ⭐ 编辑模式只读；新建模式可留空自动生成 -->
+      <input type="text" id="process_order_no" name="process_order_no"
+             maxlength="50" value="{{ form_data.process_order_no }}"
+             {% if mode == 'edit' %}readonly{% endif %}
+             placeholder="留空自动生成">
+
+      <label for="batch_no">生产批号 *</label>
+      <input type="text" id="batch_no" name="batch_no"
+             maxlength="100" value="{{ form_data.batch_no }}" required>
+    </div>
+
+    <div class="form-row">
+      <label for="product_name">产品名称 *</label>
+      <input type="text" id="product_name" name="product_name"
+             maxlength="200" value="{{ form_data.product_name }}" required>
+    </div>
+
+    <div class="form-row">
+      <label for="product_specification">产品规格</label>
+      <input type="text" id="product_specification" name="product_specification"
+             maxlength="500" style="flex:1;"
+             value="{{ form_data.product_specification }}">
+    </div>
+
+    <div class="form-row">
+      <label for="quantity">计划数量 *</label>
+      <input type="number" id="quantity" name="quantity" step="0.000001"
+             min="0.000001" value="{{ form_data.quantity }}" required>
+
+      <label for="unit">单位</label>
+      <input type="text" id="unit" name="unit" maxlength="20"
+             value="{{ form_data.unit }}">
+
+      <label for="status">状态</label>
+      <select id="status" name="status">
+        {% for code, label in [
+          ('DRAFT','草稿'),('ORDERED','已下单'),('PRODUCING','生产中'),
+          ('COMPLETED','已完工'),('RECEIVED','已入库'),('CANCELLED','已取消')
+        ] %}
+          <option value="{{ code }}"
+            {% if form_data.status == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-row">
+      <label for="cost_price">预计单位成本</label>
+      <input type="number" id="cost_price" name="cost_price"
+             step="0.000001" min="0" value="{{ form_data.cost_price }}">
+
+      <label for="total_cost">预计总成本</label>
+      <input type="number" id="total_cost" name="total_cost"
+             step="0.000001" min="0" value="{{ form_data.total_cost }}">
+    </div>
+
+    <div class="form-row">
+      <label for="remark">备注</label>
+      <input type="text" id="remark" name="remark" maxlength="500"
+             style="flex:1;" value="{{ form_data.remark }}">
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>原料配比（配比合计必须 = 1）</legend>
+    <table id="mat-table">
+      <thead>
+        <tr>
+          <th style="width:40px;">#</th>
+          <th>原料 *</th>
+          <th style="width:120px;">配比 *</th>
+          <th style="width:140px;">数量（自动）</th>
+          <th style="width:140px;">成本</th>
+          <th>备注</th>
+          <th style="width:80px;">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in form_data.materials %}
+        <tr class="mat-row">
+          <td class="row-no">{{ loop.index }}</td>
+          <td>
+            <select name="materials[{{ loop.index0 }}][material_id]" required>
+              <option value="">-- 选择原料 --</option>
+              {% for mat in materials %}
+                <option value="{{ mat.id }}"
+                  {% if m.material_id|string == mat.id|string %}selected{% endif %}>
+                  {{ mat.material_code }} - {{ mat.material_name }} ({{ mat.unit }})
+                </option>
+              {% endfor %}
+            </select>
+          </td>
+          <td><input type="number" step="0.00000001" min="0" max="1"
+                     name="materials[{{ loop.index0 }}][ratio_value]"
+                     value="{{ m.ratio_value }}" required class="ratio-input"></td>
+          <td><input type="number" step="0.000001" min="0"
+                     name="materials[{{ loop.index0 }}][quantity]"
+                     value="{{ m.quantity }}" readonly class="qty-auto"
+                     title="由计划数量 × 配比自动计算"></td>
+          <td><input type="number" step="0.000001" min="0"
+                     name="materials[{{ loop.index0 }}][cost]"
+                     value="{{ m.cost }}"></td>
+          <td><input type="text" maxlength="255"
+                     name="materials[{{ loop.index0 }}][remark]"
+                     value="{{ m.remark }}"></td>
+          <td><button type="button" class="btn btn-danger btn-remove-row">删除</button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <th colspan="2" style="text-align:right;">配比合计</th>
+          <th id="ratio-sum" style="text-align:right;">0</th>
+          <th colspan="4"></th>
+        </tr>
+      </tfoot>
+    </table>
+
+    <button type="button" id="add-row-btn" class="btn">+ 添加原料</button>
+  </fieldset>
+
+  <div style="margin-top:24px;">
+    <button type="submit" class="btn btn-primary">
+      {{ '保存修改' if mode == 'edit' else '保存工艺单' }}
+    </button>
+    <a class="btn" href="{% if mode == 'edit' %}
+                          {{ url_for('process_order.detail_page', order_id=order_id) }}
+                        {% else %}
+                          {{ url_for('process_order.list_page') }}
+                        {% endif %}">取消</a>
+  </div>
+</form>
+
+<template id="mat-template">
+  <tr class="mat-row">
+    <td class="row-no"></td>
+    <td>
+      <select name="materials[__IDX__][material_id]" required>
+        <option value="">-- 选择原料 --</option>
+        {% for mat in materials %}
+          <option value="{{ mat.id }}">{{ mat.material_code }} - {{ mat.material_name }} ({{ mat.unit }})</option>
+        {% endfor %}
+      </select>
+    </td>
+    <td><input type="number" step="0.00000001" min="0" max="1"
+               name="materials[__IDX__][ratio_value]" required class="ratio-input"></td>
+    <td><input type="number" step="0.000001" min="0"
+               name="materials[__IDX__][quantity]" readonly class="qty-auto"></td>
+    <td><input type="number" step="0.000001" min="0"
+               name="materials[__IDX__][cost]"></td>
+    <td><input type="text" maxlength="255"
+               name="materials[__IDX__][remark]"></td>
+    <td><button type="button" class="btn btn-danger btn-remove-row">删除</button></td>
+  </tr>
+</template>
+
+<script src="{{ url_for('static', filename='js/process_order.js') }}"></script>
+{% endblock %}

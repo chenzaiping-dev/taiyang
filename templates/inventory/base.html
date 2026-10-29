@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}仓储管理{% endblock %}</title>
+  <style>
+    body { font-family: -apple-system, "Segoe UI", sans-serif; margin: 24px; }
+    .form-row { display: flex; gap: 16px; margin-bottom: 12px; }
+    .form-row label { width: 100px; display: inline-block; }
+    table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+    table th, table td { border: 1px solid #ddd; padding: 6px; }
+    .error-box {
+      background: #fdecea; color: #b3261e;
+      border: 1px solid #f5c2c0; padding: 10px 14px;
+      border-radius: 6px; margin-bottom: 16px;
+    }
+    .btn { padding: 6px 14px; cursor: pointer; }
+    .btn-primary { background: #1976d2; color: #fff; border: none; border-radius: 4px; }
+    .btn-danger  { background: #e53935; color: #fff; border: none; border-radius: 4px; }
+    .qty-auto {
+      background: #f5f5f5;
+      color: #333;
+      cursor: not-allowed;
+    }
+    .form-row { display: flex; gap: 16px; margin-bottom: 10px; }
+    .form-row label { width: 140px; color: #555; }
+    fieldset { border: 1px solid #ddd; border-radius: 6px; padding: 16px; margin-bottom: 20px; }
+    legend { padding: 0 8px; color: #333; }
+    table th, table td { border: 1px solid #eee; padding: 8px; }
+    table thead th { font-weight: 600; }
+    .btn { padding: 4px 10px; border: 1px solid #ddd; border-radius: 4px;
+          text-decoration: none; color: #333; background: #fff; cursor: pointer; }
+    .btn-primary { background: #1976d2; color: #fff; border-color: #1976d2; }
+    .btn-danger  { background: #e53935; color: #fff; border-color: #e53935; }    
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="{{ url_for('inventory_query.material_stock_page') }}">原料库存</a>
+    <a href="{{ url_for('inventory_query.material_io_summary_page') }}">原料出入库汇总</a>
+    <a href="{{ url_for('inventory_query.material_transactions_page') }}">出入库流水</a>
+    <a href="{{ url_for('purchase_in.purchase_in_page') }}">原料入库</a>
+    <a href="{{ url_for('stock_out.stock_out_page') }}">原料出库</a>
+    <a href="{{ url_for('process_order.list_page') }}">工艺单列表</a>
+
+    <a href="{{ url_for('finished_goods.warehouses_page') }}">成品库存</a>
+    <a href="{{ url_for('finished_goods.io_summary_page') }}">成品出入库汇总</a>
+    <a href="{{ url_for('finished_goods.transactions_page') }}">成品流水</a>    
+    <a href="{{ url_for('finished_goods.inbound_page') }}">成品入库</a>
+    <a href="{{ url_for('finished_goods.outbound_page') }}">成品出库</a>
+  </nav>  
+  {% block content %}{% endblock %}
+</body>
+</html>

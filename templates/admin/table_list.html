@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ cfg.label }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2>{{ cfg.label }}</h2>
+  <a class="btn btn-outline-secondary" href="{{ url_for('admin.dashboard') }}">返回首页</a>
+</div>
+
+{% if cfg.search_fields %}
+<form method="get" class="row g-2 mb-3">
+  <div class="col-md-4"><input class="form-control" name="keyword" value="{{ keyword }}" placeholder="输入关键词"></div>
+  <div class="col-auto"><button class="btn btn-primary">搜索</button></div>
+  <div class="col-auto"><a class="btn btn-outline-secondary" href="{{ url_for('admin.table_list', table_name=table_name) }}">重置</a></div>
+</form>
+{% endif %}
+
+{% if cfg.mode == 'crud' and cfg.can_create %}
+<div class="card mb-4">
+  <div class="card-header">新增</div>
+  <div class="card-body">
+    <form method="post" class="row g-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% for field in form_fields %}
+        {% set col = table.c[field] %}
+        <div class="col-md-4">
+          <label class="form-label">{{ col.comment or field }}</label>
+          {% if field in fk_options %}
+            <select class="form-select" name="{{ field }}" {% if not col.nullable %}required{% endif %}>
+              <option value="">请选择</option>
+              {% for opt in fk_options[field] %}<option value="{{ opt.value }}">{{ opt.label }}</option>{% endfor %}
+            </select>
+          {% elif field == 'sstatus' %}
+            <select class="form-select" name="{{ field }}"><option value="1">启用</option><option value="0">禁用</option></select>
+          {% else %}
+            <input class="form-control" name="{{ field }}" {% if not col.nullable %}required{% endif %}>
+          {% endif %}
+        </div>
+      {% endfor %}
+      <div class="col-12"><button class="btn btn-success">保存</button></div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<div class="table-responsive">
+<table class="table table-striped table-hover align-middle">
+<thead><tr>{% for field in fields %}<th>{{ table.c[field].comment or field }}</th>{% endfor %}<th>操作</th></tr></thead>
+<tbody>
+{% for row in rows %}
+<tr>
+  {% for field in fields %}<td>{{ row[field] if row[field] is not none else '' }}</td>{% endfor %}
+  <td>
+    {% if cfg.mode == 'crud' and cfg.can_edit %}
+      <a class="btn btn-sm btn-outline-primary" href="{{ url_for('admin.table_edit', table_name=table_name, row_id=row[pk_name]) }}">编辑</a>
+    {% else %}
+      <span class="text-muted">只读</span>
+    {% endif %}
+  </td>
+</tr>
+{% else %}
+<tr><td colspan="{{ fields|length + 1 }}" class="text-center text-muted">暂无数据</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+<p class="text-muted small">当前最多显示 200 条记录；正式使用建议增加分页、排序白名单及细粒度权限。</p>
+{% endblock %}

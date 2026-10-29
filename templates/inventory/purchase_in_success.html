@@ -1,0 +1,37 @@
+{% extends "inventory/base.html" %}
+{% block title %}入库成功{% endblock %}
+
+{% block content %}
+<h2>✅ 采购入库成功</h2>
+
+<div class="form-row"><label>单据号：</label>{{ result.document_no }}</div>
+<div class="form-row"><label>状态：</label>{{ result.status }}</div>
+<div class="form-row"><label>入库时间：</label>{{ result.document_time }}</div>
+<div class="form-row"><label>总金额：</label>{{ result.total_cost }}</div>
+<div class="form-row"><label>明细行数：</label>{{ result.line_count }}</div>
+
+<h3>生成的 FIFO 成本层</h3>
+<table>
+  <thead>
+    <tr>
+      <th>层ID</th><th>原料ID</th><th>原始数量</th>
+      <th>剩余数量</th><th>单价</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for l in result.layers %}
+    <tr>
+      <td>{{ l.layer_id }}</td>
+      <td>{{ l.material_id }}</td>
+      <td>{{ l.original_qty }}</td>
+      <td>{{ l.remaining_qty }}</td>
+      <td>{{ l.unit_cost }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div style="margin-top:20px;">
+  <a class="btn btn-primary" href="{{ url_for('purchase_in.purchase_in_page') }}">继续录入</a>
+</div>
+{% endblock %}

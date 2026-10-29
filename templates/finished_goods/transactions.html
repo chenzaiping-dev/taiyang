@@ -1,0 +1,97 @@
+{% extends "inventory/base.html" %}
+{% block title %}成品库历史记录{% endblock %}
+{% block content %}
+<h2>成品库历史记录</h2>
+
+<form method="get" action="{{ url_for('finished_goods.transactions_page') }}"
+      style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+  <input type="text" name="document_no" value="{{ document_no }}"
+         placeholder="单据号" maxlength="50">
+  <select name="warehouse_id">
+    <option value="">-- 全部仓库 --</option>
+    {% for w in warehouses %}
+      <option value="{{ w.id }}" {% if warehouse_id|string == w.id|string %}selected{% endif %}>
+        {{ w.warehouse_code }} - {{ w.warehouse_name }}
+      </option>
+    {% endfor %}
+  </select>
+  <select name="transaction_type">
+    <option value="">-- 全部类型 --</option>
+    {% for code, label in tx_types.items() %}
+      <option value="{{ code }}" {% if transaction_type == code %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <label style="font-size:12px;color:#666;">
+    从 <input type="date" name="date_from" value="{{ date_from }}">
+    到 <input type="date" name="date_to" value="{{ date_to }}">
+  </label>
+  <button type="submit" class="btn btn-primary">查询</button>
+  <a class="btn" href="{{ url_for('finished_goods.transactions_page') }}">重置</a>
+</form>
+
+<table style="width:100%;border-collapse:collapse;font-size:12px;">
+  <thead>
+    <tr style="background:#f5f5f5;">
+      <th style="width:60px;">ID</th>
+      <th style="width:150px;">时间</th>
+      <th style="width:110px;">类型</th>
+      <th>仓库</th>
+      <th>批次号</th>
+      <th>产品名称</th>
+      <th style="width:60px;">单位</th>
+      <th style="width:130px;text-align:right;">数量变化</th>
+      <th>单据号</th>
+      <th>单据类型</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if rows %}
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.id }}</td>
+        <td>{{ r.transaction_time.strftime("%Y-%m-%d %H:%M:%S") if r.transaction_time else "-" }}</td>
+        <td><span class="tx-badge tx-{{ r.transaction_type|lower }}">
+          {{ tx_types.get(r.transaction_type, r.transaction_type) }}</span></td>
+        <td>{{ r.warehouse_code }} - {{ r.warehouse_name }}</td>
+        <td>{{ r.batch_no }}</td>
+        <td>{{ r.product_name }}</td>
+        <td>{{ r.unit or "" }}</td>
+        <td style="text-align:right;font-weight:600;
+                   color:{{ '#2e7d32' if r.quantity_delta > 0 else '#c62828' }};">
+          {{ '+' if r.quantity_delta > 0 }}{{ r.quantity_delta }}
+        </td>
+        <td>
+          <a href="{{ url_for('finished_goods.transactions_page',
+               document_no=r.document_no) }}">{{ r.document_no }}</a>
+        </td>
+        <td>{{ {'PRODUCTION_IN':'生产入库','OUTBOUND':'出库',
+                'TRANSFER':'调拨','CUSTOMER_RETURN':'客户退货',
+                'ADJUSTMENT':'库存调整'}.get(r.document_type, r.document_type) }}</td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr><td colspan="10" style="text-align:center;color:#999;padding:24px;">暂无记录</td></tr>
+    {% endif %}
+  </tbody>
+</table>
+
+<div style="margin-top:16px;display:flex;gap:8px;align-items:center;">
+  <span>共 {{ total }} 条，第 {{ page }}/{{ total_pages }} 页</span>
+  {% if page > 1 %}<a class="btn" href="{{ url_for('finished_goods.transactions_page',
+    document_no=document_no, warehouse_id=warehouse_id, transaction_type=transaction_type,
+    date_from=date_from, date_to=date_to, page=page-1) }}">上一页</a>{% endif %}
+  {% if page < total_pages %}<a class="btn" href="{{ url_for('finished_goods.transactions_page',
+    document_no=document_no, warehouse_id=warehouse_id, transaction_type=transaction_type,
+    date_from=date_from, date_to=date_to, page=page+1) }}">下一页</a>{% endif %}
+</div>
+
+<style>
+  .tx-badge { display:inline-block;padding:1px 6px;border-radius:10px;font-size:11px; }
+  .tx-production_in { background:#e8f5e9;color:#2e7d32; }
+  .tx-outbound      { background:#fff3e0;color:#ef6c00; }
+  .tx-customer_return{ background:#ede7f6;color:#4527a0; }
+  .tx-adjustment    { background:#e3f2fd;color:#1565c0; }
+  .tx-transfer_in   { background:#f3e5f5;color:#6a1b9a; }
+  .tx-transfer_out  { background:#fce4ec;color:#ad1457; }
+</style>
+{% endblock %}

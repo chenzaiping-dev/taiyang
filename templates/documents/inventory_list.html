@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}原料库存单据{% endblock %}
+{% block content %}
+<h2 class="mb-3">原料库存单据</h2>
+<div class="alert alert-warning">
+  当前页面仅用于查看单据。库存单据的确认必须在同一数据库事务中完成数量校验、库存流水写入、FIFO 成本层更新和幂等控制；此框架不会直接修改单据状态。
+</div>
+<div class="table-responsive">
+<table class="table table-striped">
+<thead><tr>{% for f in fields %}<th>{{ table.c[f].comment or f }}</th>{% endfor %}<th>操作</th></tr></thead>
+<tbody>
+{% for row in rows %}
+<tr>
+{% for f in fields %}<td>{{ row[f] if row[f] is not none else '' }}</td>{% endfor %}
+<td>
+{% if row['status'] == 'DRAFT' %}
+<form method="post" action="{{ url_for('documents.confirm_inventory_document', document_id=row['id']) }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<button class="btn btn-sm btn-outline-warning" onclick="return confirm('当前为占位确认入口，尚未执行库存过账。确定查看提示？')">确认流程</button>
+</form>
+{% else %}<span class="text-muted">—</span>{% endif %}
+</td>
+</tr>
+{% else %}<tr><td colspan="{{ fields|length + 1 }}">暂无数据</td></tr>{% endfor %}
+</tbody>
+</table>
+</div>
+{% endblock %}
