@@ -64,7 +64,7 @@
         <td>{{ b.product_specification or "-" }}</td>
         <td>{{ b.unit or "" }}</td>
         <td>{{ {'PENDING':'待检','QUALIFIED':'合格','REJECTED':'不合格'}.get(b.quality_status, b.quality_status) }}</td>
-        <td style="text-align:right;">{{ b.quantity }}</td>
+        <td style="text-align:right;">{{ b.available_qty }}</td>
         <td>
           <input type="hidden" name="lines[{{ loop.index0 }}][batch_id]"
                  value="{{ b.id }}" disabled class="batch-id">

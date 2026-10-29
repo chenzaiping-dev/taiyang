@@ -217,6 +217,7 @@ def outbound_page():
         FinishedGoodsQueryService.list_available_batches(warehouse_id)
         if warehouse_id else []
     )
+    #print("outbound_page batches:", batches)
     return render_template(
         "finished_goods/outbound.html",
         warehouses=_fg_warehouses(),

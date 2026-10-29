@@ -151,6 +151,26 @@ TABLES = {
         "form_fields": ["process_order_id", "material_id", "ratio_value", "quantity", "cost"],
         "search_fields": ["process_order_id", "material_id"],
         "can_create": True, "can_edit": True, "can_delete": False,
-    },  
-
+    },
+    "shipment_plans": {
+        "label": "发货计划单", "module": "发货管理", "mode": "crud",
+        "list_fields": ["id", "shipment_plan_no", "performance_id", "destination", "transport_method", "planned_ship_time", "actual_ship_time", "status"],
+        "form_fields": ["shipment_plan_no", "performance_id", "destination", "transport_method", "planned_ship_time", "actual_ship_time", "status"],
+        "search_fields": ["shipment_plan_no", "performance_id", "destination"],
+        "can_create": True, "can_edit": True, "can_delete": False,
+    },
+    "shipment_plan_lines": {
+        "label": "发货计划详单", "module": "发货管理", "mode": "crud",
+        "list_fields": ["id", "shipment_plan_id", "product_name", "product_specification", "unit", "unit_price", "quantity", "shipped_quantity"],
+        "form_fields": ["shipment_plan_id", "product_name", "product_specification", "unit", "unit_price", "quantity", "shipped_quantity"],
+        "search_fields": ["shipment_plan_id", "product_name"],
+        "can_create": True, "can_edit": True, "can_delete": False,
+    },
+    "shipment_plan_allocations": {
+        "label": "发货计划批次分配表", "module": "发货管理", "mode": "crud",
+        "list_fields": ["id", "shipment_line_id", "warehouse_id", "batch_id", "planned_quantity", "shipped_quantity"],
+        "form_fields": ["shipment_line_id", "warehouse_id", "batch_id", "planned_quantity", "shipped_quantity"],
+        "search_fields": ["warehouse_id", "batch_id"],
+        "can_create": True, "can_edit": True, "can_delete": False,
+    },
 }

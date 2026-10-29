@@ -859,7 +859,7 @@ CREATE TABLE shipment_plans (
         'PARTIALLY_SHIPPED',
         'SHIPPED',
         'CANCELLED'
-    ) NOT NULL DEFAULT 'DRAFT' COMMENT '发货状态',
+    ) NOT NULL DEFAULT 'DRAFT' COMMENT '发货状态 DRAFT:草稿, PLANNED:计划中, PARTIALLY_SHIPPED:部分发货, SHIPPED:已发货, CANCELLED:已取消',
 
     created_by BIGINT UNSIGNED NULL COMMENT '创建人ID',
     remark VARCHAR(1000) NULL COMMENT '备注',
@@ -975,8 +975,9 @@ CREATE TABLE finished_goods_reservations (
     status ENUM(
         'ACTIVE',
         'RELEASED',
-        'CONSUMED'
-    ) NOT NULL DEFAULT 'ACTIVE' COMMENT '预留状态',
+        'CONSUMED',
+        'TRANSFERRED'
+    ) NOT NULL DEFAULT 'ACTIVE' COMMENT '预留状态: ACTIVE:激活, RELEASED:已释放, CONSUMED:已消耗, TRANSFERRED:已转移',
 
     remark VARCHAR(500) NULL COMMENT '备注',
 

@@ -103,7 +103,7 @@ class FinishedGoodsQueryService:
                 FinishedGoodsBatch.product_specification,
                 FinishedGoodsBatch.unit,
                 FinishedGoodsBatch.quality_status,
-                FinishedGoodsInventory.quantity,
+                FinishedGoodsInventory.quantity.label("total_qty"),
                 # ⭐ 锁定数量 & 可用数量
                 locked_qty_col.label("locked_qty"),
                 (FinishedGoodsInventory.quantity - locked_qty_col).label("available_qty"),
@@ -410,3 +410,25 @@ class FinishedGoodsQueryService:
                          - Decimal(str(r["current_qty"] or 0)))
 
         return rows, total
+
+    @staticmethod
+    def get_batch_available_qty(warehouse_id: int, batch_id: int):
+        """返回 (库存总量, 锁定数量, 可用数量)"""
+        inv = FinishedGoodsInventory.query.filter_by(
+            warehouse_id=warehouse_id, batch_id=batch_id
+        ).first()
+        total_qty = inv.quantity if inv else 0
+
+        from app.models.finished_goods import FinishedGoodsReservation
+        locked = (
+            db.session.query(func.coalesce(
+                func.sum(FinishedGoodsReservation.remaining_quantity), 0))
+            .filter(
+                FinishedGoodsReservation.warehouse_id == warehouse_id,
+                FinishedGoodsReservation.batch_id == batch_id,
+                FinishedGoodsReservation.status == "ACTIVE",
+            )
+            .scalar()
+        ) or 0
+
+        return total_qty, locked, (total_qty - locked)

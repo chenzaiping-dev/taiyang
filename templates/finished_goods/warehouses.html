@@ -47,7 +47,7 @@
         <td>{{ r.product_specification or "-" }}</td>
         <td>{{ r.unit or "" }}</td>
         <td>{{ quality_labels.get(r.quality_status, r.quality_status) }}</td>
-        <td style="text-align:right;">{{ r.quantity }}</td>
+        <td style="text-align:right;">{{ r.total_qty }}</td>
         <td style="text-align:right;color:#ef6c00;font-weight:600;">
           {{ r.locked_qty }}
         </td>
@@ -65,7 +65,7 @@
   <tfoot>
     <tr style="background:#fafafa;font-weight:600;">
       <td colspan="7" style="text-align:right;">本页合计：</td>
-      <td style="text-align:right;">{{ rows|sum(attribute='quantity') }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='total_qty') }}</td>
       <td style="text-align:right;color:#ef6c00;">
         {{ rows|sum(attribute='locked_qty') }}
       </td>
