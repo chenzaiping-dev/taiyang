@@ -65,10 +65,11 @@ def _stock_rows_for_performance(performance_id):
         .join(FinishedGoodsBatch,
               FinishedGoodsBatch.id == FinishedGoodsInventory.batch_id)
         .filter(
-            FinishedGoodsInventory.quantity > 0,
+            FinishedGoodsInventory.quantity >= 0,
             FinishedGoodsBatch.product_name == perf.product_name,
         )
     )
+    #print(q)
     if perf.product_specification:
         q = q.filter(FinishedGoodsBatch.product_specification
                      == perf.product_specification)

@@ -419,7 +419,6 @@ class FinishedGoodsQueryService:
         ).first()
         total_qty = inv.quantity if inv else 0
 
-        from app.models.finished_goods import FinishedGoodsReservation
         locked = (
             db.session.query(func.coalesce(
                 func.sum(FinishedGoodsReservation.remaining_quantity), 0))
@@ -432,3 +431,22 @@ class FinishedGoodsQueryService:
         ) or 0
 
         return total_qty, locked, (total_qty - locked)
+
+    # ⭐ 新增：可复用的"可用量"表达式
+    @staticmethod
+    def _locked_subquery():
+        return (
+            select(
+                FinishedGoodsReservation.warehouse_id.label("wh_id"),
+                FinishedGoodsReservation.batch_id.label("bt_id"),
+                func.coalesce(
+                    func.sum(FinishedGoodsReservation.remaining_quantity), 0
+                ).label("locked_qty"),
+            )
+            .where(FinishedGoodsReservation.status == "ACTIVE")
+            .group_by(
+                FinishedGoodsReservation.warehouse_id,
+                FinishedGoodsReservation.batch_id,
+            )
+            .subquery()
+        )

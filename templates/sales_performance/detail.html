@@ -1,0 +1,156 @@
+{% extends "inventory/base.html" %}
+{% block title %}业绩单详情{% endblock %}
+{% block content %}
+<h2>
+  业绩单详情
+  <span style="color:#888;font-size:14px;">#{{ perf.performance_no }}</span>
+  <a class="btn" style="float:right;"
+     href="{{ url_for('sales_performance.edit_page', perf_id=perf.id) }}">编辑</a>
+  <a class="btn" style="float:right;margin-right:8px;"
+     href="{{ url_for('sales_performance.list_page') }}">返回列表</a>
+</h2>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, msg in messages %}
+      <div class="flash {{ category }}">{{ msg }}</div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<fieldset>
+  <legend>基本信息</legend>
+  <table class="detail-table">
+    <tr>
+      <th>业绩单号</th><td>{{ perf.performance_no }}</td>
+      <th>销售编号</th><td>{{ perf.sales_order_no or "-" }}</td>
+    </tr>
+    <tr>
+      <th>日期</th>
+      <td>{{ perf.performance_date.strftime("%Y-%m-%d") if perf.performance_date else "-" }}</td>
+      <th>客户期待发货日期</th>
+      <td>{{ perf.expected_delivery_date.strftime("%Y-%m-%d") if perf.expected_delivery_date else "-" }}</td>
+    </tr>
+    <tr>
+      <th>公司名称</th><td colspan="3">{{ perf.company_name }}</td>
+    </tr>
+    <tr>
+      <th>产品名称</th><td>{{ perf.product_name }}</td>
+      <th>产品规格</th><td>{{ perf.product_specification or "-" }}</td>
+    </tr>
+    <tr>
+      <th>产品单位</th><td>{{ perf.unit or "-" }}</td>
+      <th>销售数量</th><td>{{ perf.quantity }}</td>
+    </tr>
+  </table>
+</fieldset>
+
+<fieldset>
+  <legend>金额信息</legend>
+  <table class="detail-table">
+    <tr>
+      <th>销售单价</th><td>{{ perf.unit_price }}</td>
+      <th>销售金额</th><td>{{ perf.amount }}</td>
+    </tr>
+    <tr>
+      <th>成本</th><td>{{ perf.cost }}</td>
+      <th>利润</th><td>{{ perf.profit }}</td>
+    </tr>
+    <tr>
+      <th>收款状态</th>
+      <td>
+        <span class="pay-badge pay-{{ perf.payment_status|lower }}">
+          {{ payment_labels.get(perf.payment_status, perf.payment_status) }}
+        </span>
+      </td>
+      <th>状态</th>
+      <td>
+        <span class="status-badge status-{{ perf.status|lower }}">
+          {{ status_labels.get(perf.status, perf.status) }}
+        </span>
+      </td>
+    </tr>
+  </table>
+</fieldset>
+
+<fieldset>
+  <legend>销售与工厂</legend>
+  <table class="detail-table">
+    <tr>
+      <th>主销售员</th>
+      <td>{{ main_sales.real_name if main_sales else "-" }}</td>
+      <th>是否走常州工厂</th>
+      <td>
+        {% if perf.is_changzhou_factory %}
+          <span style="color:#2e7d32;">是</span>
+        {% else %}
+          <span style="color:#999;">否</span>
+        {% endif %}
+      </td>
+    </tr>
+    <tr>
+      <th>是否共同销售</th>
+      <td>
+        {% if perf.is_joint_sales %}
+          <span style="color:#2e7d32;">是</span>
+        {% else %}
+          <span style="color:#999;">否</span>
+        {% endif %}
+      </td>
+      <th>共同销售员</th>
+      <td>{{ co_sales.real_name if co_sales else "-" }}</td>
+    </tr>
+  </table>
+</fieldset>
+
+{% if perf.remark %}
+<fieldset>
+  <legend>备注</legend>
+  <p style="white-space:pre-wrap;">{{ perf.remark }}</p>
+</fieldset>
+{% endif %}
+
+<fieldset>
+  <legend>关联计划</legend>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;">
+    <a class="btn btn-primary"
+       href="{{ url_for('production_plan.new_page', performance_id=perf.id) }}">
+      + 生产计划
+    </a>
+    <a class="btn btn-success"
+       href="{{ url_for('shipment_plan.list_page', performance_id=perf.id) }}">
+      发货计划
+    </a>
+  </div>
+</fieldset>
+
+<div style="margin-top:16px;color:#999;font-size:12px;">
+  创建时间：{{ perf.created_at.strftime("%Y-%m-%d %H:%M") if perf.created_at else "-" }}
+  &nbsp;|&nbsp;
+  更新时间：{{ perf.updated_at.strftime("%Y-%m-%d %H:%M") if perf.updated_at else "-" }}
+</div>
+
+<style>
+  .detail-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .detail-table th {
+    background:#f8f8f8; text-align:left; padding:8px 10px;
+    border:1px solid #eee; width:150px; color:#555; font-weight:500;
+  }
+  .detail-table td { padding:8px 10px; border:1px solid #eee; }
+  .status-badge { display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px; }
+  .status-draft { background:#eee;color:#555; }
+  .status-submitted { background:#e3f2fd;color:#1565c0; }
+  .status-production_planned { background:#fff3e0;color:#ef6c00; }
+  .status-finished_goods_stocked { background:#e8f5e9;color:#2e7d32; }
+  .status-shipment_scheduled { background:#ede7f6;color:#4527a0; }
+  .status-completed { background:#e8f5e9;color:#1b5e20; }
+  .status-cancelled { background:#fdecea;color:#c62828; }
+  .pay-badge { display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px; }
+  .pay-unpaid { background:#fdecea;color:#c62828; }
+  .pay-paid { background:#e8f5e9;color:#1b5e20; }
+  .btn-success { background:#2e7d32;color:#fff;border-color:#2e7d32; }
+  .flash { padding:10px 14px;border-radius:4px;margin-bottom:12px; }
+  .flash.success { background:#e8f5e9;color:#1b5e20;border:1px solid #a5d6a7; }
+  .flash.error { background:#fdecea;color:#c62828;border:1px solid #ef9a9a; }
+</style>
+{% endblock %}

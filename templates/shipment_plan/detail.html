@@ -1,0 +1,144 @@
+{% extends "inventory/base.html" %}
+{% block title %}发货计划详情{% endblock %}
+{% block content %}
+<h2>
+  发货计划详情
+  <span style="color:#888;font-size:14px;">
+    {{ plan.shipment_plan_no }}
+  </span>
+  {% if plan.status in ("DRAFT", "PLANNED") %}
+    <a class="btn btn-primary" style="float:right;"
+       href="{{ url_for('shipment_plan.edit_page', plan_id=plan.id) }}">编辑</a>
+  {% endif %}
+</h2>
+
+<fieldset>
+  <legend>基本信息</legend>
+  <table style="width:100%;font-size:13px;">
+    <tr>
+      <td style="width:120px;color:#888;">发货计划单号</td>
+      <td>{{ plan.shipment_plan_no }}</td>
+      <td style="width:120px;color:#888;">状态</td>
+      <td>
+        <span class="status-badge status-{{ plan.status|lower }}">
+          {{ status_labels.get(plan.status, plan.status) }}
+        </span>
+      </td>
+    </tr>
+    <tr>
+      <td style="color:#888;">业绩单</td>
+      <td>
+        {% if performance %}
+          {{ performance.performance_no }} — {{ performance.company_name }}
+        {% else %}-{% endif %}
+      </td>
+      <td style="color:#888;">目的地</td>
+      <td>{{ plan.destination }}</td>
+    </tr>
+    <tr>
+      <td style="color:#888;">运输方式</td>
+      <td>{{ plan.transport_method or "-" }}</td>
+      <td style="color:#888;">计划发货时间</td>
+      <td>
+        {{ plan.planned_ship_time.strftime("%Y-%m-%d %H:%M")
+           if plan.planned_ship_time else "-" }}
+      </td>
+    </tr>
+    <tr>
+      <td style="color:#888;">实际发货时间</td>
+      <td>
+        {{ plan.actual_ship_time.strftime("%Y-%m-%d %H:%M")
+           if plan.actual_ship_time else "-" }}
+      </td>
+      <td style="color:#888;">创建日期</td>
+      <td>
+        {{ plan.created_at.strftime("%Y-%m-%d %H:%M")
+           if plan.created_at else "-" }}
+      </td>
+    </tr>
+    <tr>
+      <td style="color:#888;">产品名称（快照）</td>
+      <td>{{ performance.product_name if performance else "-" }}</td>
+      <td style="color:#888;">产品规格（快照）</td>
+      <td>
+        {{ performance.product_specification or "-" if performance else "-" }}
+      </td>
+    </tr>
+    <tr>
+      <td style="color:#888;">备注</td>
+      <td colspan="3">{{ plan.remark or "-" }}</td>
+    </tr>
+  </table>
+</fieldset>
+
+<fieldset>
+  <legend>发货明细</legend>
+  {% for line in lines %}
+    <div style="margin-bottom:16px;border:1px solid #e0e0e0;border-radius:4px;">
+      <div style="background:#fafafa;padding:8px 12px;border-bottom:1px solid #e0e0e0;">
+        <strong>{{ line.product_name }}</strong>
+        <span style="color:#888;margin-left:12px;">
+          规格：{{ line.product_specification or "-" }}
+        </span>
+        <span style="color:#888;margin-left:12px;">
+          单位：{{ line.unit }}
+        </span>
+        <span style="margin-left:12px;">
+          计划数量：<strong>{{ line.quantity }}</strong>
+        </span>
+        <span style="margin-left:12px;">
+          已发数量：
+          <strong style="color:{{ '#2e7d32' if line.shipped_quantity >= line.quantity else '#ef6c00' }};">
+            {{ line.shipped_quantity }}
+          </strong>
+        </span>
+        <span style="margin-left:12px;color:#888;">
+          单价：{{ line.unit_price }}
+        </span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:#f5f5f5;">
+            <th style="width:60px;">#</th>
+            <th>仓库</th>
+            <th>批次号</th>
+            <th style="width:120px;text-align:right;">计划数量</th>
+            <th style="width:120px;text-align:right;">已发数量</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set allocs = allocations_map.get(line.id, []) %}
+          {% for a in allocs %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ a.warehouse_code }} - {{ a.warehouse_name }}</td>
+            <td>{{ a.batch_no }}</td>
+            <td style="text-align:right;">{{ a.planned_quantity }}</td>
+            <td style="text-align:right;">{{ a.shipped_quantity }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" style="text-align:center;color:#999;padding:12px;">
+            无批次分配
+          </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div style="text-align:center;color:#999;padding:24px;">无发货明细</div>
+  {% endfor %}
+</fieldset>
+
+<div style="margin-top:24px;">
+  <a class="btn" href="{{ url_for('shipment_plan.list_page') }}">返回列表</a>
+</div>
+
+<style>
+  .status-badge { display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px; }
+  .status-draft             { background:#eee;color:#555; }
+  .status-planned           { background:#e3f2fd;color:#1565c0; }
+  .status-partially_shipped { background:#fff3e0;color:#ef6c00; }
+  .status-shipped           { background:#e8f5e9;color:#2e7d32; }
+  .status-cancelled         { background:#fdecea;color:#c62828; }
+</style>
+{% endblock %}

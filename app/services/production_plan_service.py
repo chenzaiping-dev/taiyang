@@ -23,8 +23,6 @@ from app.generated.models.finished_goods_reservations import FinishedGoodsReserv
 from app.utils.datetime_utils import now_beijing
 
 Q6 = Decimal("0.000001")
-BEIJING = timezone(timedelta(hours=8))
-
 
 def _q6(v):
     return Decimal(str(v)).quantize(Q6, rounding=ROUND_HALF_UP)
@@ -300,6 +298,8 @@ class ProductionPlanService:
                 status="DRAFT",
                 remark=f"由生产计划 {plan.plan_no} 自动创建",
                 created_by=created_by or 1,
+                created_at=now_beijing_naive(),
+                updated_at=now_beijing_naive(),
             )
             db.session.add(order)
             db.session.flush()

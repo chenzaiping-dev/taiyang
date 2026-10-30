@@ -55,6 +55,10 @@
     <a href="{{ url_for('finished_goods.transactions_page') }}">成品流水</a>    
     <a href="{{ url_for('finished_goods.inbound_page') }}">成品入库</a>
     <a href="{{ url_for('finished_goods.outbound_page') }}">成品出库</a>
+
+    <a href="{{ url_for('shipment_plan.list_page') }}">发货计划</a>
+
+    <a href="{{ url_for('sales_performance.list_page') }}">业绩单列表</a>
   </nav>  
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}

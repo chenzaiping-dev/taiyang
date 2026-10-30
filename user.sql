@@ -886,9 +886,9 @@ CREATE TABLE shipment_plan_lines (
 
     shipment_plan_id BIGINT UNSIGNED NOT NULL COMMENT '发货计划ID',
 
-    product_name VARCHAR(200) NOT NULL COMMENT '产品名称',
-    product_specification VARCHAR(500) NULL COMMENT '产品规格',
-    unit VARCHAR(20) DEFAULT 'KG' COMMENT '单位',
+    product_name VARCHAR(200) NOT NULL COMMENT '产品名称快照',
+    product_specification VARCHAR(500) NULL COMMENT '产品规格快照',
+    unit VARCHAR(20) DEFAULT 'KG' COMMENT '单位快照',
 
     unit_price DECIMAL(24, 6) NOT NULL DEFAULT 0 COMMENT '销售单价',
     quantity DECIMAL(18, 6) NOT NULL COMMENT '计划发货数量',
@@ -1061,7 +1061,8 @@ VALUES
 ('YL10001', '丁醚', 1),
 ('YL10002', '乙醚', 1),
 ('YL10003', '丙醚', 1),
-('YL10004', '丁醇', 1);
+('YL10004', '丁醇', 1),
+('YL10005', '醋酸', 1);
 
 INSERT INTO suppliers (name, contact, status)
 VALUES

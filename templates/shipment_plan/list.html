@@ -1,0 +1,158 @@
+{% extends "inventory/base.html" %}
+{% block title %}发货计划列表{% endblock %}
+{% block content %}
+<h2>发货计划列表</h2>
+
+<form method="get" action="{{ url_for('shipment_plan.list_page') }}"
+      style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+  <input type="text" name="keyword" value="{{ keyword }}"
+         placeholder="发货计划单号" maxlength="64">
+  <select name="status">
+    <option value="">-- 全部状态 --</option>
+    {% for code, label in status_labels.items() %}
+      <option value="{{ code }}"
+        {% if status == code %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <input type="text" name="performance_id" value="{{ performance_id_raw }}"
+        placeholder="业绩单ID/单号" maxlength="64" style="width:150px;">
+  <button type="submit" class="btn btn-primary">查询</button>
+  <a class="btn" href="{{ url_for('shipment_plan.list_page') }}">重置</a>
+</form>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, msg in messages %}
+      <div class="flash flash-{{ category }}">{{ msg }}</div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<table style="width:100%;border-collapse:collapse;font-size:13px;">
+  <thead>
+    <tr style="background:#f5f5f5;">
+      <th style="width:50px;">ID</th>
+      <th>发货计划单号</th>
+      <th style="width:110px;">业绩单ID</th>
+      <th>关联产品名称</th>
+      <th style="width:120px;text-align:right;">计划发货数量</th>
+      <th style="width:120px;text-align:right;">已发货数量</th>
+      <th style="width:100px;">状态</th>
+      <th style="width:150px;">创建日期</th>
+      <th style="width:220px;">操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if rows %}
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.id }}</td>
+        <td>
+          <a href="{{ url_for('shipment_plan.detail_page', plan_id=r.id) }}">
+            {{ r.shipment_plan_no }}
+          </a>
+        </td>
+        <!-- ⭐ 业绩单ID -->
+        <td>
+          <a href="{{ url_for('shipment_plan.list_page', performance_id=r.performance_id) }}"
+            title="按此业绩单筛选">
+            {{ r.performance_no or ('#' ~ r.performance_id) }}
+          </a>
+        </td>
+
+        <td>{{ r.product_name or "-" }}</td>
+        <td style="text-align:right;">{{ r.planned_qty }}</td>
+        <td style="text-align:right;">{{ r.shipped_qty }}</td>
+        <td>
+          <span class="status-badge status-{{ r.status|lower }}">
+            {{ status_labels.get(r.status, r.status) }}
+          </span>
+        </td>
+        <td>{{ r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "-" }}</td>
+        <td style="white-space:nowrap;">
+          {# 编辑：仅草稿 #}
+          {% if r.status == 'DRAFT' %}
+            <a class="btn btn-sm"
+               href="{{ url_for('shipment_plan.edit_page', plan_id=r.id) }}">编辑</a>
+          {% else %}
+            <span class="btn btn-sm disabled" title="仅草稿可编辑">编辑</span>
+          {% endif %}
+
+          {# 计划：仅草稿 #}
+          {% if r.status == 'DRAFT' %}
+            <form method="post" style="display:inline;"
+                  action="{{ url_for('shipment_plan.mark_planned', plan_id=r.id) }}"
+                  onsubmit="return confirm('确认标记为【已计划】？');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-primary">计划</button>
+            </form>
+          {% else %}
+            <span class="btn btn-sm disabled" title="仅草稿可计划">计划</span>
+          {% endif %}
+
+          {# 发货：仅已计划 #}
+          {% if r.status == 'PLANNED' %}
+            <form method="post" style="display:inline;"
+                  action="{{ url_for('shipment_plan.ship_plan', plan_id=r.id) }}"
+                  onsubmit="return confirm('确认发货并出库？此操作将扣减库存且不可撤销。');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-success">发货</button>
+            </form>
+          {% else %}
+            <span class="btn btn-sm disabled" title="仅已计划可发货">发货</span>
+          {% endif %}
+
+          {# 取消：非已发货、非已取消 #}
+          {% if r.status not in ('SHIPPED', 'CANCELLED') %}
+            <form method="post" style="display:inline;"
+                  action="{{ url_for('shipment_plan.cancel_plan', plan_id=r.id) }}"
+                  onsubmit="return confirm('确认取消该发货计划？');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-danger">取消</button>
+            </form>
+          {% else %}
+            <span class="btn btn-sm disabled">取消</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr><td colspan="9" style="text-align:center;color:#999;padding:24px;">
+        暂无发货计划
+      </td></tr>
+    {% endif %}
+  </tbody>
+</table>
+
+<div style="margin-top:16px;display:flex;gap:8px;align-items:center;">
+  <span>共 {{ total }} 条，第 {{ page }}/{{ total_pages }} 页</span>
+  {% if page > 1 %}
+    <a class="btn" href="{{ url_for('shipment_plan.list_page',
+         keyword=keyword, status=status, performance_id=performance_id,
+         page=page-1) }}">上一页</a>
+  {% endif %}
+  {% if page < total_pages %}
+    <a class="btn" href="{{ url_for('shipment_plan.list_page',
+         keyword=keyword, status=status, performance_id=performance_id,
+         page=page+1) }}">下一页</a>
+  {% endif %}
+</div>
+
+<style>
+  .btn-sm { padding:2px 8px;font-size:12px;text-decoration:none;border:1px solid #ccc;
+            border-radius:3px;background:#fff;color:#333;cursor:pointer; }
+  .btn-sm.btn-primary { background:#1976d2;color:#fff;border-color:#1976d2; }
+  .btn-sm.btn-success { background:#2e7d32;color:#fff;border-color:#2e7d32; }
+  .btn-sm.btn-danger  { background:#c62828;color:#fff;border-color:#c62828; }
+  .btn-sm.disabled    { opacity:.45;cursor:not-allowed;pointer-events:none; }
+  .flash { padding:8px 12px;border-radius:3px;margin-bottom:12px;font-size:13px; }
+  .flash-success { background:#e8f5e9;color:#2e7d32; }
+  .flash-error   { background:#fdecea;color:#c62828; }
+  .status-badge { display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px; }
+  .status-draft             { background:#eee;color:#555; }
+  .status-planned           { background:#e3f2fd;color:#1565c0; }
+  .status-partially_shipped { background:#fff3e0;color:#ef6c00; }
+  .status-shipped           { background:#e8f5e9;color:#2e7d32; }
+  .status-cancelled         { background:#fdecea;color:#c62828; }
+</style>
+{% endblock %}

@@ -184,6 +184,7 @@ class ProcessOrderService:
             followup_employee_id=followup_employee_id,
             cost_price=_q6(cost_price), total_cost=_q6(total_cost),
             status=status, remark=remark, created_by=created_by,
+            created_at=now_beijing_naive(), updated_at=now_beijing_naive(),
         )
         db.session.add(order)
         db.session.flush()

@@ -1,0 +1,176 @@
+{% extends "inventory/base.html" %}
+{% block title %}{{ '编辑业绩单' if mode == 'edit' else '新建业绩单' }}{% endblock %}
+
+{% block content %}
+<h2>{{ '编辑业绩单' if mode == 'edit' else '新建业绩单' }}
+  {% if perf %}<span style="color:#888;font-size:14px;">#{{ perf.performance_no }}</span>{% endif %}
+</h2>
+
+{% if errors %}
+  <div class="error-box">
+    <ul style="margin:0;padding-left:20px;">
+      {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+<form method="post"
+      action="{% if mode == 'edit' %}
+                {{ url_for('sales_performance.update_submit', perf_id=perf.id) }}
+              {% else %}
+                {{ url_for('sales_performance.create_submit') }}
+              {% endif %}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <fieldset>
+    <legend>基本信息</legend>
+    <div class="form-row">
+        <label>业绩单号</label>
+        <input type="text" name="performance_no"
+                value="{% if mode == 'edit' %}{{ form_data.performance_no }}{% else %}（保存后自动生成）{% endif %}"
+                readonly
+                style="background:#f5f5f5;color:#666;cursor:not-allowed;">
+
+        <label>销售编号</label>
+        <input type="text" name="sales_order_no" maxlength="64"
+                value="{{ form_data.sales_order_no }}">
+    </div>
+
+    <div class="form-row">
+      <label>日期 *</label>
+      <input type="date" name="performance_date"
+             value="{{ form_data.performance_date }}" required>
+
+      <label>客户期待发货日期</label>
+      <input type="date" name="expected_delivery_date"
+             value="{{ form_data.expected_delivery_date }}">
+    </div>
+    <div class="form-row">
+      <label>公司名称 *</label>
+      <input type="text" name="company_name" maxlength="200" required
+             style="flex:1;" value="{{ form_data.company_name }}">
+    </div>
+    <div class="form-row">
+      <label>产品名称 *</label>
+      <input type="text" name="product_name" maxlength="200" required
+             style="flex:1;" value="{{ form_data.product_name }}">
+    </div>
+    <div class="form-row">
+      <label>产品规格</label>
+      <input type="text" name="product_specification" maxlength="500"
+             style="flex:1;" value="{{ form_data.product_specification }}">
+    </div>
+    <div class="form-row">
+      <label>产品单位</label>
+      <input type="text" name="unit" maxlength="20"
+             value="{{ form_data.unit }}">
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>金额与数量</legend>
+    <div class="form-row">
+      <label>销售单价 *</label>
+      <input type="number" step="0.000001" min="0" name="unit_price"
+             value="{{ form_data.unit_price }}" required>
+
+      <label>销售数量 *</label>
+      <input type="number" step="0.000001" min="0.000001" name="quantity"
+             value="{{ form_data.quantity }}" required>
+    </div>
+    <div class="form-row">
+      <label>销售金额 *</label>
+      <input type="number" step="0.000001" min="0" name="amount"
+             value="{{ form_data.amount }}" required>
+
+      <label>收款状态</label>
+      <select name="payment_status">
+        {% for code, label in payment_labels.items() %}
+          <option value="{{ code }}"
+            {% if form_data.payment_status == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-row">
+      <label>成本</label>
+      <input type="number" step="0.000001" min="0" name="cost"
+             value="{{ form_data.cost }}">
+
+      <label>利润</label>
+      <input type="number" step="0.000001" name="profit"
+             value="{{ form_data.profit }}">
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>销售与工厂</legend>
+    <div class="form-row">
+      <label>主销售员</label>
+      <select name="main_salesperson_id">
+        <option value="">-- 请选择 --</option>
+        {% for e in employees %}
+          <option value="{{ e.id }}"
+            {% if form_data.main_salesperson_id|string == e.id|string %}selected{% endif %}>
+            {{ e.real_name }} ({{ e.username }})
+          </option>
+        {% endfor %}
+      </select>
+
+      <label>是否走常州工厂</label>
+      <input type="checkbox" name="is_changzhou_factory"
+             {% if form_data.is_changzhou_factory %}checked{% endif %}>
+    </div>
+    <div class="form-row">
+      <label>是否共同销售</label>
+      <input type="checkbox" name="is_joint_sales" id="is_joint_sales"
+             {% if form_data.is_joint_sales %}checked{% endif %}>
+
+      <label>共同销售员</label>
+      <select name="co_salesperson_id" id="co_salesperson_id">
+        <option value="">-- 请选择 --</option>
+        {% for e in employees %}
+          <option value="{{ e.id }}"
+            {% if form_data.co_salesperson_id|string == e.id|string %}selected{% endif %}>
+            {{ e.real_name }} ({{ e.username }})
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>状态与备注</legend>
+    <div class="form-row">
+      <label>状态</label>
+      <select name="status">
+        {% for code, label in status_labels.items() %}
+          <option value="{{ code }}"
+            {% if form_data.status == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-row">
+      <label>备注</label>
+      <textarea name="remark" maxlength="1000" rows="3" style="flex:1;">{{ form_data.remark }}</textarea>
+    </div>
+  </fieldset>
+
+  <div style="margin-top:24px;">
+    <button type="submit" class="btn btn-primary">保存</button>
+    <a class="btn" href="{{ url_for('sales_performance.list_page') }}">取消</a>
+  </div>
+</form>
+
+<script>
+(function () {
+  const chk = document.getElementById("is_joint_sales");
+  const coSel = document.getElementById("co_salesperson_id");
+  function sync() {
+    coSel.disabled = !chk.checked;
+    if (!chk.checked) coSel.value = "";
+  }
+  chk.addEventListener("change", sync);
+  sync();
+})();
+</script>
+{% endblock %}

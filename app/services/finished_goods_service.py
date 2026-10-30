@@ -12,10 +12,9 @@ from app.generated.models.finished_goods_document_lines import FinishedGoodsDocu
 from app.generated.models.finished_goods_inventory import FinishedGoodsInventory
 from app.generated.models.finished_goods_transactions import FinishedGoodsTransaction
 from app.generated.models.finished_goods_reservations import FinishedGoodsReservation
-from app.utils.datetime_utils import now_beijing
+from app.utils.datetime_utils import now_beijing, now_beijing_naive
 
 Q6 = Decimal("0.000001")
-BEIJING = timezone(timedelta(hours=8))
 
 
 def _q6(v):
@@ -83,6 +82,8 @@ class FinishedGoodsService:
             status="CONFIRMED" if auto_confirm else "DRAFT",
             remark=remark,
             created_by=created_by,
+            created_at=now_beijing_naive(),
+            updated_at=now_beijing_naive(),
             confirmed_by=created_by if auto_confirm else None,
             confirmed_at=now_beijing() if auto_confirm else None,
         )
@@ -207,6 +208,7 @@ class FinishedGoodsService:
         document_time: datetime = None,
         created_by: int = None,
         remark: str = None,
+        commit: bool = True,          # ⭐ 新增
     ) -> dict:
         """
         人工选批次出库。
@@ -234,6 +236,8 @@ class FinishedGoodsService:
             created_by=created_by,
             confirmed_by=created_by,
             confirmed_at=now_beijing(),
+            created_at=now_beijing_naive(),
+            updated_at=now_beijing_naive(),
         )
         db.session.add(document)
         db.session.flush()
@@ -296,11 +300,18 @@ class FinishedGoodsService:
                 "quantity": str(qty),
             })
 
-        try:
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            raise FinishedGoodsError(f"成品出库失败: {e}")
+        # ---- 收尾：与原入库一致的提交方式 ----
+        if commit:
+            try:
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                raise FinishedGoodsError(f"成品出库失败: {e}")
+        else:
+            try:
+                db.session.flush()
+            except Exception as e:
+                raise FinishedGoodsError(f"成品出库 flush 失败: {e}")
 
         return {
             "document_id": document.id,
