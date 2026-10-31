@@ -561,6 +561,7 @@ CREATE TABLE finished_goods_batches (
     product_name VARCHAR(200) NOT NULL COMMENT '产品名称快照',
     product_specification VARCHAR(500) NULL COMMENT '产品规格快照',
     unit VARCHAR(20) DEFAULT 'KG' COMMENT '成品计量单位',
+    unit_cost DECIMAL(24, 6) DEFAULT NULL COMMENT '成品计价单价，由用户指定或者从工艺单传过来',
 
     batch_source ENUM(
         'PRODUCTION',
@@ -774,20 +775,13 @@ CREATE TABLE production_plans (
     process_quantity DECIMAL(18, 6) NOT NULL DEFAULT 0
         COMMENT '计划新生产数量',
 
-    process_order_status ENUM(
-        'NOT_REQUIRED',
-        'PLANNED',
-        'CREATED'
-    ) NOT NULL DEFAULT 'PLANNED'
-        COMMENT '工艺单状态',
-
     status ENUM(
         'DRAFT',
         'CONFIRMED',
         'IN_PROGRESS',
         'COMPLETED',
         'CANCELLED'
-    ) NOT NULL DEFAULT 'DRAFT' COMMENT '生产计划状态',
+    ) NOT NULL DEFAULT 'DRAFT' COMMENT '生产计划状态, DRAFT:草稿, CONFIRMED:已确认, IN_PROGRESS:处理中, COMPLETED:已完成, CANCELLED:已取消',
 
     remark VARCHAR(1000) NULL COMMENT '备注',
     created_by BIGINT UNSIGNED NULL COMMENT '创建人ID',
@@ -962,6 +956,7 @@ CREATE TABLE finished_goods_reservations (
 
     production_plan_id BIGINT UNSIGNED NULL COMMENT '生产计划ID',
     shipment_allocation_id BIGINT UNSIGNED NULL COMMENT '发货批次分配ID',
+    goods_type ENUM('FRESH', 'STAPLE') NOT NULL COMMENT '货物类型',
 
     warehouse_id BIGINT UNSIGNED NOT NULL COMMENT '预留仓库ID',
     batch_id BIGINT UNSIGNED NOT NULL COMMENT '预留成品批次ID',

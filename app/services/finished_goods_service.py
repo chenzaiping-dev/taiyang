@@ -83,7 +83,6 @@ class FinishedGoodsService:
             remark=remark,
             created_by=created_by,
             created_at=now_beijing_naive(),
-            updated_at=now_beijing_naive(),
             confirmed_by=created_by if auto_confirm else None,
             confirmed_at=now_beijing() if auto_confirm else None,
         )
@@ -237,7 +236,6 @@ class FinishedGoodsService:
             confirmed_by=created_by,
             confirmed_at=now_beijing(),
             created_at=now_beijing_naive(),
-            updated_at=now_beijing_naive(),
         )
         db.session.add(document)
         db.session.flush()

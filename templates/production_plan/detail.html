@@ -38,10 +38,6 @@
       {{ status_labels.get(plan.status, plan.status) }}
     </span>
   </div>
-  <div class="form-row"><label>工艺单状态：</label>
-    {{ {'NOT_REQUIRED':'无需生成','PLANNED':'已计划','CREATED':'已生成'}
-       .get(plan.process_order_status, plan.process_order_status) }}
-  </div>
   <div class="form-row"><label>创建人：</label>
     {{ creator.real_name if creator else "-" }}
   </div>

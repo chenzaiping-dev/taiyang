@@ -10,14 +10,6 @@
      href="{{ url_for('sales_performance.list_page') }}">返回列表</a>
 </h2>
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
-    {% for category, msg in messages %}
-      <div class="flash {{ category }}">{{ msg }}</div>
-    {% endfor %}
-  {% endif %}
-{% endwith %}
-
 <fieldset>
   <legend>基本信息</legend>
   <table class="detail-table">

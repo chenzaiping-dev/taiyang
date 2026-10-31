@@ -30,6 +30,7 @@
       <th style="width:100px;">计划单状态</th>
       <th style="width:100px;">创建人</th>
       <th style="width:150px;">创建时间</th>
+      <th style="width:220px;">操作</th>
     </tr>
   </thead>
   <tbody>
@@ -58,10 +59,83 @@
         </td>
         <td>{{ r.created_by_name or "-" }}</td>
         <td>{{ r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "-" }}</td>
+        <td style="white-space:nowrap;">
+          {# 编辑：仅 DRAFT #}
+          {% if r.status == 'DRAFT' %}
+            <a class="btn btn-sm"
+              href="{{ url_for('production_plan.edit_page', plan_id=r.id) }}">编辑</a>
+          {% else %}
+            <button class="btn btn-sm" disabled
+                    title="仅草稿可编辑"
+                    onclick="alertPlanLocked('{{ status_labels.get(r.status, r.status) }}')">
+              编辑
+            </button>
+          {% endif %}
+
+          {# 确认：仅 DRAFT #}
+          {% if r.status == 'DRAFT' %}
+            <form method="post" style="display:inline;"
+                  action="{{ url_for('production_plan.confirm_plan', plan_id=r.id) }}"
+                  onsubmit="return confirm('确认该生产计划？');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-primary">确认</button>
+            </form>
+          {% else %}
+            <button class="btn btn-sm" disabled
+                    title="仅草稿可确认"
+                    onclick="alertPlanLocked('{{ status_labels.get(r.status, r.status) }}')">
+              确认
+            </button>
+          {% endif %}
+
+          {# 处理：仅 CONFIRMED #}
+          {% if r.status == 'CONFIRMED' %}
+            <form method="post" style="display:inline;"
+                  action="{{ url_for('production_plan.process_plan', plan_id=r.id) }}"
+                  onsubmit="return confirm('开始处理该生产计划？');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-warn">处理</button>
+            </form>
+          {% else %}
+            <button class="btn btn-sm" disabled
+                    title="仅已确认可处理"
+                    onclick="alertPlanLocked('{{ status_labels.get(r.status, r.status) }}')">
+              处理
+            </button>
+          {% endif %}
+
+          {# 完成：仅 IN_PROGRESS #}
+          {% if r.status == 'IN_PROGRESS' %}
+            <form method="post" style="display:inline;"
+                  action="{{ url_for('production_plan.complete_plan', plan_id=r.id) }}"
+                  onsubmit="return confirm('确认完成？将检查所有工艺单是否已入库，并为成品批次创建预留。');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-success">完成</button>
+            </form>
+          {% else %}
+            <button class="btn btn-sm" disabled
+                    title="仅处理中可完成"
+                    onclick="alertPlanLocked('{{ status_labels.get(r.status, r.status) }}')">
+              完成
+            </button>
+          {% endif %}
+
+          {# 取消：DRAFT / CONFIRMED / IN_PROGRESS #}
+          {% if r.status in ['DRAFT', 'CONFIRMED', 'IN_PROGRESS'] %}
+            <form method="post" style="display:inline;"
+                  action="{{ url_for('production_plan.cancel_plan', plan_id=r.id) }}"
+                  onsubmit="return confirm('确认取消该生产计划？');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-danger">取消</button>
+            </form>
+          {% else %}
+            <button class="btn btn-sm" disabled title="当前状态不可取消">取消</button>
+          {% endif %}
+        </td>
       </tr>
       {% endfor %}
     {% else %}
-      <tr><td colspan="8" style="text-align:center;color:#999;padding:24px;">
+      <tr><td colspan="9" style="text-align:center;color:#999;padding:24px;">
         暂无生产计划
       </td></tr>
     {% endif %}
@@ -83,6 +157,14 @@
 </div>
 
 <style>
+  .btn-sm { padding:2px 8px;font-size:12px;text-decoration:none;
+            border:1px solid #ccc;border-radius:3px;background:#fff;color:#333;cursor:pointer; }
+  .btn-sm.btn-primary { background:#1976d2;color:#fff;border-color:#1976d2; }
+  .btn-sm.btn-warn    { background:#ff9800;color:#fff;border-color:#ff9800; }
+  .btn-sm.btn-success { background:#2e7d32;color:#fff;border-color:#2e7d32; }
+  .btn-sm.btn-danger  { background:#c62828;color:#fff;border-color:#c62828; }
+  .btn-sm[disabled]   { opacity:.45;cursor:not-allowed; }
+
   .status-badge { display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px; }
   .status-draft       { background:#eee;color:#555; }
   .status-confirmed   { background:#e3f2fd;color:#1565c0; }
@@ -90,4 +172,10 @@
   .status-completed   { background:#e8f5e9;color:#2e7d32; }
   .status-cancelled   { background:#fdecea;color:#c62828; }
 </style>
+
+<script>
+  function alertPlanLocked(currentLabel) {
+    alert(`当前状态为【${currentLabel}】，该操作不可用。`);
+  }
+</script>
 {% endblock %}

@@ -19,7 +19,7 @@ from app.generated.models.finished_goods_transactions import FinishedGoodsTransa
 from app.generated.models.finished_goods_reservations import FinishedGoodsReservation
 
 from app.services.production_plan_service import (
-    ProductionPlanService, ProductionPlanError,
+    ProductionPlanService, ProductionPlanError, PLAN_STATUS_LABELS,
 )
 
 bp = Blueprint("production_plan", __name__, url_prefix="/production-plans")
@@ -140,6 +140,14 @@ def edit_page(plan_id):
     plan = db.session.get(ProductionPlan, plan_id)
     if not plan:
         abort(404)
+    if plan.status != "DRAFT":
+        flash(
+            f"当前状态【{PLAN_STATUS_LABELS.get(plan.status, plan.status)}】"
+            f"不允许编辑，仅草稿可编辑",
+            "error",
+        )
+        return redirect(url_for("production_plan.list_page"))
+
     perf = db.session.get(SalesPerformance, plan.performance_id)
 
     # 已锁定：production_plan_id -> {(warehouse_id, batch_id): remaining_qty}
@@ -201,6 +209,9 @@ def update_submit(plan_id):
     plan = db.session.get(ProductionPlan, plan_id)
     if not plan:
         abort(404)
+    if plan.status != "DRAFT":
+        flash("仅草稿状态允许编辑", "error")
+        return redirect(url_for("production_plan.list_page"))
     try:
         data = _parse_form(request.form)
         ProductionPlanService.update_plan(plan_id=plan_id, **data)
@@ -399,3 +410,42 @@ def detail_page(plan_id):
         po_status_labels=PO_STATUS_LABELS,
         res_status_labels=RES_STATUS_LABELS,
     )
+
+@bp.post("/<int:plan_id>/confirm")
+def confirm_plan(plan_id):
+    try:
+        ProductionPlanService.confirm_plan(plan_id)
+        flash("已确认", "success")
+    except ProductionPlanError as e:
+        flash(str(e), "error")
+    return redirect(url_for("production_plan.list_page"))
+
+
+@bp.post("/<int:plan_id>/process")
+def process_plan(plan_id):
+    try:
+        ProductionPlanService.process_plan(plan_id)
+        flash("已开始处理", "success")
+    except ProductionPlanError as e:
+        flash(str(e), "error")
+    return redirect(url_for("production_plan.list_page"))
+
+
+@bp.post("/<int:plan_id>/complete")
+def complete_plan(plan_id):
+    try:
+        ProductionPlanService.complete_plan(plan_id, operator_id=1)
+        flash("已完成，成品已预留", "success")
+    except ProductionPlanError as e:
+        flash(str(e), "error")
+    return redirect(url_for("production_plan.list_page"))
+
+
+@bp.post("/<int:plan_id>/cancel")
+def cancel_plan(plan_id):
+    try:
+        ProductionPlanService.cancel_plan(plan_id)
+        flash("已取消", "success")
+    except ProductionPlanError as e:
+        flash(str(e), "error")
+    return redirect(url_for("production_plan.list_page"))

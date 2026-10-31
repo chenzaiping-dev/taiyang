@@ -20,7 +20,7 @@ from app.generated.models.finished_goods_document_lines import FinishedGoodsDocu
 from app.generated.models.finished_goods_inventory import FinishedGoodsInventory
 from app.generated.models.finished_goods_transactions import FinishedGoodsTransaction
 from app.generated.models.finished_goods_reservations import FinishedGoodsReservation
-from app.utils.datetime_utils import now_beijing
+from app.utils.datetime_utils import now_beijing, now_beijing_naive
 
 Q6 = Decimal("0.000001")
 
@@ -32,6 +32,13 @@ def gen_plan_no() -> str:
     import random
     return f"PP{ts}{random.randint(0, 9999):04d}"
 
+PLAN_STATUS_LABELS = {
+    "DRAFT": "草稿",
+    "CONFIRMED": "已确认",
+    "IN_PROGRESS": "处理中",
+    "COMPLETED": "已完成",
+    "CANCELLED": "已取消",
+}
 
 class ProductionPlanError(Exception):
     pass
@@ -76,7 +83,6 @@ class ProductionPlanService:
             performance_id=performance_id,
             total_quantity=total,
             process_quantity=process,
-            process_order_status="PLANNED" if process > 0 else "NOT_REQUIRED",
             status="DRAFT",
             remark=remark,
             created_by=created_by,
@@ -141,7 +147,6 @@ class ProductionPlanService:
         plan.total_quantity = total
         plan.process_quantity = process
         plan.remark = remark
-        plan.process_order_status = "PLANNED" if process > 0 else "NOT_REQUIRED"
 
         # ⭐ 重新写预留
         ProductionPlanService._apply_reservations(
@@ -344,7 +349,6 @@ class ProductionPlanService:
                 ProductionPlan.performance_id,
                 ProductionPlan.total_quantity,
                 ProductionPlan.process_quantity,
-                ProductionPlan.process_order_status,
                 ProductionPlan.status,
                 ProductionPlan.created_by,
                 creator.real_name.label("created_by_name"),
@@ -469,3 +473,205 @@ class ProductionPlanService:
             "process_orders": process_orders,
             "locked_total": locked_total,
         }
+
+    # ==================== 状态操作 ====================
+
+    @staticmethod
+    def _get_plan_or_raise(plan_id: int) -> ProductionPlan:
+        plan = db.session.get(ProductionPlan, plan_id)
+        if not plan:
+            raise ProductionPlanError("生产计划不存在")
+        return plan
+
+    @staticmethod
+    def confirm_plan(plan_id: int) -> ProductionPlan:
+        """DRAFT → CONFIRMED"""
+        plan = ProductionPlanService._get_plan_or_raise(plan_id)
+        if plan.status != "DRAFT":
+            raise ProductionPlanError(
+                f"当前状态【{PLAN_STATUS_LABELS.get(plan.status, plan.status)}】"
+                f"不允许确认，仅草稿可确认"
+            )
+        plan.status = "CONFIRMED"
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            raise ProductionPlanError(f"确认失败: {e}")
+        return plan
+
+    @staticmethod
+    def process_plan(plan_id: int) -> ProductionPlan:
+        """CONFIRMED → IN_PROGRESS"""
+        plan = ProductionPlanService._get_plan_or_raise(plan_id)
+        if plan.status != "CONFIRMED":
+            raise ProductionPlanError(
+                f"当前状态【{PLAN_STATUS_LABELS.get(plan.status, plan.status)}】"
+                f"不允许处理，仅已确认可处理"
+            )
+        plan.status = "IN_PROGRESS"
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            raise ProductionPlanError(f"处理失败: {e}")
+        return plan
+
+    @staticmethod
+    def cancel_plan(plan_id: int) -> ProductionPlan:
+        """DRAFT / CONFIRMED / IN_PROGRESS → CANCELLED"""
+        plan = ProductionPlanService._get_plan_or_raise(plan_id)
+        if plan.status in ("COMPLETED", "CANCELLED"):
+            raise ProductionPlanError(
+                f"当前状态【{PLAN_STATUS_LABELS.get(plan.status, plan.status)}】"
+                f"不允许取消"
+            )
+        plan.status = "CANCELLED"
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            raise ProductionPlanError(f"取消失败: {e}")
+        return plan
+
+    @staticmethod
+    def complete_plan(plan_id: int, operator_id: int = None) -> ProductionPlan:
+        """
+        IN_PROGRESS → COMPLETED
+        前置：所有关联工艺单状态必须为 RECEIVED
+        动作：
+          1. 检查工艺单状态
+          2. 为每个已入库的成品批次写 finished_goods_reservations
+          3. 更新状态
+        """
+        plan = ProductionPlanService._get_plan_or_raise(plan_id)
+        if plan.status != "IN_PROGRESS":
+            raise ProductionPlanError(
+                f"当前状态【{PLAN_STATUS_LABELS.get(plan.status, plan.status)}】"
+                f"不允许完成，仅处理中可完成"
+            )
+
+        # 1. 关联工艺单
+        rels = ProductionPlanProcessOrder.query.filter_by(
+            production_plan_id=plan.id).all()
+        if not rels:
+            raise ProductionPlanError(
+                "该生产计划未关联任何工艺单，无法完成"
+            )
+
+        po_ids = [r.process_order_id for r in rels]
+        pos = (
+            ProcessOrder.query
+            .filter(ProcessOrder.id.in_(po_ids))
+            .order_by(ProcessOrder.process_order_no.asc())
+            .all()
+        )
+
+        not_received = [
+            po for po in pos if po.status != "RECEIVED"
+        ]
+        if not_received:
+            details = "；".join(
+                f"{po.process_order_no}({po.status})" for po in not_received
+            )
+            raise ProductionPlanError(
+                f"以下工艺单尚未入库，无法完成：{details}"
+            )
+
+        # 2. 为每个工艺单的成品批次写预留
+        try:
+            for po in pos:
+                ProductionPlanService._reserve_finished_goods_for_po(
+                    plan=plan, po=po, operator_id=operator_id,
+                )
+            # 3. 更新状态
+            plan.status = "COMPLETED"
+            db.session.commit()
+        except ProductionPlanError:
+            db.session.rollback()
+            raise
+        except Exception as e:
+            db.session.rollback()
+            raise ProductionPlanError(f"完成失败: {e}")
+
+        return plan
+
+    # ==================== 内部：完成时写预留 ====================
+    @staticmethod
+    def _reserve_finished_goods_for_po(plan, po, operator_id=None):
+        """
+        按工艺单 po 的成品批次写 finished_goods_reservations。
+        规则：
+          - 找 finished_goods_batches.process_order_id = po.id 的所有批次
+          - 找 finished_goods_inventory 里该批次有库存的记录
+          - 计算可用：inventory.quantity - 已有 ACTIVE 预留
+          - 若可用 > 0 → 写一条 ACTIVE 预留
+          - 已存在同一 (plan, warehouse, batch) 的 ACTIVE 预留 → 跳过（幂等）
+        """
+        # 1. 该工艺单已入库的批次库存
+        rows = (
+            db.session.query(
+                FinishedGoodsInventory.warehouse_id,
+                FinishedGoodsInventory.batch_id,
+                FinishedGoodsInventory.quantity,
+                FinishedGoodsBatch.batch_no,
+            )
+            .join(FinishedGoodsBatch,
+                  FinishedGoodsBatch.id == FinishedGoodsInventory.batch_id)
+            .filter(
+                FinishedGoodsBatch.process_order_id == po.id,
+                FinishedGoodsInventory.quantity > 0,
+            )
+            .all()
+        )
+        if not rows:
+            # 工艺单虽有 RECEIVED 状态，但没有成品批次库存：
+            # 说明成品入库可能被冲销了，或本计划无需预留。
+            # 这里不抛错，仅记录日志式备注，避免阻塞完成。
+            return
+
+        for wh_id, batch_id, qty, batch_no in rows:
+            # 是否已存在同一 (plan, wh, batch) 的 ACTIVE 预留 → 幂等跳过
+            exists = FinishedGoodsReservation.query.filter_by(
+                production_plan_id=plan.id,
+                warehouse_id=wh_id,
+                batch_id=batch_id,
+                status="ACTIVE",
+            ).first()
+            if exists:
+                continue
+
+            # 已锁定数量（其他 ACTIVE 预留）
+            already = (
+                db.session.query(func.coalesce(
+                    func.sum(FinishedGoodsReservation.remaining_quantity), 0))
+                .filter(
+                    FinishedGoodsReservation.warehouse_id == wh_id,
+                    FinishedGoodsReservation.batch_id == batch_id,
+                    FinishedGoodsReservation.status == "ACTIVE",
+                )
+                .scalar()
+            ) or Decimal("0")
+
+            available = (qty or Decimal("0")) - Decimal(str(already))
+            if available <= 0:
+                continue
+
+            res = FinishedGoodsReservation(
+                reservation_no=(
+                    f"RES-PP-{plan.plan_no}-{wh_id}-{batch_id}"
+                ),
+                reservation_type="PRODUCTION_PLAN",
+                production_plan_id=plan.id,
+                shipment_allocation_id=None,
+                warehouse_id=wh_id,
+                batch_id=batch_id,
+                reserved_quantity=_q6(available),
+                remaining_quantity=_q6(available),
+                status="ACTIVE",
+                remark=(
+                    f"生产计划 {plan.plan_no} 完成时锁定 "
+                    f"(工艺单 {po.process_order_no}, 批次 {batch_no})"
+                ),
+            )
+            db.session.add(res)

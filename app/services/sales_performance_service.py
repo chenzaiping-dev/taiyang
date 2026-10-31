@@ -1,11 +1,13 @@
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import date, datetime
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import select, case, func, or_
+from sqlalchemy import select, case, func, or_, exists
 
 from app.extensions import db
 from app.generated.models.employees import Employee
 from app.generated.models.sales_performance import SalesPerformance
+from app.generated.models.production_plans import ProductionPlan
+from app.generated.models.shipment_plans import ShipmentPlan
 from app.utils.datetime_utils import now_beijing_naive
 
 Q6 = Decimal("0.000001")
@@ -222,6 +224,12 @@ class SalesPerformanceService:
         creator = db.aliased(Employee)
         sales = db.aliased(Employee)
 
+        # ⭐ 发货计划是否存在：相关子查询（避免主查询出现多行）
+        has_shipment_sq = (
+            exists()
+            .where(ShipmentPlan.performance_id == SalesPerformance.id)
+        )
+
         base = (
             select(
                 SalesPerformance.id,
@@ -240,9 +248,16 @@ class SalesPerformanceService:
                 SalesPerformance.status,
                 SalesPerformance.created_at,
                 sales.real_name.label("salesperson_name"),
+                # ⭐ 生产计划 ID（因 performance_id 唯一，最多一行）
+                ProductionPlan.id.label("production_plan_id"),
+                # ⭐ 发货计划是否存在
+                has_shipment_sq.label("has_shipment_plan"),
             )
             .join(sales, sales.id == SalesPerformance.main_salesperson_id,
-                  isouter=True)
+                isouter=True)
+            .join(ProductionPlan,
+                ProductionPlan.performance_id == SalesPerformance.id,
+                isouter=True)
             .order_by(SalesPerformance.id.desc())
         )
         if keyword:

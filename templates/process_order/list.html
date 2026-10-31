@@ -3,15 +3,6 @@
 
 {% block content %}
 <h2>工艺单列表</h2>
-
-{% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
-    {% for cat, msg in messages %}
-      <div class="flash flash-{{ cat }}">{{ msg }}</div>
-    {% endfor %}
-  {% endif %}
-{% endwith %}
-
 <form method="get" action="{{ url_for('process_order.list_page') }}"
       style="margin-bottom:16px;">
   <!-- 过滤条件：保持不变 -->
@@ -53,11 +44,7 @@
       <th>创建人</th>
       <th style="width:100px;">成本价格</th>
       <th style="width:90px;">状态</th>
-      <th style="width:60px;">编辑</th>
-      <th style="width:60px;">下单</th>
-      <th style="width:60px;">生产</th>
-      <th style="width:60px;">完工入库</th>
-      <th style="width:60px;">取消</th>
+      <th style="width:220px;">操作</th>
     </tr>
   </thead>
   <tbody>
@@ -92,43 +79,38 @@
             }.get(it.status, it.status) }}
           </span>
         </td>
+        <td style="white-space:nowrap;">
+          <!-- ===== 编辑：仅 DRAFT ===== -->
+          {% if it.status == 'DRAFT' %}
+              <a class="btn btn-small"
+              href="{{ url_for('process_order.edit_page', order_id=it.id) }}">编辑</a>
+          {% else %}
+              <button type="button" class="btn btn-small" disabled
+                      data-locked-status="{{ it.status }}"
+                      onclick="alertEditLocked(this)"
+                      title="仅草稿可编辑">编辑</button>
+          {% endif %}
 
-        <!-- ===== 编辑：仅 DRAFT ===== -->
-        <td style="text-align:center;">
-        {% if it.status == 'DRAFT' %}
-            <a class="btn btn-small"
-            href="{{ url_for('process_order.edit_page', order_id=it.id) }}">编辑</a>
-        {% else %}
-            <button type="button" class="btn btn-small"
-                    data-locked-status="{{ it.status }}"
-                    onclick="alertEditLocked(this)"
-                    title="仅草稿可编辑">编辑</button>
-        {% endif %}
-        </td>
+          <!-- ===== 下单：仅 DRAFT ===== -->
+          {% if it.status == 'DRAFT' %}
+              <form method="post"
+                  action="{{ url_for('process_order.place_order', order_id=it.id) }}"
+                  onsubmit="return confirm('确认下单？将自动生成原料领料出库单。');"
+                  style="display:inline-flex;gap:4px;align-items:center;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <select name="warehouse_id" required
+                      style="font-size:11px;padding:2px;max-width:110px;">
+                  {% for w in warehouses %}
+                  <option value="{{ w.id }}">{{ w.warehouse_name }}</option>
+                  {% endfor %}
+              </select>
+              <button type="submit" class="btn btn-small btn-primary">下单</button>
+              </form>
+          {% else %}
+              <button class="btn btn-small" disabled title="仅草稿可下单">下单</button>
+          {% endif %}
 
-        <!-- ===== 下单：仅 DRAFT ===== -->
-        <td style="text-align:center;white-space:nowrap;">
-        {% if it.status == 'DRAFT' %}
-            <form method="post"
-                action="{{ url_for('process_order.place_order', order_id=it.id) }}"
-                onsubmit="return confirm('确认下单？将自动生成原料领料出库单。');"
-                style="display:inline-flex;gap:4px;align-items:center;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <select name="warehouse_id" required
-                    style="font-size:11px;padding:2px;max-width:110px;">
-                {% for w in warehouses %}
-                <option value="{{ w.id }}">{{ w.warehouse_name }}</option>
-                {% endfor %}
-            </select>
-            <button type="submit" class="btn btn-small btn-primary">下单</button>
-            </form>
-        {% else %}
-            <button class="btn btn-small" disabled title="仅草稿可下单">下单</button>
-        {% endif %}
-        </td>        
-
-        <!-- ===== 出库：仅 ORDERED ===== -->
-        <td style="text-align:center;">
+          <!-- ===== 出库：仅 ORDERED ===== -->
           {% if it.status == 'ORDERED' %}
             <form method="post"
                   action="{{ url_for('process_order.produce', order_id=it.id) }}"
@@ -140,10 +122,8 @@
           {% else %}
             <button class="btn btn-small" disabled title="仅已下单可生产">生产</button>
           {% endif %}
-        </td>
 
-        <!-- ===== 入库：仅 PRODUCING ===== -->
-        <td style="text-align:center;white-space:nowrap;">
+          <!-- ===== 入库：仅 PRODUCING ===== -->
           {% if it.status == 'PRODUCING' %}
             <form method="post"
                   action="{{ url_for('process_order.receive', order_id=it.id) }}"
@@ -161,10 +141,8 @@
           {% else %}
             <button class="btn btn-small" disabled>入库</button>
           {% endif %}
-        </td>
 
-        <!-- ===== 取消：DRAFT / ORDERED ===== -->
-        <td style="text-align:center;">
+          <!-- ===== 取消：DRAFT / ORDERED ===== -->
           {% if it.status in ['DRAFT', 'ORDERED'] %}
             <form method="post"
                   action="{{ url_for('process_order.cancel', order_id=it.id) }}"

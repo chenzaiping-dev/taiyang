@@ -46,6 +46,16 @@ TABLES = {
         "list_fields": ["id", "permission_code", "permission_name", "module_code"],
         "search_fields": ["permission_code", "permission_name", "module_code"],
     },
+    "employee_roles": {
+        "label": "员工角色关联表", "module": "权限管理", "mode": "readonly",
+        "list_fields": ["employee_id", "role_id"],
+        "search_fields": ["employee_id", "role_id"],
+    },
+    "role_permissions": {
+        "label": "角色权限关联表", "module": "权限管理", "mode": "readonly",
+        "list_fields": ["role_id", "permission_id", "data_scope"],
+        "search_fields": ["role_id", "permission_id"],
+    },
     "inventory_documents": {
         "label": "原料库存单据", "module": "库存管理", "mode": "crud",
         "list_fields": ["id", "document_no", "document_type", "document_time", "status", "created_at"],
@@ -126,8 +136,8 @@ TABLES = {
     },
     "production_plans": {
         "label": "生产计划", "module": "生产管理", "mode": "crud",
-        "list_fields": ["id", "plan_no", "performance_id", "total_quantity", "process_quantity", "process_order_status", "created_by", "confirmed_by", "status"],
-        "form_fields": ["plan_no", "performance_id", "total_quantity", "process_quantity", "process_order_status", "created_by", "confirmed_by", "status"],
+        "list_fields": ["id", "plan_no", "performance_id", "total_quantity", "process_quantity", "created_by", "confirmed_by", "status"],
+        "form_fields": ["plan_no", "performance_id", "total_quantity", "process_quantity", "created_by", "confirmed_by", "status"],
         "search_fields": ["plan_no", "performance_id"],
         "can_create": True, "can_edit": True, "can_delete": False,
     },

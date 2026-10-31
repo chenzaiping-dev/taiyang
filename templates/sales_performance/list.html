@@ -71,22 +71,38 @@
         </td>
         <td>{{ r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "-" }}</td>
 
-        <!-- ⭐ 生产计划快捷入口 -->
+        <!-- ⭐ 生产计划：有则跳详情，无则跳新建 -->
         <td style="text-align:center;">
-          <a class="btn btn-sm btn-primary"
-             href="{{ url_for('production_plan.new_page', performance_id=r.id) }}"
-             title="为业绩单创建生产计划">
-            生产计划
-          </a>
+          {% if r.production_plan_id %}
+            <a class="btn btn-sm btn-primary"
+              href="{{ url_for('production_plan.detail_page', plan_id=r.production_plan_id) }}"
+              title="查看已有生产计划">
+              生产计划
+            </a>
+          {% else %}
+            <a class="btn btn-sm btn-primary"
+              href="{{ url_for('production_plan.new_page', performance_id=r.id) }}"
+              title="为业绩单创建生产计划">
+              生产计划
+            </a>
+          {% endif %}
         </td>
 
-        <!-- ⭐ 发货计划快捷入口 -->
+        <!-- ⭐ 发货计划：有则跳列表（带过滤），无则跳新建 -->
         <td style="text-align:center;">
-          <a class="btn btn-sm btn-success"
-             href="{{ url_for('shipment_plan.list_page', performance_id=r.id) }}"
-             title="查看该业绩单的发货计划">
-            发货计划
-          </a>
+          {% if r.has_shipment_plan %}
+            <a class="btn btn-sm btn-success"
+              href="{{ url_for('shipment_plan.list_page', performance_id=r.id) }}"
+              title="查看该业绩单的发货计划">
+              发货计划
+            </a>
+          {% else %}
+            <a class="btn btn-sm btn-success"
+              href="{{ url_for('shipment_plan.new_page', performance_id=r.id) }}"
+              title="为该业绩单创建发货计划">
+              发货计划
+            </a>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}
