@@ -244,6 +244,8 @@ class SalesPerformanceService:
                 SalesPerformance.payment_status,
                 SalesPerformance.cost,
                 SalesPerformance.profit,
+                SalesPerformance.is_joint_sales,
+                SalesPerformance.is_changzhou_factory,
                 SalesPerformance.expected_delivery_date,
                 SalesPerformance.status,
                 SalesPerformance.created_at,

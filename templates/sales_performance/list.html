@@ -30,20 +30,26 @@
 <table style="width:100%;border-collapse:collapse;font-size:13px;">
   <thead>
     <tr style="background:#f5f5f5;">
-      <th style="width:50px;">ID</th>
+      <th style="width:20px;">ID</th>
       <th>业绩单号</th>
-      <th>公司名称</th>
-      <th>产品名称</th>
+      <th style="width:120px;text-align:right;">公司名称</th>
+      <th style="width:120px;text-align:right;">产品名称</th>
       <th>规格</th>
       <th style="width:90px;text-align:right;">数量</th>
-      <th style="width:90px;">单位</th>
-      <th style="width:110px;text-align:right;">单价</th>
-      <th style="width:120px;text-align:right;">金额</th>
-      <th style="width:80px;">收款状态</th>
-      <th style="width:100px;">状态</th>
-      <th style="width:150px;">创建时间</th>
-      <th style="width:110px;">生产计划</th>
-      <th style="width:110px;">发货计划</th>
+      <th style="width:40px;">单位</th>
+      <th style="width:100px;text-align:right;">单价</th>
+      <th style="width:100px;text-align:right;">金额</th>
+      <th style="width:100px;text-align:right;">成本</th>
+      <th style="width:100px;text-align:right;">利润</th>
+      <th style="width:80px;text-align:right;">主销售</th>
+      <th style="width:40px;text-align:right;">是否共同销售</th>
+      <th style="width:40px;text-align:right;">走常州工厂</th>
+      <th style="width:60px;text-align:right;">期待发货日期</th>
+      <th style="width:50px;">收款状态</th>
+      <th style="width:50px;">状态</th>
+      <th style="width:100px;">创建时间</th>
+      <th style="width:80px;">生产计划</th>
+      <th style="width:80px;">发货计划</th>
     </tr>
   </thead>
   <tbody>
@@ -63,6 +69,12 @@
         <td>{{ r.unit or "" }}</td>
         <td style="text-align:right;">{{ r.unit_price }}</td>
         <td style="text-align:right;">{{ r.amount }}</td>
+        <td style="text-align:right;">{{ r.cost }}</td>
+        <td style="text-align:right;">{{ r.profit }}</td>
+        <td style="text-align:right;">{{ r.salesperson_name }}</td>
+        <td style="text-align:right;">{{ r.is_joint_sales }}</td>
+        <td style="text-align:right;">{{ r.is_changzhou_factory }}</td>
+        <td style="text-align:right;">{{ r.expected_delivery_date }}</td>
         <td>{{ payment_labels.get(r.payment_status, r.payment_status) }}</td>
         <td>
           <span class="status-badge status-{{ r.status|lower }}">
@@ -107,7 +119,7 @@
       </tr>
       {% endfor %}
     {% else %}
-      <tr><td colspan="14" style="text-align:center;color:#999;padding:24px;">
+      <tr><td colspan="20" style="text-align:center;color:#999;padding:24px;">
         暂无业绩单
       </td></tr>
     {% endif %}
