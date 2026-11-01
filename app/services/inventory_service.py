@@ -110,7 +110,8 @@ class PurchaseInService:
             document_time=doc_time,
             status=doc_status,
             remark=remark,
-            confirmed_at=now_beijing_naive() if auto_confirm else None,
+            created_at=doc_time,
+            confirmed_at=doc_time if auto_confirm else None,
         )
         db.session.add(document)
         db.session.flush()  # 拿到 document.id
@@ -136,6 +137,7 @@ class PurchaseInService:
                 total_cost=total_cost,
                 supplier_id=supplier_id,
                 warehouse_id=warehouse_id,
+                created_at=doc_time,
             )
             db.session.add(tx)
             db.session.flush()  # 拿到 tx.id
@@ -151,6 +153,7 @@ class PurchaseInService:
                     unit_cost=unit_cost,
                     original_cost=total_cost,
                     warehouse_id=warehouse_id,
+                    created_at=doc_time,
                 )
                 db.session.add(layer)
                 layers.append(layer)
@@ -286,6 +289,7 @@ class StockOutService:
                 quantity=take,
                 unit_cost=layer.unit_cost,
                 cost_amount=cost_amount,
+                created_at=now_beijing_naive(),
             )
             db.session.add(alloc)
 
@@ -373,7 +377,8 @@ class StockOutService:
             document_time=doc_time,
             status=doc_status,
             remark=remark,
-            confirmed_at=now_beijing_naive() if auto_confirm else None,
+            created_at=doc_time,
+            confirmed_at=doc_time if auto_confirm else None,
         )
         db.session.add(document)
         db.session.flush()
@@ -396,6 +401,7 @@ class StockOutService:
                 total_cost=None,
                 process_order_id=process_order_id,
                 warehouse_id=warehouse_id,
+                created_at=doc_time,
             )
             db.session.add(tx)
             db.session.flush()              # 拿到 tx.id，供成本分配引用

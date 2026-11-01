@@ -32,8 +32,8 @@
   </div>
   <div class="form-row"><label>产品名称：</label>{{ order.product_name }}</div>
   <div class="form-row"><label>产品规格：</label>{{ order.product_specification or "-" }}</div>
-  <div class="form-row"><label>数量：</label>
-    {{ order.quantity }}{% if order.unit %} {{ order.unit }}{% endif %}
+  <div class="form-row"><label>计划数量：</label>
+    {{ order.planned_quantity }}{% if order.unit %} {{ order.unit }}{% endif %}
   </div>
   <div class="form-row"><label>业绩单号：</label>
     {{ performance.performance_no if performance else "-" }}
@@ -47,8 +47,8 @@
   <div class="form-row"><label>创建人：</label>
     {{ creator.real_name if creator else "-" }}
   </div>
-  <div class="form-row"><label>成本价格：</label>{{ order.cost_price }}</div>
-  <div class="form-row"><label>总成本：</label>{{ order.total_cost }}</div>
+  <div class="form-row"><label>预计单位成本：</label>{{ order.planned_cost_price }}</div>
+  <div class="form-row"><label>预计总成本：</label>{{ order.planned_total_cost }}</div>
   <div class="form-row"><label>实际总成本：</label>{{ order.actual_total_cost }}</div>
   <div class="form-row"><label>状态：</label>
     <span class="status-badge status-{{ order.status|lower }}">{{ order.status }}</span>

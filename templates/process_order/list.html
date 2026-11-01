@@ -37,12 +37,13 @@
       <th>工艺单编号</th>
       <th>加工厂</th>
       <th>产品名称</th>
-      <th style="width:110px;">数量</th>
+      <th style="width:110px;">计划数量</th>
       <th>业绩单号</th>
       <th style="width:140px;">下单时间</th>
       <th>跟单人</th>
       <th>创建人</th>
-      <th style="width:100px;">成本价格</th>
+      <th style="width:100px;">预计单位成本</th>
+      <th style="width:100px;">实际单位成本</th>
       <th style="width:90px;">状态</th>
       <th style="width:220px;">操作</th>
     </tr>
@@ -63,14 +64,21 @@
         </td>
         <td>{{ it.product_name }}</td>
         <td style="text-align:right;">
-          {{ it.quantity }}
+          {{ it.planned_quantity }}
           {% if it.unit %}<span style="color:#999;font-size:11px;">{{ it.unit }}</span>{% endif %}
         </td>
         <td>{{ it.performance_no or "-" }}</td>
         <td>{{ it.order_time.strftime("%Y-%m-%d %H:%M") if it.order_time else "-" }}</td>
         <td>{{ it.followup_employee_name or "-" }}</td>
         <td>{{ it.created_by_name or "-" }}</td>
-        <td style="text-align:right;">{{ it.cost_price }}</td>
+        <td style="text-align:right;">{{ it.planned_cost_price }}</td>
+        <td style="text-align:right;">
+          {% if it.completed_quantity > 0 %}
+            {{ it.actual_total_cost / it.completed_quantity }}
+          {% else %}
+            -
+          {% endif %}
+        </td>
         <td>
           <span class="status-badge status-{{ it.status|lower }}">
             {{ {
@@ -159,7 +167,7 @@
       {% endfor %}
     {% else %}
       <tr>
-        <td colspan="15" style="text-align:center;color:#999;padding:24px;">
+        <td colspan="13" style="text-align:center;color:#999;padding:24px;">
           暂无数据
         </td>
       </tr>

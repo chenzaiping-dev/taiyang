@@ -155,6 +155,7 @@ def edit_page(plan_id):
         production_plan_id=plan.id,
         reservation_type="PRODUCTION_PLAN",
         status="ACTIVE",
+        good_type="STAPLE",
     ).all()
     selected_reservations = {
         (r.warehouse_id, r.batch_id): r.remaining_quantity

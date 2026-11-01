@@ -310,15 +310,16 @@ CREATE TABLE process_orders (
     product_name VARCHAR(200) NOT NULL COMMENT '产品名称',
     product_specification VARCHAR(500) NULL COMMENT '产品规格',
     unit VARCHAR(20) DEFAULT 'KG' COMMENT '成品计量单位',
-    quantity DECIMAL(18, 6) NOT NULL COMMENT '计划生产数量',
 
     performance_id BIGINT UNSIGNED NOT NULL COMMENT '关联业绩表ID快照',
     order_time DATETIME NOT NULL COMMENT '下单时间',
 
     followup_employee_id BIGINT UNSIGNED NOT NULL COMMENT '跟单员ID',
 
-    cost_price DECIMAL(24, 6) DEFAULT 0 COMMENT '预计单位成本',
-    total_cost DECIMAL(24, 6) DEFAULT 0 COMMENT '预计总成本',
+    planned_quantity DECIMAL(18, 6) NOT NULL COMMENT '计划生产数量',
+    planned_cost_price DECIMAL(24, 6) DEFAULT 0 COMMENT '预计单位成本',
+    planned_total_cost DECIMAL(24, 6) DEFAULT 0 COMMENT '预计总成本',
+
     actual_total_cost DECIMAL(24, 6) DEFAULT 0 COMMENT '实际生产总成本',
     completed_quantity DECIMAL(18, 6) DEFAULT 0 COMMENT '实际完工数量',
     

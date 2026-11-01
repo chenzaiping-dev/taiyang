@@ -150,8 +150,8 @@ TABLES = {
     },    
     "process_orders": {
         "label": "工艺单", "module": "生产管理", "mode": "crud",
-        "list_fields": ["id", "process_order_no", "factory_id", "batch_no", "product_name", "quantity", "performance_id", "order_time", "followup_employee_id", "cost_price", "total_cost", "created_by", "status"],
-        "form_fields": ["process_order_no", "factory_id", "batch_no", "product_name", "quantity", "performance_id", "order_time", "followup_employee_id", "cost_price", "total_cost", "created_by", "status"],
+        "list_fields": ["id", "process_order_no", "factory_id", "batch_no", "product_name", "quantity", "performance_id", "order_time", "followup_employee_id", "planned_cost_price", "planned_total_cost", "created_by", "status"],
+        "form_fields": ["process_order_no", "factory_id", "batch_no", "product_name", "quantity", "performance_id", "order_time", "followup_employee_id", "planned_cost_price", "planned_total_cost", "created_by", "status"],
         "search_fields": ["factory_id", "product_name", "batch_no", "performance_id"],
         "can_create": True, "can_edit": True, "can_delete": False,
     },

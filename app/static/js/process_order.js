@@ -6,7 +6,7 @@
   const addBtn   = document.getElementById("add-row-btn");
   const form     = document.getElementById("po-form");
   const ratioSumEl = document.getElementById("ratio-sum");
-  const planQtyInput = document.getElementById("quantity");   // 计划数量输入框
+  const planQtyInput = document.getElementById("planned_quantity");   // 计划数量输入框
   let nextIndex = parseInt(form?.dataset.nextIndex || "0", 10);
 
   const toNum = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };

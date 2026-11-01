@@ -86,6 +86,7 @@ class ProductionPlanService:
             status="DRAFT",
             remark=remark,
             created_by=created_by,
+            created_at=now_beijing_naive(),
         )
         db.session.add(plan)
         db.session.flush()
@@ -253,6 +254,8 @@ class ProductionPlanService:
                     reserved_quantity=qty,
                     remaining_quantity=qty,
                     status="ACTIVE",
+                    goods_type="STAPLE",
+                    created_at=now_beijing_naive(),
                     remark=f"生产计划 {plan.plan_no} 锁定",
                 )
                 db.session.add(new_res)
@@ -290,14 +293,14 @@ class ProductionPlanService:
                 product_name=perf.product_name,
                 product_specification=perf.product_specification,
                 unit=perf.unit or "KG",
-                quantity=qty,
+                planned_quantity=qty,
                 performance_id=perf.id,
                 order_time=now_beijing(),
                 followup_employee_id=(
                     perf.main_salesperson_id or created_by or 1
                 ),
-                cost_price=Decimal("0"),
-                total_cost=Decimal("0"),
+                planned_cost_price=Decimal("0"),
+                planned_total_cost=Decimal("0"),
                 actual_total_cost=Decimal("0"),
                 completed_quantity=Decimal("0"),
                 status="DRAFT",
@@ -314,6 +317,7 @@ class ProductionPlanService:
                 production_plan_id=plan.id,
                 process_order_id=order.id,
                 planned_quantity=qty,
+                created_at=now_beijing_naive(),
             )
             db.session.add(rel)
 
@@ -425,6 +429,7 @@ class ProductionPlanService:
             .filter(
                 FinishedGoodsReservation.production_plan_id == plan.id,
                 FinishedGoodsReservation.reservation_type == "PRODUCTION_PLAN",
+                FinishedGoodsReservation.goods_type == "STAPLE",
             )
             .order_by(Warehouse.warehouse_code.asc(),
                       FinishedGoodsBatch.batch_no.asc(),
@@ -451,7 +456,7 @@ class ProductionPlanService:
                 ProcessOrder.product_name,
                 ProcessOrder.product_specification,
                 ProcessOrder.unit,
-                ProcessOrder.quantity,
+                ProcessOrder.planned_quantity,
                 ProcessOrder.status.label("po_status"),
                 ProcessOrder.completed_quantity,
                 ProcessOrder.order_time,
@@ -669,6 +674,7 @@ class ProductionPlanService:
                 reserved_quantity=_q6(available),
                 remaining_quantity=_q6(available),
                 status="ACTIVE",
+                goods_type="FRESH",
                 remark=(
                     f"生产计划 {plan.plan_no} 完成时锁定 "
                     f"(工艺单 {po.process_order_no}, 批次 {batch_no})"

@@ -170,14 +170,14 @@ def parse_process_order_form(form) -> dict:
     if not product_name:
         raise FormParseError("请填写产品名称")
 
-    qty_raw = form.get("quantity", "").strip()
+    qty_raw = form.get("planned_quantity", "").strip()
     if not qty_raw:
         raise FormParseError("请填写计划生产数量")
     try:
-        quantity = Decimal(qty_raw)
+        planned_quantity = Decimal(qty_raw)
     except InvalidOperation:
         raise FormParseError("计划生产数量格式错误")
-    if quantity <= 0:
+    if planned_quantity <= 0:
         raise FormParseError("计划生产数量必须大于 0")
 
     # ---- 明细 ----
@@ -250,10 +250,10 @@ def parse_process_order_form(form) -> dict:
         "product_name": product_name,
         "product_specification": form.get("product_specification", "").strip() or None,
         "unit": form.get("unit", "KG").strip() or "KG",
-        "quantity": str(quantity),
+        "planned_quantity": str(planned_quantity),
         "order_time": form.get("order_time") or None,
-        "cost_price": form.get("cost_price", "0").strip() or "0",
-        "total_cost": form.get("total_cost", "0").strip() or "0",
+        "planned_cost_price": form.get("planned_cost_price", "0").strip() or "0",
+        "planned_total_cost": form.get("planned_total_cost", "0").strip() or "0",
         "remark": form.get("remark", "").strip() or None,
         "process_order_no": form.get("process_order_no", "").strip() or None,
         "status": form.get("status", "DRAFT"),

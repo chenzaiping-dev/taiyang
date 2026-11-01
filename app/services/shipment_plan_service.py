@@ -234,6 +234,7 @@ class ShipmentPlanService:
                 unit_price=uprice,
                 quantity=total_qty,
                 shipped_quantity=Decimal("0"),
+                created_at=now_beijing_naive(),
             )
             db.session.add(line)
             db.session.flush()
@@ -262,6 +263,7 @@ class ShipmentPlanService:
                     batch_id=int(it["batch_id"]),
                     planned_quantity=qty,
                     shipped_quantity=Decimal("0"),
+                    created_at=now_beijing_naive(),
                 )
                 db.session.add(alloc)
 

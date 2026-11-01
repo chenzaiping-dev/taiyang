@@ -126,6 +126,7 @@ class FinishedGoodsService:
                         product_name=l.get("product_name") or "未命名",
                         product_specification=l.get("product_specification"),
                         unit=l.get("unit") or "KG",
+                        unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else None,
                         batch_source=(
                             "RETURN" if inbound_type == "CUSTOMER_RETURN"
                             else ("PRODUCTION" if inbound_type == "PRODUCTION_IN"
@@ -133,6 +134,7 @@ class FinishedGoodsService:
                         ),
                         quality_status=l.get("quality_status") or "QUALIFIED",
                         remark=l.get("remark"),
+                        created_at=now_beijing_naive(),
                     )
                     db.session.add(batch)
                     db.session.flush()
@@ -148,6 +150,7 @@ class FinishedGoodsService:
                             )
                         if batch.process_order_id is None:
                             batch.process_order_id = int(incoming_po_id)
+                    # 是否要做价格一致性检测, to be continued
 
             line = FinishedGoodsDocumentLine(
                 document_id=document.id,
@@ -158,6 +161,7 @@ class FinishedGoodsService:
                 quantity=qty,
                 unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else None,
                 remark=l.get("remark"),
+                created_at=now_beijing_naive(),
             )
             db.session.add(line)
             db.session.flush()
@@ -281,6 +285,7 @@ class FinishedGoodsService:
                 quantity=qty,
                 unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else None,
                 remark=l.get("remark"),
+                created_at=now_beijing_naive(),
             )
             db.session.add(line)
             db.session.flush()
@@ -346,6 +351,7 @@ class FinishedGoodsService:
             transaction_type=tx_type,
             quantity_delta=delta,
             transaction_time=tx_time,
+            created_at=now_beijing_naive()
         )
         db.session.add(tx)
         return tx

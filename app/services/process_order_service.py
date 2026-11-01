@@ -84,7 +84,7 @@ class ProcessOrderService:
     @staticmethod
     def _validate_and_normalize(
         factory_id, performance_id, followup_employee_id, created_by,
-        batch_no, product_name, quantity, materials,
+        batch_no, product_name, planned_quantity, materials,
     ):
         """
         抽取公共校验：主表字段 + 明细配比。
@@ -94,7 +94,7 @@ class ProcessOrderService:
             raise ProcessOrderError("生产批号必填")
         if not product_name:
             raise ProcessOrderError("产品名称必填")
-        q = _q6(quantity)
+        q = _q6(planned_quantity)
         if q <= 0:
             raise ProcessOrderError("计划生产数量必须 > 0")
 
@@ -160,13 +160,13 @@ class ProcessOrderService:
     @staticmethod
     def create_process_order(
         factory_id, performance_id, followup_employee_id, created_by,
-        batch_no, product_name, quantity, order_time, materials,
-        product_specification=None, unit="KG", cost_price=0, total_cost=0,
+        batch_no, product_name, planned_quantity, order_time, materials,
+        product_specification=None, unit="KG", planned_cost_price=0, planned_total_cost=0,
         remark=None, process_order_no=None, status="DRAFT",
     ) -> dict:
         q, normalized = ProcessOrderService._validate_and_normalize(
             factory_id, performance_id, followup_employee_id, created_by,
-            batch_no, product_name, quantity, materials,
+            batch_no, product_name, planned_quantity, materials,
         )
 
         doc_no = process_order_no or generate_process_order_no()
@@ -178,11 +178,12 @@ class ProcessOrderService:
             factory_id=factory_id, batch_no=batch_no,
             product_name=product_name,
             product_specification=product_specification,
-            unit=unit or "KG", quantity=q,
+            unit=unit or "KG", planned_quantity=q,
             performance_id=performance_id,
             order_time=order_time or now_beijing_naive(),
             followup_employee_id=followup_employee_id,
-            cost_price=_q6(cost_price), total_cost=_q6(total_cost),
+            planned_cost_price=_q6(planned_cost_price), 
+            planned_total_cost=_q6(planned_total_cost),
             status=status, remark=remark, created_by=created_by,
             created_at=now_beijing_naive(), updated_at=now_beijing_naive(),
         )
@@ -229,8 +230,8 @@ class ProcessOrderService:
     def update_process_order(
         order_id: int,
         factory_id, performance_id, followup_employee_id,
-        batch_no, product_name, quantity, order_time, materials,
-        product_specification=None, unit="KG", cost_price=0, total_cost=0,
+        batch_no, product_name, planned_quantity, order_time, materials,
+        product_specification=None, unit="KG", planned_cost_price=0, planned_total_cost=0,
         remark=None, status=None,
         operator_id: int = None,           # 记录最后修改人（可选）
         allow_status_edit: bool = True,
@@ -251,7 +252,7 @@ class ProcessOrderService:
         q, normalized = ProcessOrderService._validate_and_normalize(
             factory_id, performance_id, followup_employee_id,
             order.created_by,            # 用原创建人，防止被篡改
-            batch_no, product_name, quantity, materials,
+            batch_no, product_name, planned_quantity, materials,
         )
 
         # ---- 主表字段 ----
@@ -262,10 +263,10 @@ class ProcessOrderService:
         order.product_name = product_name
         order.product_specification = product_specification
         order.unit = unit or "KG"
-        order.quantity = q
+        order.planned_quantity = q
         order.order_time = order_time or order.order_time
-        order.cost_price = _q6(cost_price)
-        order.total_cost = _q6(total_cost)
+        order.planned_cost_price = _q6(planned_cost_price)
+        order.planned_total_cost = _q6(planned_total_cost)
         order.remark = remark
         if status:
             order.status = status
@@ -331,14 +332,16 @@ class ProcessOrderService:
                 ProcessOrder.factory_id,
                 Factory.factory_name.label("factory_name"),
                 ProcessOrder.product_name,
-                ProcessOrder.quantity,
+                ProcessOrder.planned_quantity,
                 ProcessOrder.unit,
                 ProcessOrder.performance_id,
                 SalesPerformance.performance_no.label("performance_no"),
                 ProcessOrder.order_time,
                 follow.real_name.label("followup_employee_name"),
                 creator.real_name.label("created_by_name"),
-                ProcessOrder.cost_price,
+                ProcessOrder.planned_cost_price,
+                ProcessOrder.actual_total_cost,
+                ProcessOrder.completed_quantity,
                 ProcessOrder.status,
             )
             .join(Factory, Factory.id == ProcessOrder.factory_id, isouter=True)
@@ -463,6 +466,7 @@ class ProcessOrderService:
         # 5. 先改状态，同事务里出库（commit=False）
         old_status = order.status
         order.status = "ORDERED"
+        order.completed_quantity = order.planned_quantity
         db.session.flush()   # 让 order.status 变更先写到 session
 
         # ---- 出库（不提交，交给外层事务） ----
@@ -557,7 +561,7 @@ class ProcessOrderService:
         - 状态：PRODUCING -> RECEIVED
         - 批次号 = order.batch_no
         - 成本单价 = actual_total_cost / completed_quantity
-        - 入库数量 = completed_quantity（若为 0 则用 quantity）
+        - 入库数量 = completed_quantity（若为 0 则用 planned_quantity）
         - 事务与状态更新合并
         """
         order = db.session.get(ProcessOrder, order_id)
@@ -573,7 +577,7 @@ class ProcessOrderService:
         # 数量：优先实际完工数，否则回退到计划数
         qty = _q6(order.completed_quantity or 0)
         if qty <= 0:
-            qty = _q6(order.quantity)
+            qty = _q6(order.planned_quantity)
         if qty <= 0:
             raise ProcessOrderError("入库数量必须 > 0")
 

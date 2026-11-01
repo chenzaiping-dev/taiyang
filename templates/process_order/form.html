@@ -109,9 +109,9 @@
     </div>
 
     <div class="form-row">
-      <label for="quantity">计划数量 *</label>
-      <input type="number" id="quantity" name="quantity" step="0.000001"
-             min="0.000001" value="{{ form_data.quantity }}" required>
+      <label for="planned_quantity">计划数量 *</label>
+      <input type="number" id="planned_quantity" name="planned_quantity" step="0.1"
+             min="0.1" value="{{ form_data.planned_quantity }}" required>
 
       <label for="unit">单位</label>
       <input type="text" id="unit" name="unit" maxlength="20"
@@ -130,13 +130,13 @@
     </div>
 
     <div class="form-row">
-      <label for="cost_price">预计单位成本</label>
-      <input type="number" id="cost_price" name="cost_price"
-             step="0.000001" min="0" value="{{ form_data.cost_price }}">
+      <label for="planned_cost_price">预计单位成本</label>
+      <input type="number" id="planned_cost_price" name="planned_cost_price"
+             step="0.000001" min="0" value="{{ form_data.planned_cost_price }}">
 
-      <label for="total_cost">预计总成本</label>
-      <input type="number" id="total_cost" name="total_cost"
-             step="0.000001" min="0" value="{{ form_data.total_cost }}">
+      <label for="planned_total_cost">预计总成本</label>
+      <input type="number" id="planned_total_cost" name="planned_total_cost"
+             step="0.000001" min="0" value="{{ form_data.planned_total_cost }}">
     </div>
 
     <div class="form-row">
