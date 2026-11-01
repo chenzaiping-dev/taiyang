@@ -33,6 +33,8 @@
       <th style="width:130px;text-align:right;">库存总量</th>
       <th style="width:130px;text-align:right;background:#fff8e1;">锁定数量</th>
       <th style="width:130px;text-align:right;background:#e8f5e9;">可用数量</th>
+      <th style="width:130px;text-align:right;background:#e8f5e9;">单价</th>
+      <th style="width:130px;text-align:right;background:#e8f5e9;">库存成本</th>
       <th style="width:150px;">更新时间</th>
     </tr>
   </thead>
@@ -55,11 +57,13 @@
                   color:{{ '#c62828' if r.available_qty <= 0 else '#2e7d32' }};">
           {{ r.available_qty }}
         </td>
+        <td style="text-align:right;">{{ r.unit_cost or "" }}</td>
+        <td style="text-align:right;">{{ r.total_cost }}</td>
         <td>{{ r.updated_at.strftime("%Y-%m-%d %H:%M") if r.updated_at else "-" }}</td>
       </tr>
       {% endfor %}
       {% else %}
-        <tr><td colspan="11" style="text-align:center;color:#999;padding:24px;">暂无库存</td></tr>
+        <tr><td colspan="13" style="text-align:center;color:#999;padding:24px;">暂无库存</td></tr>
       {% endif %}
   </tbody>
   <tfoot>

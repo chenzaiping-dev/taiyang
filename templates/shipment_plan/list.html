@@ -18,6 +18,8 @@
         placeholder="业绩单ID/单号" maxlength="64" style="width:150px;">
   <button type="submit" class="btn btn-primary">查询</button>
   <a class="btn" href="{{ url_for('shipment_plan.list_page') }}">重置</a>
+  <a class="btn btn-primary" style="float:right;"
+     href="{{ url_for('shipment_plan.new_page', performance_id=performance_id) }}">+ 新建发货计划</a>
 </form>
 
 <table style="width:100%;border-collapse:collapse;font-size:13px;">

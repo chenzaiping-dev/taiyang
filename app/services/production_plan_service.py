@@ -561,7 +561,14 @@ class ProductionPlanService:
             production_plan_id=plan.id
         ).order_by(ProductionPlanProcessOrder.id.asc()).all()
         if not rels:
-            raise ProductionPlanError("该生产计划未关联任何工艺单，无法完成")
+            #raise ProductionPlanError("该生产计划未关联任何工艺单，无法完成")
+            plan.status = "COMPLETED"
+            try:
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                raise ProductionPlanError(f"完成失败: {e}")
+            return plan
 
         po_ids = [r.process_order_id for r in rels]
         pos_map = {

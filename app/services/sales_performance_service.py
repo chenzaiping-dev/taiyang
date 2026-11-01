@@ -153,6 +153,8 @@ class SalesPerformanceService:
                 **n,
                 created_by=created_by,
                 updated_by=created_by,
+                created_at=now_beijing_naive(),
+                updated_at=now_beijing_naive(),
             )
             db.session.add(perf)
             try:

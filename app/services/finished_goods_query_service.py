@@ -102,6 +102,8 @@ class FinishedGoodsQueryService:
                 FinishedGoodsBatch.product_name,
                 FinishedGoodsBatch.product_specification,
                 FinishedGoodsBatch.unit,
+                FinishedGoodsBatch.unit_cost,
+                func.round(FinishedGoodsBatch.unit_cost * FinishedGoodsInventory.quantity, 6).label("total_cost"),
                 FinishedGoodsBatch.quality_status,
                 FinishedGoodsInventory.quantity.label("total_qty"),
                 # ⭐ 锁定数量 & 可用数量
