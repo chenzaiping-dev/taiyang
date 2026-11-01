@@ -324,7 +324,7 @@ class SalesPerformanceService:
         return rows, total
 
     @staticmethod
-    def change_status(perf_id: int, action: str,
+    def old_change_status(perf_id: int, action: str,
                       operator_id: int = None) -> SalesPerformance:
         """
         统一状态流转入口。
@@ -361,6 +361,119 @@ class SalesPerformanceService:
                     f"必须为【已完成】才能执行生产入库"
                 )
 
+        old_status = perf.status
+        perf.status = rule["to"]
+        perf.updated_by = operator_id
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            raise SalesPerformanceError(f"状态更新失败: {e}")
+
+        return perf
+
+    @staticmethod
+    def change_status(perf_id: int, action: str,
+                    operator_id: int = None) -> SalesPerformance:
+        """
+        统一状态流转入口。
+        action ∈ {'submit', 'stock_in', 'ship', 'complete', 'cancel'}
+        """
+        rule = STATUS_ACTIONS.get(action)
+        if not rule:
+            raise SalesPerformanceError(f"不支持的操作: {action}")
+
+        perf = db.session.get(SalesPerformance, perf_id)
+        if not perf:
+            raise SalesPerformanceError("业绩单不存在")
+
+        if perf.status not in rule["from"]:
+            cur = STATUS_LABELS.get(perf.status, perf.status)
+            raise SalesPerformanceError(
+                f"当前状态【{cur}】不允许执行【{rule['label']}】"
+            )
+
+        # ============ 生产入库：校验 + 计算成本 ============
+        if action == "stock_in":
+            plan = ProductionPlan.query.filter_by(
+                performance_id=perf.id
+            ).first()
+            if not plan:
+                raise SalesPerformanceError(
+                    "该业绩单没有关联的生产计划，无法执行生产入库"
+                )
+            if plan.status != "COMPLETED":
+                from app.services.production_plan_service import PLAN_STATUS_LABELS
+                plan_label = PLAN_STATUS_LABELS.get(plan.status, plan.status)
+                raise SalesPerformanceError(
+                    f"生产计划【{plan.plan_no}】状态为【{plan_label}】，"
+                    f"必须为【已完成】才能执行生产入库"
+                )
+
+            from app.generated.models.finished_goods_reservations import (
+                FinishedGoodsReservation,
+            )
+            from app.generated.models.finished_goods_batches import FinishedGoodsBatch
+
+            rows = (
+                db.session.query(
+                    FinishedGoodsReservation.remaining_quantity,
+                    FinishedGoodsBatch.unit_cost,
+                    FinishedGoodsBatch.batch_no,
+                )
+                .join(FinishedGoodsBatch,
+                    FinishedGoodsBatch.id == FinishedGoodsReservation.batch_id)
+                .filter(
+                    FinishedGoodsReservation.production_plan_id == plan.id,
+                    FinishedGoodsReservation.reservation_type == "PRODUCTION_PLAN",
+                    FinishedGoodsReservation.status == "ACTIVE",
+                    FinishedGoodsReservation.remaining_quantity > 0,
+                )
+                .all()
+            )
+
+            if not rows:
+                #raise SalesPerformanceError(
+                #    f"生产计划【{plan.plan_no}】没有可用的成品预留，"
+                #    f"无法执行生产入库"
+                #)
+                # ============ 状态切换 ============
+                old_status = perf.status
+                perf.status = rule["to"]
+                perf.updated_by = operator_id
+                try:
+                    db.session.commit()
+                except Exception as e:
+                    db.session.rollback()
+                    raise SalesPerformanceError(f"状态更新失败: {e}")
+
+                return perf
+
+            total_cost = Decimal("0")
+            missing_cost_batches = []
+            for remaining_qty, unit_cost, batch_no in rows:
+                q = _q6(remaining_qty or 0)
+                if unit_cost is None:
+                    missing_cost_batches.append(batch_no)
+                    continue
+                total_cost += _q6(q * _q6(unit_cost))
+
+            total_cost = _q6(total_cost)
+            amount = _q6(perf.amount or 0)
+            new_profit = _q6(amount - total_cost)
+
+            # 覆盖写入
+            perf.cost = total_cost
+            perf.profit = new_profit
+
+            # 供 Controller 读取并 flash
+            if missing_cost_batches:
+                perf._cost_warning = (
+                    f"以下批次缺少 unit_cost，按 0 计入成本："
+                    f"{'、'.join(missing_cost_batches)}"
+                )
+
+        # ============ 状态切换 ============
         old_status = perf.status
         perf.status = rule["to"]
         perf.updated_by = operator_id

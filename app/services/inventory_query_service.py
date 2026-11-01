@@ -97,6 +97,7 @@ class InventoryQueryService:
                     Material.material_name,
                     Material.unit,
                 )
+                #.order_by(Material.id.desc())
                 .order_by(Material.material_code.asc())
             )
 

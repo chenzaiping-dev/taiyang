@@ -120,7 +120,8 @@ class FinishedGoodsQueryService:
                   isouter=True)
             .where(FinishedGoodsInventory.quantity > 0)
             .order_by(Warehouse.warehouse_code.asc(),
-                      FinishedGoodsBatch.batch_no.asc())
+                      FinishedGoodsBatch.id.desc())
+                      #FinishedGoodsBatch.batch_no.asc())
         )
         if warehouse_id:
             stmt = stmt.where(FinishedGoodsInventory.warehouse_id == warehouse_id)

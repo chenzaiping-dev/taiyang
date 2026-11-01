@@ -266,23 +266,24 @@ def detail_page(perf_id):
 
 @bp.post("/<int:perf_id>/<action>")
 def change_status(perf_id, action):
-    """
-    状态操作：submit / stock_in / ship / complete / cancel
-    """
     if action not in ("submit", "stock_in", "ship", "complete", "cancel"):
         abort(404)
     try:
-        SalesPerformanceService.change_status(
+        perf = SalesPerformanceService.change_status(
             perf_id, action, operator_id=1,
         )
         labels = {
             "submit": "已提交",
-            "stock_in": "已标记生产入库",
+            "stock_in": "已标记生产入库，成本/利润已更新",
             "ship": "已发货",
             "complete": "已完成",
             "cancel": "已取消",
         }
         flash(labels.get(action, "操作成功"), "success")
+
+        # ⭐ 成本缺失提示
+        if getattr(perf, "_cost_warning", None):
+            flash(perf._cost_warning, "error")
     except SalesPerformanceError as e:
         flash(str(e), "error")
-    return redirect(request.referrer or url_for("sales_performance.list_page"))
+    return redirect(request.referrer or url_for("sales_performance.list_page")) 
