@@ -155,7 +155,7 @@ def edit_page(plan_id):
         production_plan_id=plan.id,
         reservation_type="PRODUCTION_PLAN",
         status="ACTIVE",
-        good_type="STAPLE",
+        goods_type="STAPLE",
     ).all()
     selected_reservations = {
         (r.warehouse_id, r.batch_id): r.remaining_quantity
@@ -179,7 +179,7 @@ def edit_page(plan_id):
                     db.session.get(Factory, po.factory_id).factory_name
                     if po.factory_id else ""
                 ),
-                "quantity": str(po.quantity),
+                #"planned_quantity": str(po.planned_quantity),
                 "planned_quantity": str(rel.planned_quantity),
                 "batch_no": po.batch_no,
                 "status": po.status,

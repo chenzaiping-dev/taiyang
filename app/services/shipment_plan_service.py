@@ -15,7 +15,6 @@ from app.generated.models.shipment_plans import ShipmentPlan
 from app.generated.models.shipment_plan_lines import ShipmentPlanLine
 from app.generated.models.shipment_plan_allocations import ShipmentPlanAllocation
 from app.generated.models.process_orders import ProcessOrder
-from app.generated.models.production_plan_process_orders import ProductionPlanProcessOrder
 from app.generated.models.production_plans import ProductionPlan
 from app.services.finished_goods_service import FinishedGoodsError, FinishedGoodsService
 

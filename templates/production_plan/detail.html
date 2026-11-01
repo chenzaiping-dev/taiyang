@@ -28,8 +28,8 @@
       #{{ plan.performance_id }}
     {% endif %}
   </div>
-  <div class="form-row"><label>总生产数量：</label>{{ plan.total_quantity }}</div>
-  <div class="form-row"><label>计划生产数量：</label>{{ plan.process_quantity }}</div>
+  <div class="form-row"><label>覆盖总数量：</label>{{ plan.total_quantity }}</div>
+  <div class="form-row"><label>新生产数量：</label>{{ plan.process_quantity }}</div>
   <div class="form-row"><label>锁定总数量：</label>
     <strong>{{ locked_total }}</strong>
   </div>
@@ -106,9 +106,9 @@
         <th>生产批号</th>
         <th>产品名称</th>
         <th style="width:60px;">单位</th>
+        <th style="width:120px;text-align:right;">锁定数量</th>
         <th style="width:120px;text-align:right;">计划生产数量</th>
-        <th style="width:120px;text-align:right;">实际生产数量</th>
-        <th style="width:120px;text-align:right;">已完工数量</th>
+        <th style="width:120px;text-align:right;">实际完工数量</th>
         <th style="width:100px;">状态</th>
         <th style="width:140px;">下单时间</th>
       </tr>
@@ -128,8 +128,8 @@
           <td>{{ po.batch_no }}</td>
           <td>{{ po.product_name }}</td>
           <td>{{ po.unit or "" }}</td>
+          <td style="text-align:right;">{{ po.locked_quantity }}</td>
           <td style="text-align:right;">{{ po.planned_quantity }}</td>
-          <td style="text-align:right;">{{ po.quantity }}</td>
           <td style="text-align:right;">{{ po.completed_quantity }}</td>
           <td>
             <span class="po-badge po-{{ po.po_status|lower }}">

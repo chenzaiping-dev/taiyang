@@ -447,7 +447,7 @@ class ProductionPlanService:
         po_rows = (
             db.session.query(
                 ProductionPlanProcessOrder.id.label("relation_id"),
-                ProductionPlanProcessOrder.planned_quantity,
+                ProductionPlanProcessOrder.planned_quantity.label("locked_quantity"),
                 ProcessOrder.id.label("process_order_id"),
                 ProcessOrder.process_order_no,
                 ProcessOrder.factory_id,
@@ -558,22 +558,23 @@ class ProductionPlanService:
 
         # 1. 关联工艺单
         rels = ProductionPlanProcessOrder.query.filter_by(
-            production_plan_id=plan.id).all()
+            production_plan_id=plan.id
+        ).order_by(ProductionPlanProcessOrder.id.asc()).all()
         if not rels:
-            raise ProductionPlanError(
-                "该生产计划未关联任何工艺单，无法完成"
-            )
+            raise ProductionPlanError("该生产计划未关联任何工艺单，无法完成")
 
         po_ids = [r.process_order_id for r in rels]
-        pos = (
-            ProcessOrder.query
-            .filter(ProcessOrder.id.in_(po_ids))
-            .order_by(ProcessOrder.process_order_no.asc())
-            .all()
-        )
+        pos_map = {
+            po.id: po for po in
+            ProcessOrder.query.filter(ProcessOrder.id.in_(po_ids)).all()
+        }
 
+        # 2. 校验工艺单状态
         not_received = [
-            po for po in pos if po.status != "RECEIVED"
+            pos_map[r.process_order_id]
+            for r in rels
+            if r.process_order_id in pos_map
+            and pos_map[r.process_order_id].status != "RECEIVED"
         ]
         if not_received:
             details = "；".join(
@@ -583,13 +584,20 @@ class ProductionPlanService:
                 f"以下工艺单尚未入库，无法完成：{details}"
             )
 
-        # 2. 为每个工艺单的成品批次写预留
+        # 3. 逐关联行写预留（按 planned_quantity）
         try:
-            for po in pos:
+            for rel in rels:
+                po = pos_map.get(rel.process_order_id)
+                if not po:
+                    raise ProductionPlanError(
+                        f"关联工艺单 {rel.process_order_id} 不存在"
+                    )
                 ProductionPlanService._reserve_finished_goods_for_po(
-                    plan=plan, po=po, operator_id=operator_id,
+                    plan=plan,
+                    po=po,
+                    planned_quantity=_q6(rel.planned_quantity),  # ⭐ 按计划量锁
+                    operator_id=operator_id,
                 )
-            # 3. 更新状态
             plan.status = "COMPLETED"
             db.session.commit()
         except ProductionPlanError:
@@ -601,19 +609,24 @@ class ProductionPlanService:
 
         return plan
 
-    # ==================== 内部：完成时写预留 ====================
     @staticmethod
-    def _reserve_finished_goods_for_po(plan, po, operator_id=None):
+    def _reserve_finished_goods_for_po(
+        plan, po, planned_quantity: Decimal, operator_id=None
+    ):
         """
-        按工艺单 po 的成品批次写 finished_goods_reservations。
-        规则：
-          - 找 finished_goods_batches.process_order_id = po.id 的所有批次
-          - 找 finished_goods_inventory 里该批次有库存的记录
-          - 计算可用：inventory.quantity - 已有 ACTIVE 预留
-          - 若可用 > 0 → 写一条 ACTIVE 预留
-          - 已存在同一 (plan, warehouse, batch) 的 ACTIVE 预留 → 跳过（幂等）
+        按工艺单的 planned_quantity，锁定其成品批次库存。
+
+        策略：
+        1. 找出该工艺单所有有库存的成品批次（按 quantity 降序）
+        2. 校验 Σ planned_quantity ≤ Σ 批次库存 - Σ 其他 ACTIVE 预留
+        3. 按批次顺序（quantity 大者优先）分摊 planned_quantity
+        4. 每分摊到的批次写一条 ACTIVE 预留，reservation_no 带序号
         """
-        # 1. 该工艺单已入库的批次库存
+        target = _q6(planned_quantity)
+        if target <= 0:
+            return
+
+        # 1. 该工艺单所有成品批次库存（包含已被其他计划锁定的，用 available 判断）
         rows = (
             db.session.query(
                 FinishedGoodsInventory.warehouse_id,
@@ -622,32 +635,26 @@ class ProductionPlanService:
                 FinishedGoodsBatch.batch_no,
             )
             .join(FinishedGoodsBatch,
-                  FinishedGoodsBatch.id == FinishedGoodsInventory.batch_id)
+                FinishedGoodsBatch.id == FinishedGoodsInventory.batch_id)
             .filter(
                 FinishedGoodsBatch.process_order_id == po.id,
                 FinishedGoodsInventory.quantity > 0,
             )
+            .order_by(FinishedGoodsInventory.quantity.desc(),
+                    FinishedGoodsInventory.id.asc())
             .all()
         )
         if not rows:
-            # 工艺单虽有 RECEIVED 状态，但没有成品批次库存：
-            # 说明成品入库可能被冲销了，或本计划无需预留。
-            # 这里不抛错，仅记录日志式备注，避免阻塞完成。
-            return
+            raise ProductionPlanError(
+                f"工艺单 {po.process_order_no} 无可用成品批次库存，无法完成"
+            )
 
+        # 2. 计算每个批次的可用量（库存 - 其他 ACTIVE 预留 - 本计划已锁的）
+        candidates = []
+        total_available = Decimal("0")
         for wh_id, batch_id, qty, batch_no in rows:
-            # 是否已存在同一 (plan, wh, batch) 的 ACTIVE 预留 → 幂等跳过
-            exists = FinishedGoodsReservation.query.filter_by(
-                production_plan_id=plan.id,
-                warehouse_id=wh_id,
-                batch_id=batch_id,
-                status="ACTIVE",
-            ).first()
-            if exists:
-                continue
-
-            # 已锁定数量（其他 ACTIVE 预留）
-            already = (
+            # 已存在的预留（本计划或其他计划）
+            locked = (
                 db.session.query(func.coalesce(
                     func.sum(FinishedGoodsReservation.remaining_quantity), 0))
                 .filter(
@@ -657,27 +664,62 @@ class ProductionPlanService:
                 )
                 .scalar()
             ) or Decimal("0")
+            available = Decimal(str(qty or 0)) - Decimal(str(locked))
+            if available > 0:
+                candidates.append({
+                    "warehouse_id": wh_id,
+                    "batch_id": batch_id,
+                    "batch_no": batch_no,
+                    "available": _q6(available),
+                })
+                total_available += available
 
-            available = (qty or Decimal("0")) - Decimal(str(already))
-            if available <= 0:
+        if total_available < target:
+            raise ProductionPlanError(
+                f"工艺单 {po.process_order_no} 可用成品库存不足："
+                f"计划锁定 {target}，实际可用 {_q6(total_available)}"
+            )
+
+        # 3. 分摊 planned_quantity 到批次
+        remaining = target
+        seq = 0
+        for c in candidates:
+            if remaining <= 0:
+                break
+            take = min(c["available"], remaining)
+
+            # 幂等：本计划 + 该批次已存在 ACTIVE 预留 → 跳过（防止重复）
+            exists = FinishedGoodsReservation.query.filter_by(
+                production_plan_id=plan.id,
+                warehouse_id=c["warehouse_id"],
+                batch_id=c["batch_id"],
+                status="ACTIVE",
+            ).first()
+            if exists:
+                # 已有预留，按其已锁数量消耗 remaining
+                remaining -= exists.remaining_quantity
                 continue
 
+            seq += 1
             res = FinishedGoodsReservation(
                 reservation_no=(
-                    f"RES-PP-{plan.plan_no}-{wh_id}-{batch_id}"
+                    f"RES-PP-{plan.plan_no}-{po.id}-{c['warehouse_id']}-"
+                    f"{c['batch_id']}-{seq}"
                 ),
                 reservation_type="PRODUCTION_PLAN",
                 production_plan_id=plan.id,
                 shipment_allocation_id=None,
-                warehouse_id=wh_id,
-                batch_id=batch_id,
-                reserved_quantity=_q6(available),
-                remaining_quantity=_q6(available),
+                warehouse_id=c["warehouse_id"],
+                batch_id=c["batch_id"],
+                reserved_quantity=_q6(take),
+                remaining_quantity=_q6(take),
                 status="ACTIVE",
                 goods_type="FRESH",
                 remark=(
                     f"生产计划 {plan.plan_no} 完成时锁定 "
-                    f"(工艺单 {po.process_order_no}, 批次 {batch_no})"
+                    f"(工艺单 {po.process_order_no}, 计划量 {target}, "
+                    f"批次 {c['batch_no']})"
                 ),
             )
             db.session.add(res)
+            remaining -= take
