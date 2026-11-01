@@ -11,15 +11,54 @@ from app.generated.models.shipment_plans import ShipmentPlan
 from app.utils.datetime_utils import now_beijing_naive
 
 Q6 = Decimal("0.000001")
+
+def _q6(v):
+    return Decimal(str(v)).quantize(Q6, rounding=ROUND_HALF_UP)
+
+
 ALLOWED_STATUS = {"DRAFT", "SUBMITTED", "PRODUCTION_PLANNED",
                   "FINISHED_GOODS_STOCKED", "SHIPMENT_SCHEDULED",
                   "COMPLETED", "CANCELLED"}
 ALLOWED_PAYMENT = {"UNPAID", "PAID"}
 
+STATUS_ACTIONS = {
+    "submit": {
+        "from": {"DRAFT"},
+        "to": "SUBMITTED",
+        "label": "提交",
+    },
+    "stock_in": {
+        "from": {"SUBMITTED"},
+        "to": "FINISHED_GOODS_STOCKED",
+        "label": "生产入库",
+    },
+    "ship": {
+        "from": {"FINISHED_GOODS_STOCKED"},
+        "to": "SHIPMENT_SCHEDULED",
+        "label": "发货",
+    },
+    "complete": {
+        "from": {"SHIPMENT_SCHEDULED"},
+        "to": "COMPLETED",
+        "label": "完成",
+    },
+    "cancel": {
+        "from": {"DRAFT", "SUBMITTED", "FINISHED_GOODS_STOCKED",
+                 "SHIPMENT_SCHEDULED"},
+        "to": "CANCELLED",
+        "label": "取消",
+    },
+}
 
-def _q6(v):
-    return Decimal(str(v)).quantize(Q6, rounding=ROUND_HALF_UP)
-
+STATUS_LABELS = {
+    "DRAFT": "草稿",
+    "SUBMITTED": "已提交",
+    "PRODUCTION_PLANNED": "生产计划中",
+    "FINISHED_GOODS_STOCKED": "成品已入库",
+    "SHIPMENT_SCHEDULED": "发货已排程",
+    "COMPLETED": "已完成",
+    "CANCELLED": "已取消",
+}
 
 class SalesPerformanceError(Exception):
     pass
@@ -283,3 +322,52 @@ class SalesPerformanceService:
         base = base.offset((page - 1) * page_size).limit(page_size)
         rows = [dict(r) for r in db.session.execute(base).mappings().all()]
         return rows, total
+
+    @staticmethod
+    def change_status(perf_id: int, action: str,
+                      operator_id: int = None) -> SalesPerformance:
+        """
+        统一状态流转入口。
+        action ∈ {'submit', 'stock_in', 'ship', 'complete', 'cancel'}
+        """
+        rule = STATUS_ACTIONS.get(action)
+        if not rule:
+            raise SalesPerformanceError(f"不支持的操作: {action}")
+
+        perf = db.session.get(SalesPerformance, perf_id)
+        if not perf:
+            raise SalesPerformanceError("业绩单不存在")
+
+        if perf.status not in rule["from"]:
+            cur = STATUS_LABELS.get(perf.status, perf.status)
+            raise SalesPerformanceError(
+                f"当前状态【{cur}】不允许执行【{rule['label']}】"
+            )
+
+        # ⭐ 生产入库：额外校验生产计划状态
+        if action == "stock_in":
+            plan = ProductionPlan.query.filter_by(
+                performance_id=perf.id
+            ).first()
+            if not plan:
+                raise SalesPerformanceError(
+                    "该业绩单没有关联的生产计划，无法执行生产入库"
+                )
+            if plan.status != "COMPLETED":
+                from app.services.production_plan_service import PLAN_STATUS_LABELS
+                plan_label = PLAN_STATUS_LABELS.get(plan.status, plan.status)
+                raise SalesPerformanceError(
+                    f"生产计划【{plan.plan_no}】状态为【{plan_label}】，"
+                    f"必须为【已完成】才能执行生产入库"
+                )
+
+        old_status = perf.status
+        perf.status = rule["to"]
+        perf.updated_by = operator_id
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            raise SalesPerformanceError(f"状态更新失败: {e}")
+
+        return perf
