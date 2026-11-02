@@ -399,8 +399,8 @@ CREATE TABLE process_order_materials (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 COMMENT='工艺单原料配比明细表';
 
---- 业务单据表 inventory_documents
---- 这张表记录一次业务的整体信息，例如一次采购入库、一张生产领料单或一次库存盘点。
+-- 业务单据表 inventory_documents
+-- 这张表记录一次业务的整体信息，例如一次采购入库、一张生产领料单或一次库存盘点。
 CREATE TABLE inventory_documents (
     id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
     document_no VARCHAR(50) NOT NULL COMMENT '单据编号',
@@ -593,7 +593,7 @@ CREATE TABLE finished_goods_batches (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 COMMENT='成品批次档案表';
 
---- 记录一次成品业务的单据头
+-- 记录一次成品业务的单据头
 CREATE TABLE finished_goods_documents (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 
@@ -635,7 +635,7 @@ CREATE TABLE finished_goods_documents (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 COMMENT='成品库存业务单据';
 
---- 记录单据涉及的批次、数量、仓库
+-- 记录单据涉及的批次、数量、仓库
 CREATE TABLE finished_goods_document_lines (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 
@@ -680,7 +680,7 @@ CREATE TABLE finished_goods_document_lines (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 COMMENT='成品库存业务单据明细';
 
---- 快速查询每个仓库、每个批次的现存量
+-- 快速查询每个仓库、每个批次的现存量
 CREATE TABLE finished_goods_inventory (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 
@@ -710,7 +710,7 @@ CREATE TABLE finished_goods_inventory (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 COMMENT='成品库存余额表';
 
---- 追溯每次入库、出库、调拨、退货造成的库存变化
+-- 追溯每次入库、出库、调拨、退货造成的库存变化
 CREATE TABLE finished_goods_transactions (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 

@@ -107,8 +107,8 @@ TABLES = {
     },
     "finished_goods_documents": {
         "label": "成品库存业务单据", "module": "成品管理", "mode": "crud",
-        "list_fields": ["id", "document_no", "document_type", "document_time", "status"],
-        "form_fields": ["document_no", "document_type", "document_time", "status"],
+        "list_fields": ["id", "document_no", "document_type", "document_time", "remark", "status"],
+        "form_fields": ["document_no", "document_type", "document_time", "remark", "status"],
         "search_fields": ["document_no"],
         "can_create": True, "can_edit": True, "can_delete": False,
     },
