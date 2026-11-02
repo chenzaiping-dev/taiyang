@@ -30,8 +30,14 @@
   </div>
   <div class="form-row"><label>覆盖总数量：</label>{{ plan.total_quantity }}</div>
   <div class="form-row"><label>新生产数量：</label>{{ plan.process_quantity }}</div>
-  <div class="form-row"><label>锁定总数量：</label>
-    <strong>{{ locked_total }}</strong>
+  <div class="form-row"><label>成品锁定总数量：</label>
+    <strong>{{ fg_locked_total }}</strong>
+  </div>
+  <div class="form-row"><label>生产锁定总数量：</label>
+    <strong>{{ prod_locked_total }}</strong>
+  </div>
+  <div class="form-row"><label>工艺单生产数量：</label>
+    <strong>{{ prod_planned_total }}</strong>
   </div>
   <div class="form-row"><label>计划单状态：</label>
     <span class="status-badge status-{{ plan.status|lower }}">

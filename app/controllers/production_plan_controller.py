@@ -179,8 +179,8 @@ def edit_page(plan_id):
                     db.session.get(Factory, po.factory_id).factory_name
                     if po.factory_id else ""
                 ),
-                #"planned_quantity": str(po.planned_quantity),
-                "planned_quantity": str(rel.planned_quantity),
+                "planned_quantity": str(po.planned_quantity),
+                "locked_quantity": str(rel.planned_quantity),
                 "batch_no": po.batch_no,
                 "status": po.status,
             })
@@ -258,19 +258,21 @@ def _parse_form(form):
     process_orders = []
     for idx in range(200):
         fac = form.get(f"po[{idx}][factory_id]", "").strip()
-        qty = form.get(f"po[{idx}][quantity]", "").strip()
+        planned_qty = form.get(f"po[{idx}][planned_quantity]", "").strip()
+        locked_qty = form.get(f"po[{idx}][locked_quantity]", "").strip()
         batch_no = form.get(f"po[{idx}][batch_no]", "").strip() or None
         po_id = form.get(f"po[{idx}][process_order_id]", "").strip()
-        if not fac and not qty:
+        if not fac and not planned_qty:
             continue
         if not fac:
             raise ProductionPlanError(f"第 {idx + 1} 行工艺单未选择加工厂")
-        if not qty or float(qty) <= 0:
+        if not planned_qty or float(planned_qty) <= 0:
             raise ProductionPlanError(f"第 {idx + 1} 行工艺单生产数量必须 > 0")
         process_orders.append({
             "process_order_id": int(po_id) if po_id else None,
             "factory_id": int(fac),
-            "quantity": qty,
+            "planned_quantity": planned_qty,
+            "locked_quantity": locked_qty,
             "batch_no": batch_no,
         })
 
@@ -406,7 +408,9 @@ def detail_page(plan_id):
         creator=detail["creator"],
         reservations=detail["reservations"],
         process_orders=detail["process_orders"],
-        locked_total=detail["locked_total"],
+        fg_locked_total=detail["fg_locked_total"],
+        prod_locked_total=detail["prod_locked_total"],
+        prod_planned_total=detail["prod_planned_total"],
         status_labels=PLAN_STATUS_LABELS,
         po_status_labels=PO_STATUS_LABELS,
         res_status_labels=RES_STATUS_LABELS,

@@ -154,17 +154,11 @@ class ProductionPlanService:
             plan=plan, reservations=reservations, perf=perf,
         )
 
-        # ⭐ 关联工艺单：本次提交里只处理新增（已有工艺单不允许改数量）
-        existing_po_ids = {
-            rel.process_order_id for rel in ProductionPlanProcessOrder.query.filter_by(
-                production_plan_id=plan.id).all()
-        }
-        new_pos = [
-            po for po in process_orders
-            if po.get("process_order_id") not in existing_po_ids
-        ]
-        ProductionPlanService._create_process_orders(
-            plan=plan, process_orders=new_pos, perf=perf,
+        # ⭐ 关联工艺单：已有行更新数量，新行创建，删除的行要处理
+        ProductionPlanService._sync_process_orders(
+            plan=plan,
+            process_orders=process_orders,
+            perf=perf,
             created_by=plan.created_by,
         )
 
@@ -266,6 +260,115 @@ class ProductionPlanService:
             r.remaining_quantity = Decimal("0")
 
     @staticmethod
+    def _sync_process_orders(plan, process_orders, perf, created_by):
+        """
+        编辑场景下同步关联工艺单：
+        - 已有 process_order_id：若数量变了 → 更新 production_plan_process_orders.planned_quantity
+            和 process_orders.planned_quantity（仅允许 DRAFT 状态修改）
+        - 无 process_order_id：创建新工艺单 + 关联行
+        - 提交中不再包含的已有行：从关联表删除（保持 plan 关联与实际一致）
+        校验：
+        - Σ(planned_quantity) 不超过 plan.process_quantity（可放宽）
+        - 数量 > 0
+        """
+        # 已有关系
+        existing_rels = {
+            rel.process_order_id: rel
+            for rel in ProductionPlanProcessOrder.query.filter_by(
+                production_plan_id=plan.id
+            ).all()
+        }
+
+        submitted_ids = set()
+        total_planned = Decimal("0")
+        max_planned = _q6(plan.process_quantity)
+
+        for row_idx, po in enumerate(process_orders, start=1):
+            print(po)
+            planned_qty = _q6(po["planned_quantity"])
+            locked_qty = _q6(po["locked_quantity"])
+            if planned_qty <= 0:
+                raise ProductionPlanError(
+                    f"第 {row_idx} 行工艺单生产数量必须 > 0"
+                )
+
+            po_id = po.get("process_order_id")
+
+            # ============ 已有行：更新数量 ============
+            if po_id and int(po_id) in existing_rels:
+                po_id = int(po_id)
+                submitted_ids.add(po_id)
+
+                rel = existing_rels[po_id]
+                order = db.session.get(ProcessOrder, po_id)
+                if not order:
+                    raise ProductionPlanError(
+                        f"关联工艺单 #{po_id} 不存在"
+                    )
+
+                # 只有草稿状态允许改数量
+                if order.status != "DRAFT":
+                    raise ProductionPlanError(
+                        f"工艺单 {order.process_order_no} 状态为【{order.status}】，"
+                        f"仅草稿状态允许修改生产数量"
+                    )
+
+                # 若 factory_id 变了 → 同步更新工艺单加工厂
+                new_factory_id = int(po["factory_id"])
+                if order.factory_id != new_factory_id:
+                    if not db.session.get(Factory, new_factory_id):
+                        raise ProductionPlanError(
+                            f"加工厂 #{new_factory_id} 不存在"
+                        )
+                    order.factory_id = new_factory_id
+
+                # 数量变了 → 双表同步
+                old_locked_qty = _q6(rel.planned_quantity)
+                old_planned_qty = _q6(order.planned_quantity)
+                print(f"工艺单 {order.process_order_no} 锁定数量由 {old_locked_qty} 改为 {locked_qty}")
+                print(f"工艺单 {order.process_order_no} 计划数量由 {old_planned_qty} 改为 {planned_qty}")
+                if old_locked_qty != locked_qty:
+                    rel.planned_quantity = locked_qty
+                if old_planned_qty != planned_qty:
+                    order.planned_quantity = planned_qty
+                    order.updated_at = now_beijing_naive()
+
+                # 批次号同步（可选）
+                if po.get("batch_no") and po["batch_no"] != (order.batch_no or ""):
+                    order.batch_no = po["batch_no"]
+
+                total_planned += locked_qty
+                continue
+
+            # ============ 新行：创建工艺单 ============
+            ProductionPlanService._create_process_orders(
+                plan=plan,
+                process_orders=[po],
+                perf=perf,
+                created_by=created_by,
+            )
+            total_planned += locked_qty
+
+        # ============ 处理被删除的行 ============
+        # 提交中不再包含的已有工艺单 → 从关联表移除（工艺单本身保留）
+        removed_po_ids = set(existing_rels.keys()) - submitted_ids
+        for po_id in removed_po_ids:
+            rel = existing_rels[po_id]
+            order = db.session.get(ProcessOrder, po_id)
+            if order and order.status != "DRAFT":
+                raise ProductionPlanError(
+                    f"工艺单 {order.process_order_no} 状态为【{order.status}】，"
+                    f"无法从生产计划中移除"
+                )
+            db.session.delete(rel)
+
+        # ============ 校验总计划量 ============
+        if max_planned > 0 and total_planned > max_planned:
+            raise ProductionPlanError(
+                f"工艺单计划数量合计 {total_planned} 超过计划生产数量 {max_planned}"
+        )
+
+    @staticmethod
     def _create_process_orders(plan, process_orders, perf, created_by):
         """为每条新工艺单行创建 process_orders + 关联"""
         for po in process_orders:
@@ -274,8 +377,9 @@ class ProductionPlanService:
                 continue
 
             factory_id = int(po["factory_id"])
-            qty = _q6(po["quantity"])
-            if qty <= 0:
+            planned_qty = _q6(po["planned_quantity"])
+            locked_qty = _q6(po["locked_quantity"])
+            if planned_qty <= 0:
                 continue
             if not db.session.get(Factory, factory_id):
                 raise ProductionPlanError(f"加工厂不存在: {factory_id}")
@@ -293,7 +397,7 @@ class ProductionPlanService:
                 product_name=perf.product_name,
                 product_specification=perf.product_specification,
                 unit=perf.unit or "KG",
-                planned_quantity=qty,
+                planned_quantity=planned_qty,
                 performance_id=perf.id,
                 order_time=now_beijing(),
                 followup_employee_id=(
@@ -316,7 +420,7 @@ class ProductionPlanService:
             rel = ProductionPlanProcessOrder(
                 production_plan_id=plan.id,
                 process_order_id=order.id,
-                planned_quantity=qty,
+                planned_quantity=locked_qty,
                 created_at=now_beijing_naive(),
             )
             db.session.add(rel)
@@ -390,7 +494,8 @@ class ProductionPlanService:
           'creator': Employee,
           'reservations': [{...with 仓库/批次信息}],
           'process_orders': [{...with 加工厂/工艺单}],
-          'locked_total': Decimal,
+          'fg_locked_total': Decimal,
+          'prod_locked_total': Decimal,
         }
         """
 
@@ -437,7 +542,7 @@ class ProductionPlanService:
             .all()
         )
         reservations = [dict(r._mapping) for r in res_rows]
-        locked_total = sum(
+        fg_locked_total = sum(
             (r["remaining_quantity"] for r in reservations
              if r["status"] == "ACTIVE"),
             Decimal("0"),
@@ -469,6 +574,16 @@ class ProductionPlanService:
             .all()
         )
         process_orders = [dict(r._mapping) for r in po_rows]
+        prod_locked_total = sum(
+            (r["locked_quantity"] for r in process_orders
+             if r["po_status"] != "CANCELLED"),
+            Decimal("0"),
+        )
+        prod_planned_total = sum(
+            (r["planned_quantity"] for r in process_orders
+             if r["po_status"] != "CANCELLED"),
+            Decimal("0"),
+        )
 
         return {
             "plan": plan,
@@ -476,7 +591,9 @@ class ProductionPlanService:
             "creator": creator,
             "reservations": reservations,
             "process_orders": process_orders,
-            "locked_total": locked_total,
+            "fg_locked_total": fg_locked_total,
+            "prod_locked_total": prod_locked_total,
+            "prod_planned_total": prod_planned_total,
         }
 
     # ==================== 状态操作 ====================
