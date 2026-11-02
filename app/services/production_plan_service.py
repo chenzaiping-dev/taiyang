@@ -289,7 +289,7 @@ class ProductionPlanService:
             locked_qty = _q6(po["locked_quantity"])
             if planned_qty <= 0:
                 raise ProductionPlanError(
-                    f"第 {row_idx} 行工艺单生产数量必须 > 0"
+                    f"第 {row_idx} 行工艺单计划生产数量必须 > 0"
                 )
 
             po_id = po.get("process_order_id")
@@ -306,8 +306,14 @@ class ProductionPlanService:
                         f"关联工艺单 #{po_id} 不存在"
                     )
 
-                # 只有草稿状态允许改数量
+                old_locked_qty = _q6(rel.planned_quantity)
+                if old_locked_qty != locked_qty:
+                    print(f"工艺单 {order.process_order_no} 锁定数量由 {old_locked_qty} 改为 {locked_qty}")
+                    rel.planned_quantity = locked_qty
+                # 只有草稿状态允许工艺单信息修改
                 if order.status != "DRAFT":
+                    total_planned += locked_qty
+                    continue
                     raise ProductionPlanError(
                         f"工艺单 {order.process_order_no} 状态为【{order.status}】，"
                         f"仅草稿状态允许修改生产数量"
@@ -323,12 +329,8 @@ class ProductionPlanService:
                     order.factory_id = new_factory_id
 
                 # 数量变了 → 双表同步
-                old_locked_qty = _q6(rel.planned_quantity)
                 old_planned_qty = _q6(order.planned_quantity)
-                print(f"工艺单 {order.process_order_no} 锁定数量由 {old_locked_qty} 改为 {locked_qty}")
                 print(f"工艺单 {order.process_order_no} 计划数量由 {old_planned_qty} 改为 {planned_qty}")
-                if old_locked_qty != locked_qty:
-                    rel.planned_quantity = locked_qty
                 if old_planned_qty != planned_qty:
                     order.planned_quantity = planned_qty
                     order.updated_at = now_beijing_naive()

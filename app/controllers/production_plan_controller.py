@@ -318,7 +318,8 @@ def _render_error(performance_id, msg, plan_id=None):
                 f"po[{idx}][process_order_id]", "").strip() or None,
             "process_order_no": "",
             "factory_id": fac,
-            "quantity": request.form.get(f"po[{idx}][quantity]", ""),
+            "planned_quantity": request.form.get(f"po[{idx}][planned_quantity]", ""),
+            "locked_quantity": request.form.get(f"po[{idx}][locked_quantity]", ""),
             "batch_no": request.form.get(f"po[{idx}][batch_no]", ""),
             "status": "",
         })
