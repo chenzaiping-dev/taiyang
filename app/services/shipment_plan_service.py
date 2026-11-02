@@ -379,6 +379,17 @@ class ShipmentPlanService:
             raise ShipmentPlanError(
                 f"只有【已计划】状态可执行发货，当前：{plan.status}")
 
+        # ⭐ 找到该发货计划对应的生产计划（1:1）
+        production_plan = ProductionPlan.query.filter_by(
+            performance_id=plan.performance_id
+        ).first()
+        if not production_plan:
+            raise ShipmentPlanError(
+                f"业绩单 #{plan.performance_id} 没有关联的生产计划，"
+                f"无法确定要消耗的成品预留"
+            )
+        production_plan_id = production_plan.id
+
         lines = ShipmentPlanLine.query.filter_by(
             shipment_plan_id=plan.id).all()
         if not lines:
@@ -406,6 +417,7 @@ class ShipmentPlanService:
             # 2. 先释放对应生产计划预留（否则可用量 = 库存 - ACTIVE 预留 会不够）
             for a, qty in pending:
                 ShipmentPlanService._consume_production_reservation(
+                    production_plan_id=production_plan_id,   # ⭐ 强校验：只消耗本计划
                     warehouse_id=a.warehouse_id,
                     batch_id=a.batch_id,
                     quantity=qty,
@@ -451,11 +463,8 @@ class ShipmentPlanService:
             if all_done and not plan.actual_ship_time:
                 plan.actual_ship_time = now_beijing()
 
-            print("[BEFORE COMMIT] reservations:", [
-                (r.id, str(r.remaining_quantity)) for r in reservations
-            ])
             db.session.commit()
-            print("[AFTER COMMIT]")
+            #print("[AFTER COMMIT]")
         except FinishedGoodsError as e:
             db.session.rollback()
             raise ShipmentPlanError(f"发货出库失败: {e}")
@@ -471,7 +480,10 @@ class ShipmentPlanService:
     # ---------- 私有：扣减/消耗生产计划预留 ----------
     @staticmethod
     def _consume_production_reservation(
-        warehouse_id: int, batch_id: int, quantity: Decimal
+        production_plan_id: int,       # ⭐ 新增，必传
+        warehouse_id: int,
+        batch_id: int,
+        quantity: Decimal
     ):
         """
         按 FIFO（created_at, id）顺序消耗指定仓库+批次上 ACTIVE 的
@@ -482,6 +494,7 @@ class ShipmentPlanService:
         reservations = (
             FinishedGoodsReservation.query
             .filter(
+                FinishedGoodsReservation.production_plan_id == production_plan_id,  # ⭐ 关键
                 FinishedGoodsReservation.warehouse_id == warehouse_id,
                 FinishedGoodsReservation.batch_id == batch_id,
                 FinishedGoodsReservation.reservation_type == "PRODUCTION_PLAN",
