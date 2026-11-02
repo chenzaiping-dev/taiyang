@@ -439,9 +439,10 @@ class FinishedGoodsQueryService:
 
         return total_qty, locked, (total_qty - locked)
 
-    # ⭐ 新增：可复用的"可用量"表达式
+    # app/services/finished_goods_query_service.py
     @staticmethod
-    def _locked_subquery():
+    def _locked_subquery_inventory():
+        """库存可用量计算用的锁定汇总：所有 ACTIVE 预留（不分 goods_type / reservation_type）"""
         return (
             select(
                 FinishedGoodsReservation.warehouse_id.label("wh_id"),
@@ -465,21 +466,7 @@ class FinishedGoodsQueryService:
         出库页一次性列出全部库存（可按仓库/关键字过滤）。
         每行带 warehouse_id，方便提交。
         """
-        locked_subq = (
-            select(
-                FinishedGoodsReservation.warehouse_id.label("wh_id"),
-                FinishedGoodsReservation.batch_id.label("bt_id"),
-                func.coalesce(
-                    func.sum(FinishedGoodsReservation.remaining_quantity), 0
-                ).label("locked_qty"),
-            )
-            .where(FinishedGoodsReservation.status == "ACTIVE")
-            .group_by(
-                FinishedGoodsReservation.warehouse_id,
-                FinishedGoodsReservation.batch_id,
-            )
-            .subquery()
-        )
+        locked_subq = FinishedGoodsQueryService._locked_subquery_inventory()
         locked = func.coalesce(locked_subq.c.locked_qty, 0)
         available = FinishedGoodsInventory.quantity - locked
 

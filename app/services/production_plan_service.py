@@ -226,7 +226,9 @@ class ProductionPlanService:
                 batch = db.session.get(FinishedGoodsBatch, batch_id)
                 batch_no = batch.batch_no if batch else f"#{batch_id}"
                 raise ProductionPlanError(
-                    f"批次 [{batch_no}] 可锁定数量不足：可用 {available}，需要 {qty}"
+                    f"批次 [{batch_no}] 可锁定数量不足："
+                    f"当前可用 {available}（库存 {inv.quantity}，其他计划已锁 {other_locked}），"
+                    f"本次需要 {qty}"
                 )
 
             existing_res = existing_map.pop((wh_id, batch_id), None)

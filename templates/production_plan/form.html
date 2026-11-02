@@ -56,7 +56,9 @@
           <th>产品名称</th>
           <th>规格</th>
           <th style="width:70px;">单位</th>
-          <th style="width:130px;text-align:right;">当前库存</th>
+          <th style="width:110px;text-align:right;">当前库存</th>
+          <th style="width:110px;text-align:right;">已锁定</th>
+          <th style="width:130px;text-align:right;background:#e8f5e9;">可用数量</th>
           <th style="width:160px;">锁定数量</th>
         </tr>
       </thead>
@@ -70,17 +72,27 @@
           <td>{{ r.product_specification or "-" }}</td>
           <td>{{ r.unit or "" }}</td>
           <td style="text-align:right;">{{ r.quantity }}</td>
+          <td style="text-align:right;color:#ef6c00;">{{ r.locked_qty }}</td>
+          <td style="text-align:right;font-weight:600;
+                    color:{{ '#c62828' if r.available_qty <= 0 else '#2e7d32' }};">
+            {{ r.available_qty }}
+          </td>
           <td>
-            <input type="hidden" name="stock[{{ loop.index0 }}][warehouse_id]" value="{{ r.warehouse_id }}">
-            <input type="hidden" name="stock[{{ loop.index0 }}][batch_id]" value="{{ r.batch_id }}">
+            <input type="hidden" name="stock[{{ loop.index0 }}][warehouse_id]"
+                  value="{{ r.warehouse_id }}">
+            <input type="hidden" name="stock[{{ loop.index0 }}][batch_id]"
+                  value="{{ r.batch_id }}">
             <input type="number" step="0.000001" min="0"
-                   name="stock[{{ loop.index0 }}][lock_qty]"
-                   placeholder="0"
-                   value="{{ selected_reservations.get((r.warehouse_id, r.batch_id), '') }}">
+                  name="stock[{{ loop.index0 }}][lock_qty]"
+                  class="lock-qty-input"
+                  data-available="{{ r.available_qty }}"
+                  max="{{ r.available_qty }}"
+                  placeholder="0"
+                  value="{{ selected_reservations.get((r.warehouse_id, r.batch_id), '') }}">
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="8" style="text-align:center;color:#999;padding:16px;">
+        <tr><td colspan="10" style="text-align:center;color:#999;padding:16px;">
           该业绩单产品在成品库暂无库存
         </td></tr>
         {% endfor %}
@@ -124,12 +136,12 @@
           <td>
             <input type="number" step="0.000001" min="0"
                    name="po[{{ loop.index0 }}][locked_quantity]"
-                   value="{{ po.locked_quantity }}" required>
+                   value="{{ po.quantity or po.locked_quantity }}" required>
           </td>
           <td>
             <input type="number" step="0.000001" min="0"
                    name="po[{{ loop.index0 }}][planned_quantity]"
-                   value="{{ po.planned_quantity }}" required>
+                   value="{{ po.quantity or po.planned_quantity }}" required>
           </td>
           <td>
             {% if po.process_order_id %}
@@ -177,9 +189,11 @@
         {% endfor %}
       </select>
     </td>
-    <td><input type="number" step="0.000001" min="0"
-               name="po[__IDX__][quantity]" required></td>
     <td><input type="text" name="po[__IDX__][batch_no]"></td>
+    <td><input type="number" step="0.000001" min="0"
+               name="po[__IDX__][locked_quantity]" required></td>
+    <td><input type="number" step="0.000001" min="0"
+               name="po[__IDX__][planned_quantity]" required></td>
     <td><span style="color:#999;">（保存后自动生成工艺单）</span></td>
     <td><button type="button" class="btn btn-danger btn-remove-row">删除</button></td>
   </tr>
@@ -219,5 +233,36 @@
     }
   });
 })();
+
+// ===== 锁定数量 ≤ 可用数量 实时校验 =====
+document.querySelectorAll(".lock-qty-input").forEach((input) => {
+  const max = parseFloat(input.dataset.available || "0");
+  input.addEventListener("input", () => {
+    const v = parseFloat(input.value || "0");
+    if (v > max) {
+      input.setCustomValidity(`不能超过可用数量 ${max}`);
+      input.style.borderColor = "#c62828";
+    } else {
+      input.setCustomValidity("");
+      input.style.borderColor = "";
+    }
+  });
+});
+
+// 提交时统一校验一次（兜底）
+document.querySelector("form")?.addEventListener("submit", (e) => {
+  let hasError = null;
+  document.querySelectorAll(".lock-qty-input").forEach((input) => {
+    const v = parseFloat(input.value || "0");
+    const max = parseFloat(input.dataset.available || "0");
+    if (v > max) {
+      hasError = `锁定数量 ${v} 超过该批次可用 ${max}`;
+    }
+  });
+  if (hasError) {
+    e.preventDefault();
+    alert(hasError);
+  }
+});
 </script>
 {% endblock %}

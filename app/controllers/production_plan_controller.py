@@ -40,8 +40,99 @@ def _fg_warehouses():
 def _available_factories():
     return Factory.query.filter_by(status=1).order_by(Factory.id).all()
 
+def _stock_rows_for_performance(performance_id, current_plan_id=None):
+    """
+    按业绩单的产品名称/规格，从成品库拉各批次现存 + 已锁定 + 可用。
+    可用量口径与 FinishedGoodsQueryService.list_all_stock_for_outbound 完全一致：
+        available = 库存 - 所有 ACTIVE 预留 + 本计划已锁的量（编辑时）
+    """
+    from sqlalchemy import func
+    from app.generated.models.finished_goods_reservations import (
+        FinishedGoodsReservation,
+    )
+    from app.services.finished_goods_query_service import FinishedGoodsQueryService
 
-def _stock_rows_for_performance(performance_id):
+    perf = db.session.get(SalesPerformance, performance_id)
+    if not perf:
+        return []
+
+    # ⭐ 与出库页共用同一份锁定汇总
+    locked_subq = FinishedGoodsQueryService._locked_subquery_inventory()
+    locked_qty_col = func.coalesce(locked_subq.c.locked_qty, 0)
+
+    # 编辑时把本计划自己的锁定量加回可用
+    self_locked_subq = None
+    if current_plan_id:
+        self_locked_subq = (
+            db.session.query(
+                FinishedGoodsReservation.warehouse_id.label("wh_id"),
+                FinishedGoodsReservation.batch_id.label("bt_id"),
+                func.coalesce(
+                    func.sum(FinishedGoodsReservation.remaining_quantity), 0
+                ).label("self_locked_qty"),
+            )
+            .filter(
+                FinishedGoodsReservation.status == "ACTIVE",
+                FinishedGoodsReservation.production_plan_id == current_plan_id,
+            )
+            .group_by(
+                FinishedGoodsReservation.warehouse_id,
+                FinishedGoodsReservation.batch_id,
+            )
+            .subquery()
+        )
+
+    self_locked_qty_col = (
+        func.coalesce(self_locked_subq.c.self_locked_qty, 0)
+        if self_locked_subq is not None
+        else func.cast(0, FinishedGoodsReservation.remaining_quantity.type)
+    )
+
+    q = (
+        db.session.query(
+            FinishedGoodsInventory.id,
+            FinishedGoodsInventory.warehouse_id,
+            Warehouse.warehouse_code,
+            Warehouse.warehouse_name,
+            FinishedGoodsInventory.batch_id,
+            FinishedGoodsBatch.batch_no,
+            FinishedGoodsBatch.product_name,
+            FinishedGoodsBatch.product_specification,
+            FinishedGoodsBatch.unit,
+            FinishedGoodsInventory.quantity,
+            locked_qty_col.label("locked_qty"),
+            (FinishedGoodsInventory.quantity
+             - locked_qty_col
+             + self_locked_qty_col).label("available_qty"),
+        )
+        .join(Warehouse, Warehouse.id == FinishedGoodsInventory.warehouse_id)
+        .join(FinishedGoodsBatch,
+              FinishedGoodsBatch.id == FinishedGoodsInventory.batch_id)
+        .outerjoin(
+            locked_subq,
+            (locked_subq.c.wh_id == FinishedGoodsInventory.warehouse_id)
+            & (locked_subq.c.bt_id == FinishedGoodsInventory.batch_id),
+        )
+        .filter(
+            FinishedGoodsInventory.quantity > 0,     # ⭐ 与出库页一致
+            FinishedGoodsBatch.product_name == perf.product_name,
+        )
+    )
+    if self_locked_subq is not None:
+        q = q.outerjoin(
+            self_locked_subq,
+            (self_locked_subq.c.wh_id == FinishedGoodsInventory.warehouse_id)
+            & (self_locked_subq.c.bt_id == FinishedGoodsInventory.batch_id),
+        )
+    if perf.product_specification:
+        q = q.filter(FinishedGoodsBatch.product_specification
+                     == perf.product_specification)
+
+    return [dict(r._mapping) for r in q.order_by(
+        Warehouse.warehouse_code.asc(), FinishedGoodsBatch.batch_no.asc()
+    ).all()]
+
+def _old_stock_rows_for_performance(performance_id):
     """
     按业绩单的产品名称/规格，从成品库拉各批次现存 + 已锁定数量。
     """
@@ -192,7 +283,7 @@ def edit_page(plan_id):
         performance=perf,
         warehouses=_fg_warehouses(),
         factories=_available_factories(),
-        stock_rows=_stock_rows_for_performance(plan.performance_id),
+        stock_rows=_stock_rows_for_performance(plan.performance_id, current_plan_id=plan.id),
         selected_reservations=selected_reservations,
         existing_process_orders=existing_process_orders,
         form_data={
@@ -331,7 +422,7 @@ def _render_error(performance_id, msg, plan_id=None):
         performance=perf,
         warehouses=_fg_warehouses(),
         factories=_available_factories(),
-        stock_rows=_stock_rows_for_performance(performance_id),
+        stock_rows=_stock_rows_for_performance(performance_id, current_plan_id=plan.id if plan else None),
         selected_reservations=selected_reservations,
         existing_process_orders=existing,
         form_data=fd,
