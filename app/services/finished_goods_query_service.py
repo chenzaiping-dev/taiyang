@@ -17,9 +17,12 @@ def _infer_source_entry(row: dict) -> str:
     doc_no = row.get("document_no") or ""
     doc_type = row.get("document_type") or ""
     remark = row.get("document_remark") or ""
+    print(remark)
 
     if "[PROCESS_ORDER_RECEIVE]" in remark:
         return "工艺单入库"
+    if "[SHIP_PLAN_OUTBOUND]" in remark:
+        return "发货计划出库"
     if doc_type == "PRODUCTION_IN":
         return "成品入库页"
     if doc_type == "CUSTOMER_RETURN":
@@ -375,7 +378,8 @@ class FinishedGoodsQueryService:
         if group_by == "product":
             stmt = stmt.order_by(FinishedGoodsBatch.product_name.asc())
         else:
-            stmt = stmt.order_by(FinishedGoodsBatch.batch_no.asc())
+            #stmt = stmt.order_by(FinishedGoodsBatch.batch_no.asc())
+            stmt = stmt.order_by(FinishedGoodsBatch.id.desc())
 
         total = db.session.execute(
             select(func.count()).select_from(stmt.subquery())
@@ -453,3 +457,72 @@ class FinishedGoodsQueryService:
             )
             .subquery()
         )
+
+    @staticmethod
+    def list_all_stock_for_outbound(batch_keyword=None, warehouse_id=None,
+                                    page=1, page_size=200):
+        """
+        出库页一次性列出全部库存（可按仓库/关键字过滤）。
+        每行带 warehouse_id，方便提交。
+        """
+        locked_subq = (
+            select(
+                FinishedGoodsReservation.warehouse_id.label("wh_id"),
+                FinishedGoodsReservation.batch_id.label("bt_id"),
+                func.coalesce(
+                    func.sum(FinishedGoodsReservation.remaining_quantity), 0
+                ).label("locked_qty"),
+            )
+            .where(FinishedGoodsReservation.status == "ACTIVE")
+            .group_by(
+                FinishedGoodsReservation.warehouse_id,
+                FinishedGoodsReservation.batch_id,
+            )
+            .subquery()
+        )
+        locked = func.coalesce(locked_subq.c.locked_qty, 0)
+        available = FinishedGoodsInventory.quantity - locked
+
+        stmt = (
+            select(
+                FinishedGoodsInventory.id,
+                FinishedGoodsInventory.warehouse_id,
+                Warehouse.warehouse_code,
+                Warehouse.warehouse_name,
+                FinishedGoodsInventory.batch_id,
+                FinishedGoodsBatch.batch_no,
+                FinishedGoodsBatch.product_name,
+                FinishedGoodsBatch.product_specification,
+                FinishedGoodsBatch.unit,
+                FinishedGoodsBatch.quality_status,
+                FinishedGoodsInventory.quantity.label("total_qty"),
+                locked.label("locked_qty"),
+                available.label("available_qty"),
+            )
+            .join(Warehouse, Warehouse.id == FinishedGoodsInventory.warehouse_id)
+            .join(FinishedGoodsBatch,
+                FinishedGoodsBatch.id == FinishedGoodsInventory.batch_id)
+            .join(locked_subq,
+                (locked_subq.c.wh_id == FinishedGoodsInventory.warehouse_id)
+                & (locked_subq.c.bt_id == FinishedGoodsInventory.batch_id),
+                isouter=True)
+            .where(FinishedGoodsInventory.quantity > 0, available > 0)
+            .order_by(Warehouse.warehouse_code.asc(),
+                    FinishedGoodsBatch.batch_no.asc())
+        )
+        if warehouse_id:
+            stmt = stmt.where(FinishedGoodsInventory.warehouse_id == warehouse_id)
+        if batch_keyword:
+            like = f"%{batch_keyword}%"
+            stmt = stmt.where(or_(
+                FinishedGoodsBatch.batch_no.like(like),
+                FinishedGoodsBatch.product_name.like(like),
+            ))
+
+        total = db.session.execute(
+            select(func.count()).select_from(stmt.subquery())
+        ).scalar() or 0
+
+        stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+        rows = [dict(r) for r in db.session.execute(stmt).mappings().all()]
+        return rows, total

@@ -202,129 +202,6 @@ class FinishedGoodsService:
             "lines": line_results,
         }
 
-    # ---------- 成品出库（人工选批次） ----------
-    @staticmethod
-    def create_outbound(
-        warehouse_id: int,
-        lines: list,
-        document_no: str = None,
-        document_time: datetime = None,
-        created_by: int = None,
-        remark: str = None,
-        commit: bool = True,          # ⭐ 新增
-    ) -> dict:
-        """
-        人工选批次出库。
-        lines: [{'batch_id', 'quantity', 'unit_cost'(可选), 'remark'}]
-        """
-        wh = db.session.get(Warehouse, warehouse_id)
-        if not wh or wh.status != 1:
-            raise FinishedGoodsError("仓库不存在或停用")
-        if wh.warehouse_type not in ("finished_goods", "general"):
-            raise FinishedGoodsError("成品出库必须选择成品仓或普通仓")
-        if not lines:
-            raise FinishedGoodsError("出库明细不能为空")
-
-        doc_no = document_no or gen_doc_no("FG-OUT")
-        if FinishedGoodsDocument.query.filter_by(document_no=doc_no).first():
-            raise FinishedGoodsError(f"单据号重复: {doc_no}")
-        doc_time = document_time or now_beijing()
-
-        document = FinishedGoodsDocument(
-            document_no=doc_no,
-            document_type="OUTBOUND",
-            document_time=doc_time,
-            status="CONFIRMED",
-            remark=remark,
-            created_by=created_by,
-            confirmed_by=created_by,
-            confirmed_at=now_beijing(),
-            created_at=now_beijing_naive(),
-        )
-        db.session.add(document)
-        db.session.flush()
-
-        line_results = []
-        for idx, l in enumerate(lines, start=1):
-            qty = _q6(l["quantity"])
-            if qty <= 0:
-                raise FinishedGoodsError(f"第 {idx} 行数量必须 > 0")
-            batch_id = int(l["batch_id"])
-            batch = db.session.get(FinishedGoodsBatch, batch_id)
-            if not batch:
-                raise FinishedGoodsError(f"第 {idx} 行批次不存在")
-
-            # 校验批次在该仓库的库存
-            inv = FinishedGoodsInventory.query.filter_by(
-                warehouse_id=warehouse_id, batch_id=batch_id
-            ).with_for_update().first()
-
-            locked = (
-                db.session.query(func.coalesce(
-                    func.sum(FinishedGoodsReservation.remaining_quantity), 0))
-                .filter(
-                    FinishedGoodsReservation.warehouse_id == warehouse_id,
-                    FinishedGoodsReservation.batch_id == batch_id,
-                    FinishedGoodsReservation.status == "ACTIVE",
-                )
-                .scalar()
-            ) or Decimal("0")
-
-            available = (inv.quantity or Decimal("0")) - locked
-            if qty > available:
-                raise FinishedGoodsError(
-                    f"批次 [{batch.batch_no}] 可用量不足：可用 {available}，需要 {qty}"
-                )
-
-            line = FinishedGoodsDocumentLine(
-                document_id=document.id,
-                line_no=idx,
-                batch_id=batch_id,
-                from_warehouse_id=warehouse_id,
-                to_warehouse_id=None,
-                quantity=qty,
-                unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else None,
-                remark=l.get("remark"),
-                created_at=now_beijing_naive(),
-            )
-            db.session.add(line)
-            db.session.flush()
-
-            FinishedGoodsService._apply_delta(
-                warehouse_id=warehouse_id, batch_id=batch_id,
-                delta=-qty, document=document, line=line,
-                tx_type="OUTBOUND", tx_time=doc_time,
-            )
-
-            line_results.append({
-                "line_id": line.id,
-                "batch_id": batch_id,
-                "batch_no": batch.batch_no,
-                "quantity": str(qty),
-            })
-
-        # ---- 收尾：与原入库一致的提交方式 ----
-        if commit:
-            try:
-                db.session.commit()
-            except Exception as e:
-                db.session.rollback()
-                raise FinishedGoodsError(f"成品出库失败: {e}")
-        else:
-            try:
-                db.session.flush()
-            except Exception as e:
-                raise FinishedGoodsError(f"成品出库 flush 失败: {e}")
-
-        return {
-            "document_id": document.id,
-            "document_no": document.document_no,
-            "status": document.status,
-            "document_type": document.document_type,
-            "document_time": document.document_time.isoformat(),
-            "lines": line_results,
-        }
-
     # ---------- 库存变动应用 ----------
     @staticmethod
     def _apply_delta(warehouse_id, batch_id, delta, document, line, tx_type, tx_time):
@@ -355,3 +232,139 @@ class FinishedGoodsService:
         )
         db.session.add(tx)
         return tx
+
+    @staticmethod
+    def create_outbound(
+        lines: list,
+        warehouse_id: int = None,       # 兼容旧的单仓调用；若 lines 里都带 warehouse_id 可省略
+        document_no: str = None,
+        document_time: datetime = None,
+        created_by: int = None,
+        remark: str = None,
+        commit: bool = True,
+    ) -> dict:
+        """
+        lines 每行需包含：
+        - warehouse_id（可选，缺省时用形参）
+        - batch_id
+        - quantity
+        - unit_cost（可选）
+        - remark（可选）
+        """
+        # 顶部仓库校验改为"按行取仓库后校验"
+        # （删除原来的"必须先传 warehouse_id"的强校验，改到循环里做）
+        print("here 1")
+        if not lines:
+            raise FinishedGoodsError("出库明细不能为空")
+
+        doc_no = document_no or gen_doc_no("FG-OUT")
+        if FinishedGoodsDocument.query.filter_by(document_no=doc_no).first():
+            raise FinishedGoodsError(f"单据号重复: {doc_no}")
+        doc_time = document_time or now_beijing()
+
+        document = FinishedGoodsDocument(
+            document_no=doc_no,
+            document_type="OUTBOUND",
+            document_time=doc_time,
+            status="CONFIRMED",
+            remark=remark,
+            created_by=created_by,
+            confirmed_by=created_by,
+            confirmed_at=now_beijing(),
+            created_at=now_beijing_naive(),
+        )
+        db.session.add(document)
+        db.session.flush()
+
+        line_results = []
+        for idx, l in enumerate(lines, start=1):
+            qty = _q6(l["quantity"])
+            if qty <= 0:
+                raise FinishedGoodsError(f"第 {idx} 行数量必须 > 0")
+
+            wh_id = int(l.get("warehouse_id") or warehouse_id or 0)
+            if not wh_id:
+                raise FinishedGoodsError(f"第 {idx} 行缺少仓库ID")
+
+            wh = db.session.get(Warehouse, wh_id)
+            if not wh or wh.status != 1:
+                raise FinishedGoodsError(f"第 {idx} 行仓库不存在或停用")
+            if wh.warehouse_type not in ("finished_goods", "general"):
+                raise FinishedGoodsError(f"第 {idx} 行仓库不是成品仓")
+
+            batch_id = int(l["batch_id"])
+            batch = db.session.get(FinishedGoodsBatch, batch_id)
+            if not batch:
+                raise FinishedGoodsError(f"第 {idx} 行批次不存在")
+
+            inv = FinishedGoodsInventory.query.filter_by(
+                warehouse_id=wh_id, batch_id=batch_id
+            ).with_for_update().first()
+
+            locked = (
+                db.session.query(func.coalesce(
+                    func.sum(FinishedGoodsReservation.remaining_quantity), 0))
+                .filter(
+                    FinishedGoodsReservation.warehouse_id == wh_id,
+                    FinishedGoodsReservation.batch_id == batch_id,
+                    FinishedGoodsReservation.status == "ACTIVE",
+                )
+                .scalar()
+            ) or Decimal("0")
+
+            available = (inv.quantity or Decimal("0")) - locked
+            if qty > available:
+                raise FinishedGoodsError(
+                    f"批次 [{batch.batch_no}] 在仓库 [{wh.warehouse_name}] 可用量不足："
+                    f"可用 {available}，需要 {qty}"
+                )
+
+            line = FinishedGoodsDocumentLine(
+                document_id=document.id,
+                line_no=idx,
+                batch_id=batch_id,
+                from_warehouse_id=wh_id,       # ⭐ 每行的仓库
+                to_warehouse_id=None,
+                quantity=qty,
+                unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else None,
+                remark=l.get("remark"),
+                created_at=now_beijing_naive(),
+            )
+            db.session.add(line)
+            db.session.flush()
+
+            FinishedGoodsService._apply_delta(
+                warehouse_id=wh_id, batch_id=batch_id,
+                delta=-qty, document=document, line=line,
+                tx_type="OUTBOUND", tx_time=doc_time,
+            )
+
+            line_results.append({
+                "line_id": line.id,
+                "warehouse_id": wh_id,
+                "batch_id": batch_id,
+                "batch_no": batch.batch_no,
+                "quantity": str(qty),
+            })
+
+        # ---- 收尾：与原入库一致的提交方式 ----
+        if commit:
+            try:
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                raise FinishedGoodsError(f"成品出库失败: {e}")
+        else:
+            try:
+                db.session.flush()
+            except Exception as e:
+                raise FinishedGoodsError(f"成品出库 flush 失败: {e}")
+
+        return {
+            "document_id": document.id,
+            "document_no": document.document_no,
+            "status": document.status,
+            "document_type": document.document_type,
+            "document_time": document.document_time.isoformat(),
+            "lines": line_results,
+        }

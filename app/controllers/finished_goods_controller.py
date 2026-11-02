@@ -211,20 +211,30 @@ def inbound_submit():
 # ==================== 出库 ====================
 @bp.get("/outbound")
 def outbound_page():
-    wh_raw = request.args.get("warehouse_id", "").strip()
-    warehouse_id = int(wh_raw) if wh_raw.isdigit() else None
-    batches = (
-        FinishedGoodsQueryService.list_available_batches(warehouse_id)
-        if warehouse_id else []
+    warehouse_id = request.args.get("warehouse_id", type=int)
+    keyword = request.args.get("batch_keyword", "").strip() or None
+    page = max(int(request.args.get("page", 1) or 1), 1)
+    page_size = 200
+
+    rows, total = FinishedGoodsQueryService.list_all_stock_for_outbound(
+        batch_keyword=keyword,
+        warehouse_id=warehouse_id,
+        page=page,
+        page_size=page_size,
     )
-    #print("outbound_page batches:", batches)
+    total_pages = max((total + page_size - 1) // page_size, 1)
+
     return render_template(
         "finished_goods/outbound.html",
+        rows=rows,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        warehouse_id=warehouse_id or "",
+        batch_keyword=keyword or "",
         warehouses=_fg_warehouses(),
-        batches=batches,
-        selected_wh=warehouse_id,
         form_data={
-            "warehouse_id": warehouse_id or "",
             "document_time": datetime.now().strftime("%Y-%m-%dT%H:%M"),
             "remark": "",
         },
@@ -234,8 +244,6 @@ def outbound_page():
 
 @bp.post("/outbound")
 def outbound_submit():
-    wh_raw = request.form.get("warehouse_id", "").strip()
-    warehouse_id = int(wh_raw) if wh_raw.isdigit() else None
     doc_time_str = request.form.get("document_time", "").strip()
     remark = request.form.get("remark", "").strip() or None
 
@@ -243,36 +251,31 @@ def outbound_submit():
     idx = 0
     while True:
         prefix = f"lines[{idx}]"
-        if prefix + "[quantity]" not in request.form:
+        if prefix + "[batch_id]" not in request.form:
             break
-        qty = _parse_qty(request.form.get(prefix + "[quantity]"))
-        batch_id_raw = request.form.get(prefix + "[batch_id]", "").strip()
-        if qty and qty > 0 and batch_id_raw.isdigit():
-            lines.append({
-                "batch_id": int(batch_id_raw),
-                "quantity": request.form.get(prefix + "[quantity]").strip(),
-                "remark": request.form.get(prefix + "[remark]", "").strip() or None,
-            })
+        batch_raw = request.form.get(prefix + "[batch_id]", "").strip()
+        wh_raw = request.form.get(prefix + "[warehouse_id]", "").strip()
+        qty_raw = request.form.get(prefix + "[quantity]", "").strip()
+        if batch_raw.isdigit() and wh_raw.isdigit() and qty_raw:
+            try:
+                if float(qty_raw) > 0:
+                    lines.append({
+                        "warehouse_id": int(wh_raw),
+                        "batch_id": int(batch_raw),
+                        "quantity": qty_raw,
+                        "remark": request.form.get(
+                            prefix + "[remark]", "").strip() or None,
+                    })
+            except ValueError:
+                pass
         idx += 1
 
     if not lines:
-        return render_template(
-            "finished_goods/outbound.html",
-            warehouses=_fg_warehouses(),
-            batches=(
-                FinishedGoodsQueryService.list_available_batches(warehouse_id)
-                if warehouse_id else []
-            ),
-            selected_wh=warehouse_id,
-            form_data={"warehouse_id": wh_raw, "document_time": doc_time_str,
-                       "remark": remark or ""},
-            errors=["请至少选择一条批次并填写数量"],
-        ), 400
+        return _render_outbound_error("请至少为一条库存填写出库数量")
 
     try:
         doc_time = datetime.fromisoformat(doc_time_str) if doc_time_str else None
         result = FinishedGoodsService.create_outbound(
-            warehouse_id=warehouse_id,
             lines=lines,
             document_time=doc_time,
             created_by=1,
@@ -282,18 +285,32 @@ def outbound_submit():
         return redirect(url_for("finished_goods.transactions_page",
                                 document_no=result["document_no"]))
     except FinishedGoodsError as e:
-        return render_template(
+        return _render_outbound_error(str(e))
+
+
+def _render_outbound_error(msg):
+    rows, total = FinishedGoodsQueryService.list_all_stock_for_outbound(
+        batch_keyword=request.args.get("batch_keyword") or request.form.get("batch_keyword") or None,
+        warehouse_id=(int(request.args.get("warehouse_id"))
+                      if request.args.get("warehouse_id", "").isdigit() else None),
+        page=1, page_size=200,
+    )
+    return (
+        render_template(
             "finished_goods/outbound.html",
+            rows=rows, total=total, page=1, page_size=200,
+            total_pages=max((total + 199) // 200, 1),
+            warehouse_id=request.form.get("warehouse_id", ""),
+            batch_keyword=request.form.get("batch_keyword", ""),
             warehouses=_fg_warehouses(),
-            batches=(
-                FinishedGoodsQueryService.list_available_batches(warehouse_id)
-                if warehouse_id else []
-            ),
-            selected_wh=warehouse_id,
-            form_data={"warehouse_id": wh_raw, "document_time": doc_time_str,
-                       "remark": remark or ""},
-            errors=[str(e)],
-        ), 400
+            form_data={
+                "document_time": request.form.get("document_time", ""),
+                "remark": request.form.get("remark", ""),
+            },
+            errors=[msg],
+        ),
+        400,
+    )
 
 
 # ==================== 仓库库存列表 ====================

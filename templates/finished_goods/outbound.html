@@ -1,7 +1,7 @@
 {% extends "inventory/base.html" %}
 {% block title %}成品出库{% endblock %}
 {% block content %}
-<h2>成品出库（人工选批次）</h2>
+<h2>成品出库</h2>
 
 {% if errors %}
   <div class="error-box">
@@ -12,23 +12,24 @@
 {% endif %}
 
 <form method="get" action="{{ url_for('finished_goods.outbound_page') }}"
-      style="margin-bottom:12px;display:flex;gap:8px;align-items:center;">
-  <label>仓库 *</label>
-  <select name="warehouse_id" onchange="this.form.submit()" required>
-    <option value="">-- 请选择成品仓 --</option>
+      style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+  <input type="text" name="batch_keyword" value="{{ batch_keyword }}"
+         placeholder="批次号/产品名称" maxlength="50">
+  <select name="warehouse_id">
+    <option value="">-- 全部成品仓 --</option>
     {% for w in warehouses %}
       <option value="{{ w.id }}"
-        {% if selected_wh|string == w.id|string %}selected{% endif %}>
+        {% if warehouse_id|string == w.id|string %}selected{% endif %}>
         {{ w.warehouse_code }} - {{ w.warehouse_name }}
       </option>
     {% endfor %}
   </select>
+  <button type="submit" class="btn btn-primary">查询</button>
+  <a class="btn" href="{{ url_for('finished_goods.outbound_page') }}">重置</a>
 </form>
 
-{% if selected_wh %}
 <form method="post" action="{{ url_for('finished_goods.outbound_submit') }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <input type="hidden" name="warehouse_id" value="{{ selected_wh }}">
 
   <div class="form-row">
     <label>出库时间</label>
@@ -39,63 +40,80 @@
            value="{{ form_data.remark }}">
   </div>
 
-  <h3>可选批次（{{ batches|length }} 个）</h3>
-  {% if batches %}
+  <h3>全部可用库存（{{ total }} 条）</h3>
+  {% if rows %}
   <table style="width:100%;border-collapse:collapse;font-size:13px;">
     <thead>
       <tr style="background:#f5f5f5;">
-        <th style="width:40px;">选</th>
+        <th style="width:50px;">ID</th>
+        <th>仓库</th>
         <th>批次号</th>
         <th>产品名称</th>
         <th>规格</th>
-        <th style="width:70px;">单位</th>
+        <th style="width:60px;">单位</th>
         <th>质量</th>
-        <th style="width:130px;text-align:right;">可用数量</th>
-        <th style="width:130px;">出库数量</th>
+        <th style="width:130px;text-align:right;">库存总量</th>
+        <th style="width:130px;text-align:right;background:#fff8e1;">锁定</th>
+        <th style="width:130px;text-align:right;background:#e8f5e9;">可用数量</th>
+        <th style="width:150px;">出库数量</th>
         <th>备注</th>
       </tr>
     </thead>
     <tbody>
-      {% for b in batches %}
+      {% for r in rows %}
       <tr>
-        <td><input type="checkbox" class="batch-chk" data-row="{{ loop.index0 }}"></td>
-        <td>{{ b.batch_no }}</td>
-        <td>{{ b.product_name }}</td>
-        <td>{{ b.product_specification or "-" }}</td>
-        <td>{{ b.unit or "" }}</td>
-        <td>{{ {'PENDING':'待检','QUALIFIED':'合格','REJECTED':'不合格'}.get(b.quality_status, b.quality_status) }}</td>
-        <td style="text-align:right;">{{ b.available_qty }}</td>
-        <td>
-          <input type="hidden" name="lines[{{ loop.index0 }}][batch_id]"
-                 value="{{ b.id }}" disabled class="batch-id">
-          <input type="number" step="0.000001" min="0"
-                 name="lines[{{ loop.index0 }}][quantity]"
-                 max="{{ b.quantity }}" disabled class="batch-qty">
+        <td>{{ r.id }}</td>
+        <td>{{ r.warehouse_code }} - {{ r.warehouse_name }}</td>
+        <td>{{ r.batch_no }}</td>
+        <td>{{ r.product_name }}</td>
+        <td>{{ r.product_specification or "-" }}</td>
+        <td>{{ r.unit or "" }}</td>
+        <td>{{ {'PENDING':'待检','QUALIFIED':'合格','REJECTED':'不合格'}.get(r.quality_status, r.quality_status) }}</td>
+        <td style="text-align:right;">{{ r.total_qty }}</td>
+        <td style="text-align:right;color:#ef6c00;">{{ r.locked_qty }}</td>
+        <td style="text-align:right;font-weight:600;
+                   color:{{ '#c62828' if r.available_qty <= 0 else '#2e7d32' }};">
+          {{ r.available_qty }}
         </td>
         <td>
-          <input type="text" name="lines[{{ loop.index0 }}][remark]"
-                 disabled class="batch-remark">
+          <input type="hidden"
+                 name="lines[{{ loop.index0 }}][warehouse_id]"
+                 value="{{ r.warehouse_id }}">
+          <input type="hidden"
+                 name="lines[{{ loop.index0 }}][batch_id]"
+                 value="{{ r.batch_id }}">
+          <input type="number" step="0.000001" min="0"
+                 name="lines[{{ loop.index0 }}][quantity]"
+                 max="{{ r.available_qty }}"
+                 placeholder="0" style="width:120px;">
+        </td>
+        <td>
+          <input type="text"
+                 name="lines[{{ loop.index0 }}][remark]"
+                 maxlength="255" style="width:100%;">
         </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
-  <script>
-    document.querySelectorAll(".batch-chk").forEach((chk) => {
-      chk.addEventListener("change", () => {
-        const tr = chk.closest("tr");
-        tr.querySelectorAll(".batch-id, .batch-qty, .batch-remark")
-          .forEach((el) => { el.disabled = !chk.checked; });
-        if (chk.checked) tr.querySelector(".batch-qty").focus();
-      });
-    });
-  </script>
+
   <div style="margin-top:16px;">
     <button type="submit" class="btn btn-primary">保存出库</button>
   </div>
   {% else %}
-  <p style="color:#999;">该仓库暂无可用库存的批次</p>
+  <p style="color:#999;">当前没有可用库存</p>
   {% endif %}
 </form>
-{% endif %}
+
+<div style="margin-top:16px;display:flex;gap:8px;align-items:center;">
+  <span>共 {{ total }} 条，第 {{ page }}/{{ total_pages }} 页</span>
+  {% if page > 1 %}
+    <a class="btn" href="{{ url_for('finished_goods.outbound_page',
+         batch_keyword=batch_keyword, warehouse_id=warehouse_id, page=page-1) }}">上一页</a>
+  {% endif %}
+  {% if page < total_pages %}
+    <a class="btn" href="{{ url_for('finished_goods.outbound_page',
+         batch_keyword=batch_keyword, warehouse_id=warehouse_id, page=page+1) }}">下一页</a>
+  {% endif %}
+</div>
 {% endblock %}

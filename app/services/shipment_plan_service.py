@@ -370,90 +370,9 @@ class ShipmentPlanService:
             raise ShipmentPlanError(f"取消失败: {e}")
         return plan
 
-    # ---------- 发货（关联出库） ----------
-    @staticmethod
-    def old_ship_plan(plan_id: int, operator_id: int = None) -> ShipmentPlan:
-        """
-        将 PLANNED 状态的发货计划整体发货：
-        1. 校验状态为 PLANNED
-        2. 按 shipments_plan_allocations 逐条调用 FinishedGoodsService 出库
-           （扣减锁定库存，按 batch 出库，出库数量 = planned_quantity - shipped_quantity）
-        3. 出库成功后回写 line.shipped_quantity、allocation.shipped_quantity
-        4. plan.status = SHIPPED, actual_ship_time = now
-        出库和状态更新同一事务。
-        """
-        plan = _get_plan_or_raise(plan_id)
-        if plan.status != STATUS_PLANNED:
-            raise ShipmentPlanError(
-                f"只有【已计划】状态可执行发货，当前：{plan.status}")
-
-        lines = ShipmentPlanLine.query.filter_by(
-            shipment_plan_id=plan.id).all()
-        if not lines:
-            raise ShipmentPlanError("发货计划无明细，不能发货")
-
-        # 收集待出库的 allocation
-        allocs = (
-            ShipmentPlanAllocation.query
-            .filter(ShipmentPlanAllocation.shipment_line_id.in_(
-                [l.id for l in lines]))
-            .all()
-        )
-        if not allocs:
-            raise ShipmentPlanError("发货计划无批次分配，不能发货")
-
-        try:
-            for alloc in allocs:
-                ship_qty = alloc.planned_quantity - alloc.shipped_quantity
-                if ship_qty <= 0:
-                    continue
-
-                # 调用既有出库服务：按仓库+批次出库
-                FinishedGoodsService.outbound(
-                    warehouse_id=alloc.warehouse_id,
-                    batch_id=alloc.batch_id,
-                    quantity=_q6(ship_qty),
-                    business_type="SHIPMENT_PLAN",
-                    business_id=plan.id,
-                    remark=f"发货计划 {plan.shipment_plan_no} 出库",
-                    operator_id=operator_id,
-                )
-
-                alloc.shipped_quantity += ship_qty
-
-            # 回写 line 已发数量
-            for line in lines:
-                total = db.session.query(
-                    func.coalesce(
-                        func.sum(ShipmentPlanAllocation.shipped_quantity), 0)
-                ).filter_by(shipment_line_id=line.id).scalar()
-                line.shipped_quantity = _q6(total)
-
-            # 判断整体是否发完（本方法只做整体发货，若全部发完→SHIPPED）
-            all_done = all(
-                l.shipped_quantity >= l.quantity for l in lines
-            )
-            plan.status = (
-                STATUS_SHIPPED if all_done
-                else STATUS_PARTIALLY_SHIPPED
-            )
-            if all_done and not plan.actual_ship_time:
-                plan.actual_ship_time = now_beijing()
-
-            db.session.commit()
-        except ShipmentPlanError:
-            db.session.rollback()
-            raise
-        except Exception as e:
-            db.session.rollback()
-            raise ShipmentPlanError(f"发货出库失败: {e}")
-
-        return plan
-
     @staticmethod
     def ship_plan(plan_id: int, operator_id: int = None) -> ShipmentPlan:
         plan = db.session.get(ShipmentPlan, plan_id)
-        print(plan)
         if not plan:
             raise ShipmentPlanError("发货计划不存在")
         if plan.status != "PLANNED":
@@ -474,7 +393,7 @@ class ShipmentPlanService:
         if not allocs:
             raise ShipmentPlanError("发货计划无批次分配，不能发货")
 
-        # 1. 过滤出本次真正要发的 allocation，并按仓库分组
+        # 1. 过滤出本次真正要发的 allocation
         pending = []
         for a in allocs:
             qty = (a.planned_quantity or Decimal("0")) - (a.shipped_quantity or Decimal("0"))
@@ -483,12 +402,8 @@ class ShipmentPlanService:
         if not pending:
             raise ShipmentPlanError("没有待发货数量")
 
-        group_by_wh = {}
-        for a, qty in pending:
-            group_by_wh.setdefault(a.warehouse_id, []).append((a, qty))
-
         try:
-            # 2. 先释放对应预留（否则出库可用量 = 库存 - ACTIVE预留 会不够）
+            # 2. 先释放对应生产计划预留（否则可用量 = 库存 - ACTIVE 预留 会不够）
             for a, qty in pending:
                 ShipmentPlanService._consume_production_reservation(
                     warehouse_id=a.warehouse_id,
@@ -496,25 +411,28 @@ class ShipmentPlanService:
                     quantity=qty,
                 )
 
-            # 3. 逐仓库调用 FinishedGoodsService.create_outbound(commit=False)
-            for wh_id, items in group_by_wh.items():
-                fg_lines = [
-                    {
-                        "batch_id": a.batch_id,
-                        "quantity": qty,
-                        "remark": f"发货计划 {plan.shipment_plan_no} 批次分配#{a.id}",
-                    }
-                    for a, qty in items
-                ]
-                FinishedGoodsService.create_outbound(
-                    warehouse_id=wh_id,
-                    lines=fg_lines,
-                    document_no=f"FG-OUT-{plan.shipment_plan_no}-{wh_id}",  # ⭐ 可追溯
-                    document_time=now_beijing(),
-                    created_by=operator_id,
-                    remark=f"发货计划 {plan.shipment_plan_no} 出库",
-                    commit=False,          # ⭐ 交给本方法统一提交
-                )
+            # 3. ⭐ 一次性构建全部出库行（每行自带 warehouse_id），一张单多仓
+            fg_lines = [
+                {
+                    "warehouse_id": a.warehouse_id,        # ⭐ 行内自带仓库
+                    "batch_id": a.batch_id,
+                    "quantity": qty,
+                    "remark": (
+                        f"发货计划 {plan.shipment_plan_no} "
+                        f"批次分配#{a.id}"
+                    ),
+                }
+                for a, qty in pending
+            ]
+
+            FinishedGoodsService.create_outbound(
+                lines=fg_lines,                            # ⭐ 新签名：lines 第一位
+                document_no=f"FG-OUT-{plan.shipment_plan_no}",  # ⭐ 不再带仓后缀
+                document_time=now_beijing(),
+                created_by=operator_id,
+                remark=f"[SHIP_PLAN_OUTBOUND] 出库 {plan.shipment_plan_no}",
+                commit=False,                              # ⭐ 交给本方法统一提交
+            )
 
             # 4. 回写 allocation / line 已发数量
             for a, qty in pending:
@@ -533,7 +451,11 @@ class ShipmentPlanService:
             if all_done and not plan.actual_ship_time:
                 plan.actual_ship_time = now_beijing()
 
+            print("[BEFORE COMMIT] reservations:", [
+                (r.id, str(r.remaining_quantity)) for r in reservations
+            ])
             db.session.commit()
+            print("[AFTER COMMIT]")
         except FinishedGoodsError as e:
             db.session.rollback()
             raise ShipmentPlanError(f"发货出库失败: {e}")
@@ -575,6 +497,7 @@ class ShipmentPlanService:
             if need <= 0:
                 break
             take = min(res.remaining_quantity, need)
+            print(f"[CONSUME] res.id={res.id}, before={res.remaining_quantity}, take={take}")
             res.remaining_quantity -= take
             need -= take
             if res.remaining_quantity <= 0:
@@ -582,7 +505,9 @@ class ShipmentPlanService:
                 res.status = "CONSUMED"
 
         if need > 0:
+            print(f"[SHORT] wh={warehouse_id}, batch={batch_id}, need={need}")
             raise ShipmentPlanError(
                 f"仓库#{warehouse_id} 批次#{batch_id} 预留量不足，"
                 f"尚缺 {need}"
             )
+        print(f"[CONSUME DONE] need={need}")
