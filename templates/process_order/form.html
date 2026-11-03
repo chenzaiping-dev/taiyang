@@ -155,7 +155,6 @@
           <th>原料 *</th>
           <th style="width:120px;">配比 *</th>
           <th style="width:140px;">数量（自动）</th>
-          <th style="width:140px;">成本</th>
           <th>备注</th>
           <th style="width:80px;">操作</th>
         </tr>
@@ -182,9 +181,6 @@
                      name="materials[{{ loop.index0 }}][quantity]"
                      value="{{ m.quantity }}" readonly class="qty-auto"
                      title="由计划数量 × 配比自动计算"></td>
-          <td><input type="number" step="0.0001" min="0"
-                     name="materials[{{ loop.index0 }}][cost]"
-                     value="{{ m.cost }}"></td>
           <td><input type="text" maxlength="255"
                      name="materials[{{ loop.index0 }}][remark]"
                      value="{{ m.remark }}"></td>
@@ -231,8 +227,6 @@
                name="materials[__IDX__][ratio_value]" required class="ratio-input"></td>
     <td><input type="number" step="0.0001" min="0"
                name="materials[__IDX__][quantity]" readonly class="qty-auto"></td>
-    <td><input type="number" step="0.0001" min="0"
-               name="materials[__IDX__][cost]"></td>
     <td><input type="text" maxlength="255"
                name="materials[__IDX__][remark]"></td>
     <td><button type="button" class="btn btn-danger btn-remove-row">删除</button></td>

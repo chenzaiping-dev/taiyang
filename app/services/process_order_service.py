@@ -189,7 +189,7 @@ class ProcessOrderService:
                 material_id=it["material_id"],
                 ratio_value=it["ratio_value"],
                 quantity=it["quantity"],
-                cost=it["cost"],
+                cost=0,
                 remark=it["remark"],
             )
             db.session.add(row)
@@ -274,7 +274,7 @@ class ProcessOrderService:
                 material_id=it["material_id"],
                 ratio_value=it["ratio_value"],
                 quantity=it["quantity"],
-                cost=it["cost"],
+                cost=0,
                 remark=it["remark"],
             )
             db.session.add(row)
