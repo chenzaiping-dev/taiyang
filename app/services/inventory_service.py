@@ -36,6 +36,7 @@ class PurchaseInService:
         warehouse_id: int,
         supplier_id: int,
         lines: list,
+        inbound_type: str = "PURCHASE_IN",   # ⭐ 新增
         document_no: str = None,
         document_time: datetime = None,
         remark: str = None,
@@ -50,6 +51,28 @@ class PurchaseInService:
         """
         if not lines:
             raise InventoryError("采购明细不能为空")
+
+        if inbound_type not in ("PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN"):
+            raise InventoryError(f"不支持的入库类型: {inbound_type}")
+
+        # 单据类型映射
+        doc_type_map = {
+            "PURCHASE_IN": "PURCHASE_IN",
+            "STOCKTAKE_GAIN": "STOCKTAKE",
+            "RETURN_IN": "PURCHASE_IN",     # 单据类型复用
+        }
+        tx_type_map = {
+            "PURCHASE_IN": "PURCHASE_IN",
+            "STOCKTAKE_GAIN": "STOCKTAKE_GAIN",
+            "RETURN_IN": "RETURN_IN",
+        }
+
+        # 单号前缀
+        prefix_map = {
+            "PURCHASE_IN": "PI",
+            "STOCKTAKE_GAIN": "SG",
+            "RETURN_IN": "RI",
+        }
 
         # 1. 校验仓库
         wh = db.session.get(Warehouse, warehouse_id)
@@ -95,7 +118,7 @@ class PurchaseInService:
         # 5. 创建单据
         document = InventoryDocument(
             document_no=doc_no,
-            document_type="PURCHASE_IN",
+            document_type=doc_type_map[inbound_type],   # ⭐
             document_time=doc_time,
             status=doc_status,
             remark=remark,
@@ -119,7 +142,7 @@ class PurchaseInService:
                 document_id=document.id,
                 line_no=line_no,
                 material_id=mid,
-                transaction_type="PURCHASE_IN",
+                transaction_type=tx_type_map[inbound_type],  # ⭐
                 transaction_time=doc_time,
                 quantity_delta=qty,          # 入库正数
                 unit_cost=unit_cost,
@@ -187,7 +210,7 @@ class PurchaseInService:
         doc = db.session.get(InventoryDocument, document_id)
         if not doc:
             raise InventoryError("单据不存在")
-        if doc.document_type != "PURCHASE_IN":
+        if doc.document_type not in ("PURCHASE_IN", "STOCKTAKE"):
             raise InventoryError("仅采购入库单可确认")
         if doc.status != "DRAFT":
             raise InventoryError(f"单据状态不为草稿，当前: {doc.status}")
@@ -199,6 +222,11 @@ class PurchaseInService:
         for tx in txs:
             if tx.quantity_delta <= 0:
                 raise InventoryError("采购流水数量必须为正")
+            # 只处理入库类流水
+            if tx.transaction_type not in ("PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN"):
+                raise InventoryError(
+                    f"单据 {doc.document_no} 中存在非入库流水: {tx.transaction_type}"
+                )
             layer = InventoryCostLayer(
                 material_id=tx.material_id,
                 source_transaction_id=tx.id,

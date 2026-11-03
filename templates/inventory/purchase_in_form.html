@@ -17,8 +17,28 @@
       method="post"
       action="{{ url_for('purchase_in.purchase_in_submit') }}"
       data-next-index="{{ form_data.lines|length }}">
-  <h3>盘点时，实物数量 > 账面数量，才盘盈入库</h3>
+  <h3 id="hint-purchase" {% if form_data.inbound_type != 'PURCHASE_IN' %}style="display:none"{% endif %}>
+    采购入库：按供应商实际采购数量入库
+  </h3>
+  <h3 id="hint-gain" {% if form_data.inbound_type != 'STOCKTAKE_GAIN' %}style="display:none"{% endif %}>
+    盘点盘盈：实物数量 > 账面数量时使用
+  </h3>
+  <h3 id="hint-return" {% if form_data.inbound_type != 'RETURN_IN' %}style="display:none"{% endif %}>
+    退货回仓：客户退货或原料退回入库
+  </h3>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="form-row">
+    <label for="inbound_type">入库类型 *</label>
+    <select id="inbound_type" name="inbound_type" required>
+      {% for code, label in inbound_types.items() %}
+        <option value="{{ code }}"
+          {% if form_data.inbound_type == code %}selected{% endif %}>
+          {{ label }}
+        </option>
+      {% endfor %}
+    </select>
+  </div>
 
   <div class="form-row">
     <label for="warehouse_id">仓库</label>
@@ -146,4 +166,20 @@
 
 <!-- ↓ 引入外部 JS -->
 <script src="{{ url_for('static', filename='js/purchase_in.js') }}"></script>
+<script>
+  (function () {
+    const sel = document.getElementById("inbound_type");
+    if (!sel) return;
+    const hints = {
+      PURCHASE_IN: document.getElementById("hint-purchase"),
+      STOCKTAKE_GAIN: document.getElementById("hint-gain"),
+      RETURN_IN: document.getElementById("hint-return"),
+    };
+    sel.addEventListener("change", () => {
+      Object.values(hints).forEach(el => el && (el.style.display = "none"));
+      const hint = hints[sel.value];
+      if (hint) hint.style.display = "";
+    });
+  })();
+</script>
 {% endblock %}

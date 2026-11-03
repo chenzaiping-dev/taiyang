@@ -376,6 +376,9 @@ class InventoryQueryService:
                 InventoryDocument.document_type.in_(
                     ["PRODUCTION_OUT", "STOCKTAKE", "ADJUSTMENT"]
                 ),
+                InventoryTransaction.transaction_type.in_(
+                    ["PRODUCTION_OUT", "STOCKTAKE_LOSS"]
+                ),
             )
             .group_by(
                 InventoryDocument.id,
@@ -499,6 +502,155 @@ class InventoryQueryService:
             },
             "lines": lines,
             "allocations_map": allocs_by_tx,
+            "total_qty": total_qty,
+            "total_cost": _q6(total_cost),
+        }
+
+    @staticmethod
+    def list_purchase_in_documents(keyword=None, status=None, inbound_type=None,
+                                    date_from=None, date_to=None,
+                                    page=1, page_size=50):
+        """
+        入库单据列表。
+        inbound_type ∈ None / 'PURCHASE_IN' / 'STOCKTAKE_GAIN' / 'RETURN_IN'
+        """
+        stmt = (
+            select(
+                InventoryDocument.id,
+                InventoryDocument.document_no,
+                InventoryDocument.document_type,
+                InventoryDocument.document_time,
+                InventoryDocument.status,
+                InventoryDocument.remark,
+                InventoryDocument.created_at,
+                InventoryDocument.confirmed_at,
+                func.count(InventoryTransaction.id).label("line_count"),
+                func.coalesce(
+                    func.sum(InventoryTransaction.quantity_delta), 0
+                ).label("total_qty"),
+                func.coalesce(
+                    func.sum(InventoryTransaction.total_cost), 0
+                ).label("total_cost"),
+            )
+            .join(InventoryTransaction,
+                InventoryTransaction.document_id == InventoryDocument.id)
+            .where(
+                InventoryDocument.document_type.in_(["PURCHASE_IN", "STOCKTAKE"]),
+                InventoryTransaction.transaction_type.in_(
+                    ["PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN"]
+                ),
+            )
+            .group_by(
+                InventoryDocument.id, InventoryDocument.document_no,
+                InventoryDocument.document_type, InventoryDocument.document_time,
+                InventoryDocument.status, InventoryDocument.remark,
+                InventoryDocument.created_at, InventoryDocument.confirmed_at,
+            )
+            .order_by(InventoryDocument.id.desc())
+        )
+        if keyword:
+            stmt = stmt.where(InventoryDocument.document_no.like(f"%{keyword}%"))
+        if status:
+            stmt = stmt.where(InventoryDocument.status == status)
+        if date_from:
+            stmt = stmt.where(InventoryDocument.document_time >= date_from)
+        if date_to:
+            stmt = stmt.where(InventoryDocument.document_time < date_to)
+        # 按 transaction_type 过滤：若 inbound_type 不是 None，要反查该单据是否含有该流水
+        if inbound_type:
+            subq = (
+                select(InventoryTransaction.document_id)
+                .where(InventoryTransaction.transaction_type == inbound_type)
+                .subquery()
+            )
+            stmt = stmt.where(InventoryDocument.id.in_(select(subq.c.document_id)))
+
+        total = db.session.execute(
+            select(func.count()).select_from(stmt.subquery())
+        ).scalar() or 0
+        stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+        rows = [dict(r) for r in db.session.execute(stmt).mappings().all()]
+        return rows, total
+
+    @staticmethod
+    def get_purchase_in_detail(document_id: int):
+        """
+        入库单详情（复用出库详情结构）。
+        """
+        doc = db.session.get(InventoryDocument, document_id)
+        if not doc:
+            return None
+        if doc.document_type not in ("PURCHASE_IN", "STOCKTAKE"):
+            return None
+
+        # 明细行
+        line_stmt = (
+            select(
+                InventoryTransaction.id.label("transaction_id"),
+                InventoryTransaction.line_no,
+                InventoryTransaction.transaction_type,
+                InventoryTransaction.transaction_time,
+                InventoryTransaction.quantity_delta,
+                InventoryTransaction.unit_cost,
+                InventoryTransaction.total_cost,
+                Material.id.label("material_id"),
+                Material.material_code,
+                Material.material_name,
+                Material.unit,
+                Warehouse.id.label("warehouse_id"),
+                Warehouse.warehouse_code,
+                Warehouse.warehouse_name,
+                Supplier.id.label("supplier_id"),
+                Supplier.name.label("supplier_name"),
+            )
+            .join(Material, Material.id == InventoryTransaction.material_id)
+            .join(Warehouse, Warehouse.id == InventoryTransaction.warehouse_id)
+            .join(Supplier, Supplier.id == InventoryTransaction.supplier_id,
+                isouter=True)
+            .where(InventoryTransaction.document_id == document_id)
+            .order_by(InventoryTransaction.line_no.asc())
+        )
+        lines = [dict(r) for r in db.session.execute(line_stmt).mappings().all()]
+
+        # 成本层（由 source_transaction_id 关联）
+        tx_ids = [l["transaction_id"] for l in lines]
+        layers_by_tx = {}
+        if tx_ids:
+            layer_stmt = (
+                select(
+                    InventoryCostLayer.source_transaction_id,
+                    InventoryCostLayer.id.label("layer_id"),
+                    InventoryCostLayer.layer_type,
+                    InventoryCostLayer.effective_time,
+                    InventoryCostLayer.original_qty,
+                    InventoryCostLayer.remaining_qty,
+                    InventoryCostLayer.unit_cost,
+                    InventoryCostLayer.original_cost,
+                )
+                .where(InventoryCostLayer.source_transaction_id.in_(tx_ids))
+                .order_by(InventoryCostLayer.source_transaction_id.asc(),
+                        InventoryCostLayer.id.asc())
+            )
+            for r in db.session.execute(layer_stmt).mappings().all():
+                layers_by_tx.setdefault(r["source_transaction_id"], []).append(dict(r))
+
+        total_qty = sum((l["quantity_delta"] for l in lines), Decimal("0"))
+        total_cost = sum((l["total_cost"] or Decimal("0") for l in lines),
+                        Decimal("0"))
+
+        return {
+            "document": {
+                "id": doc.id,
+                "document_no": doc.document_no,
+                "document_type": doc.document_type,
+                "document_time": doc.document_time,
+                "status": doc.status,
+                "remark": doc.remark,
+                "created_at": doc.created_at,
+                "confirmed_at": doc.confirmed_at,
+            },
+            "lines": lines,
+            "layers_map": layers_by_tx,
             "total_qty": total_qty,
             "total_cost": _q6(total_cost),
         }

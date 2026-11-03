@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, flash
+from flask import Blueprint, render_template, request, flash, redirect
 from sqlalchemy import distinct
 
 from app.extensions import db
@@ -7,7 +7,7 @@ from app.generated.models.materials import Material
 from app.generated.models.warehouses import Warehouse
 from app.generated.models.inventory_cost_layers import InventoryCostLayer
 from app.services.inventory_query_service import InventoryQueryService
-from app.services.inventory_service import StockOutService, InventoryError
+from app.services.inventory_service import PurchaseInService, StockOutService, InventoryError
 
 bp = Blueprint("inventory_query", __name__, url_prefix="/inventory")
 
@@ -294,5 +294,92 @@ def stock_out_confirm(document_id):
     return redirect(
         request.referrer
         or url_for("inventory_query.stock_out_detail_page",
+                   document_id=document_id)
+    )
+
+INBOUND_STATUS_LABELS = {
+    "DRAFT": "草稿",
+    "CONFIRMED": "已确认",
+    "CANCELLED": "已取消",
+}
+
+INBOUND_TYPE_FOR_DISPLAY = {
+    "PURCHASE_IN": "采购入库",
+    "STOCKTAKE_GAIN": "盘点盘盈",
+    "RETURN_IN": "退货回仓",
+}
+
+@bp.get("/purchase-in/list")
+def purchase_in_list_page():
+    keyword = request.args.get("keyword", "").strip() or None
+    status = request.args.get("status", "").strip() or None
+    inbound_type = request.args.get("inbound_type", "").strip() or None
+    date_from_raw = request.args.get("date_from", "").strip() or None
+    date_to_raw = request.args.get("date_to", "").strip() or None
+
+    def _parse_date(s):
+        if not s:
+            return None
+        try:
+            return datetime.strptime(s, "%Y-%m-%d")
+        except ValueError:
+            return None
+
+    page = max(int(request.args.get("page", 1) or 1), 1)
+    page_size = 50
+
+    rows, total = InventoryQueryService.list_purchase_in_documents(
+        keyword=keyword,
+        status=status,
+        inbound_type=inbound_type,
+        date_from=_parse_date(date_from_raw),
+        date_to=_parse_date(date_to_raw),
+        page=page, page_size=page_size,
+    )
+    total_pages = max((total + page_size - 1) // page_size, 1)
+
+    return render_template(
+        "inventory/purchase_in_list.html",
+        rows=rows, total=total, page=page,
+        page_size=page_size, total_pages=total_pages,
+        keyword=keyword or "",
+        status=status or "",
+        inbound_type=inbound_type or "",
+        date_from=date_from_raw or "",
+        date_to=date_to_raw or "",
+        status_labels=INBOUND_STATUS_LABELS,
+        inbound_types=INBOUND_TYPE_FOR_DISPLAY,
+    )
+
+
+@bp.get("/purchase-in/<int:document_id>")
+def purchase_in_detail_page(document_id):
+    detail = InventoryQueryService.get_purchase_in_detail(document_id)
+    if not detail:
+        return render_template(
+            "inventory/purchase_in_detail.html",
+            detail=None,
+            error="单据不存在或不是入库单",
+        ), 404
+
+    return render_template(
+        "inventory/purchase_in_detail.html",
+        detail=detail,
+        status_labels=INBOUND_STATUS_LABELS,
+        inbound_types=INBOUND_TYPE_FOR_DISPLAY,
+        transaction_types=TRANSACTION_TYPE_LABELS,
+    )
+
+
+@bp.post("/purchase-in/<int:document_id>/confirm")
+def purchase_in_confirm(document_id):
+    try:
+        PurchaseInService.confirm_document(document_id)
+        flash("入库单已确认，FIFO 成本层已生成", "success")
+    except InventoryError as e:
+        flash(str(e), "error")
+    return redirect(
+        request.referrer
+        or url_for("inventory.purchase_in_detail_page",
                    document_id=document_id)
     )

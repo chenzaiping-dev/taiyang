@@ -49,6 +49,12 @@ def api_purchase_in():
     return jsonify({"code": 0, "msg": "采购入库成功", "data": result})
 
 
+INBOUND_TYPE_LABELS = {
+    "PURCHASE_IN": "采购入库",
+    "STOCKTAKE_GAIN": "盘点盘盈",
+    "RETURN_IN": "退货回仓",
+}
+
 # ========== 模板页面：GET 渲染表单 ==========
 @bp.get("/purchase-in")
 def purchase_in_page():
@@ -63,9 +69,11 @@ def purchase_in_page():
         warehouses=warehouses,
         suppliers=suppliers,
         materials=materials,
+        inbound_types=INBOUND_TYPE_LABELS,   # ⭐
         form_data={
             "warehouse_id": "",
             "supplier_id": "",
+            "inbound_type": "PURCHASE_IN",       # ⭐
             "document_time": datetime.now().strftime("%Y-%m-%dT%H:%M"),
             "remark": "",
             "auto_confirm": True,
@@ -85,6 +93,7 @@ def purchase_in_submit():
             warehouse_id=data["warehouse_id"],
             supplier_id=data["supplier_id"],
             lines=data["lines"],
+            inbound_type=data.get("inbound_type", "PURCHASE_IN"),   # ⭐
             document_time=(
                 datetime.fromisoformat(data["document_time"])
                 if data["document_time"] else None
@@ -133,6 +142,7 @@ def _render_form_with_error(error_msg: str):
         "document_time": request.form.get("document_time", ""),
         "remark": request.form.get("remark", ""),
         "auto_confirm": request.form.get("auto_confirm") == "on",
+        "inbound_type": request.form.get("inbound_type", "PURCHASE_IN"),
         "lines": lines,
     }
 
@@ -142,6 +152,7 @@ def _render_form_with_error(error_msg: str):
             warehouses=warehouses,
             suppliers=suppliers,
             materials=materials,
+            inbound_types=INBOUND_TYPE_LABELS,   # ⭐
             form_data=form_data,
             errors=[error_msg],
         ),

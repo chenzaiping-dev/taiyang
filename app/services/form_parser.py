@@ -78,6 +78,7 @@ def parse_purchase_in_form(form) -> dict:
     return {
         "warehouse_id": warehouse_id,
         "supplier_id": supplier_id,
+        "inbound_type": form.get("inbound_type", "PURCHASE_IN"),   # ⭐
         "document_time": form.get("document_time") or None,
         "remark": form.get("remark") or None,
         "auto_confirm": form.get("auto_confirm") == "on",
