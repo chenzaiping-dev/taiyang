@@ -3,14 +3,6 @@
 {% block content %}
 <h2>{{ '原料入库单' if direction == 'in' else '原料出库单' }}</h2>
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
-    {% for cat, msg in messages %}
-      <div class="flash flash-{{ cat }}">{{ msg }}</div>
-    {% endfor %}
-  {% endif %}
-{% endwith %}
-
 <form method="get"
       action="{{ url_for('inventory_query.document_list_page', direction=direction) }}"
       style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
