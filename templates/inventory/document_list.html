@@ -1,7 +1,7 @@
 {% extends "inventory/base.html" %}
-{% block title %}原料入库单{% endblock %}
+{% block title %}{{ '原料入库单' if direction == 'in' else '原料出库单' }}{% endblock %}
 {% block content %}
-<h2>原料入库单</h2>
+<h2>{{ '原料入库单' if direction == 'in' else '原料出库单' }}</h2>
 
 {% with messages = get_flashed_messages(with_categories=true) %}
   {% if messages %}
@@ -11,7 +11,8 @@
   {% endif %}
 {% endwith %}
 
-<form method="get" action="{{ url_for('inventory_query.purchase_in_list_page') }}"
+<form method="get"
+      action="{{ url_for('inventory_query.document_list_page', direction=direction) }}"
       style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
   <input type="text" name="keyword" value="{{ keyword }}"
          placeholder="单据号" maxlength="64">
@@ -22,6 +23,9 @@
         {% if status == code %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
   </select>
+
+  {# 仅入库方向展示入库类型过滤 #}
+  {% if direction == 'in' %}
   <select name="inbound_type">
     <option value="">-- 全部入库类型 --</option>
     {% for code, label in inbound_types.items() %}
@@ -29,14 +33,28 @@
         {% if inbound_type == code %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
   </select>
+  {% elif direction == 'out' %}
+  <select name="outbound_type">
+    <option value="">-- 全部出库类型 --</option>
+    {% for code, label in outbound_types.items() %}
+      <option value="{{ code }}"
+        {% if outbound_type == code %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  {% endif %}
+
   <label style="font-size:12px;color:#666;">
     从 <input type="date" name="date_from" value="{{ date_from }}">
     到 <input type="date" name="date_to" value="{{ date_to }}">
   </label>
   <button type="submit" class="btn btn-primary">查询</button>
-  <a class="btn" href="{{ url_for('inventory_query.purchase_in_list_page') }}">重置</a>
-  <a class="btn btn-primary" style="float:right;"
-     href="{{ url_for('purchase_in.purchase_in_page') }}">+ 新建入库单</a>
+  <a class="btn"
+     href="{{ url_for('inventory_query.document_list_page', direction=direction) }}">
+    重置
+  </a>
+  <a class="btn btn-primary" style="float:right;" href="{{ new_doc_url }}">
+    + 新建{{ '入库单' if direction == 'in' else '出库单' }}
+  </a>
 </form>
 
 <table style="width:100%;border-collapse:collapse;font-size:13px;">
@@ -44,11 +62,15 @@
     <tr style="background:#f5f5f5;">
       <th style="width:60px;">ID</th>
       <th>单据号</th>
-      <th style="width:110px;">单据类型</th>
-      <th style="width:140px;">入库时间</th>
+      <th style="width:120px;">单据类型</th>
+      <th style="width:140px;">{{ '入库时间' if direction == 'in' else '出库时间' }}</th>
       <th style="width:90px;text-align:right;">明细行数</th>
-      <th style="width:130px;text-align:right;">入库数量合计</th>
-      <th style="width:130px;text-align:right;">入库成本合计</th>
+      <th style="width:140px;text-align:right;">
+        {{ '入库数量合计' if direction == 'in' else '出库数量合计' }}
+      </th>
+      <th style="width:140px;text-align:right;">
+        {{ '入库成本合计' if direction == 'in' else '出库成本合计' }}
+      </th>
       <th style="width:90px;">状态</th>
       <th style="width:150px;">创建时间</th>
       <th style="width:100px;">操作</th>
@@ -60,13 +82,12 @@
       <tr>
         <td>{{ r.id }}</td>
         <td>
-          <a href="{{ url_for('inventory_query.purchase_in_detail_page',
-                     document_id=r.id) }}">
+          <a href="{{ url_for('inventory_query.document_detail_page',
+                     direction=direction, document_id=r.id) }}">
             {{ r.document_no }}
           </a>
         </td>
-        <td>{{ {'PURCHASE_IN':'采购入库','STOCKTAKE':'盘点'}.get(
-               r.document_type, r.document_type) }}</td>
+        <td>{{ doc_type_labels.get(r.document_type, r.document_type) }}</td>
         <td>{{ r.document_time.strftime("%Y-%m-%d %H:%M")
                if r.document_time else "-" }}</td>
         <td style="text-align:right;">{{ r.line_count }}</td>
@@ -82,9 +103,8 @@
         <td style="text-align:center;white-space:nowrap;">
           {% if r.status == 'DRAFT' %}
             <form method="post"
-                  action="{{ url_for('inventory_query.purchase_in_confirm',
-                           document_id=r.id) }}"
-                  onsubmit="return confirm('确认该入库单？将生成 FIFO 成本层。');"
+                  action="{{ url_for(confirm_endpoint, document_id=r.id) }}"
+                  onsubmit="return confirm('确认该单据？将扣减/生成 FIFO 成本层。');"
                   style="display:inline;">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn btn-sm btn-primary">确认</button>
@@ -97,7 +117,7 @@
       {% endfor %}
     {% else %}
       <tr><td colspan="10" style="text-align:center;color:#999;padding:24px;">
-        暂无入库单
+        暂无{{ '入库单' if direction == 'in' else '出库单' }}
       </td></tr>
     {% endif %}
   </tbody>
@@ -106,14 +126,16 @@
 <div style="margin-top:16px;display:flex;gap:8px;align-items:center;">
   <span>共 {{ total }} 条，第 {{ page }}/{{ total_pages }} 页</span>
   {% if page > 1 %}
-    <a class="btn" href="{{ url_for('inventory_query.purchase_in_list_page',
-         keyword=keyword, status=status, inbound_type=inbound_type,
-         date_from=date_from, date_to=date_to, page=page-1) }}">上一页</a>
+    <a class="btn" href="{{ url_for('inventory_query.document_list_page',
+         direction=direction, keyword=keyword, status=status,
+         inbound_type=inbound_type, date_from=date_from, date_to=date_to,
+         page=page-1) }}">上一页</a>
   {% endif %}
   {% if page < total_pages %}
-    <a class="btn" href="{{ url_for('inventory_query.purchase_in_list_page',
-         keyword=keyword, status=status, inbound_type=inbound_type,
-         date_from=date_from, date_to=date_to, page=page+1) }}">下一页</a>
+    <a class="btn" href="{{ url_for('inventory_query.document_list_page',
+         direction=direction, keyword=keyword, status=status,
+         inbound_type=inbound_type, date_from=date_from, date_to=date_to,
+         page=page+1) }}">下一页</a>
   {% endif %}
 </div>
 

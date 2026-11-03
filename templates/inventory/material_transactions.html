@@ -79,8 +79,8 @@
         <td style="text-align:right;">{{ r.unit_cost if r.unit_cost is not none else '-' }}</td>
         <td style="text-align:right;">{{ r.total_cost if r.total_cost is not none else '-' }}</td>
         <td>
-          <a href="{{ url_for('inventory_query.purchase_in_detail_page',
-                     document_id=r.document_id) }}">
+          <a href="{{ url_for('inventory_query.document_detail_page',
+                     direction=transaction_directions.get(r.transaction_type, r.transaction_type), document_id=r.document_id) }}">
             {{ r.document_no }}
           </a>
           {% if r.document_status and r.document_status != 'CONFIRMED' %}

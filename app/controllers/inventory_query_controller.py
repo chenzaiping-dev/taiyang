@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, flash, redirect
+from flask import Blueprint, render_template, request, flash, redirect, abort, url_for
 from sqlalchemy import distinct
 
 from app.extensions import db
@@ -6,7 +6,7 @@ from app.generated.models.employees import Employee
 from app.generated.models.materials import Material
 from app.generated.models.warehouses import Warehouse
 from app.generated.models.inventory_cost_layers import InventoryCostLayer
-from app.services.inventory_query_service import InventoryQueryService
+from app.services.inventory_query_service import InventoryQueryService, INBOUND_TYPE_LABELS, OUTBOUND_TYPE_LABELS
 from app.services.inventory_service import PurchaseInService, StockOutService, InventoryError
 
 bp = Blueprint("inventory_query", __name__, url_prefix="/inventory")
@@ -150,12 +150,27 @@ TRANSACTION_TYPE_LABELS = {
     "RETURN_IN":     "退货入库",
 }
 
-DOCUMENT_TYPE_LABELS = {
-    "PURCHASE_IN":   "采购入库单",
-    "PRODUCTION_OUT": "生产领料单",
-    "STOCKTAKE":     "盘点单",
-    "ADJUSTMENT":    "调整单",
+TRANSACTION_TYPE_DIRECTION = {
+    "PURCHASE_IN":   "in",
+    "PRODUCTION_OUT": "out",
+    "STOCKTAKE_GAIN": "in",
+    "STOCKTAKE_LOSS": "out",
+    "RETURN_IN":     "in",
 }
+
+DOC_STATUS_LABELS = {
+    "DRAFT": "草稿",
+    "CONFIRMED": "已确认",
+    "CANCELLED": "已取消",
+}
+
+DOC_TYPE_LABELS = {
+    "PURCHASE_IN": "采购入库单",
+    "PRODUCTION_OUT": "生产领料单",
+    "STOCKTAKE": "盘点单",
+    "ADJUSTMENT": "调整单",
+}
+
 
 @bp.get("/material-transactions")
 def material_transactions_page():
@@ -215,37 +230,46 @@ def material_transactions_page():
         date_to=date_to_raw or "",
         warehouses=warehouses,
         transaction_types=TRANSACTION_TYPE_LABELS,
-        document_types=DOCUMENT_TYPE_LABELS,
+        transaction_directions=TRANSACTION_TYPE_DIRECTION,
+        document_types=DOC_TYPE_LABELS,
     )
 
+# ==================== 通用状态/类型标签 ====================
 
-STOCK_OUT_STATUS_LABELS = {
-    "DRAFT": "草稿",
-    "CONFIRMED": "已确认",
-    "CANCELLED": "已取消",
-}
+def _parse_date(s):
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s, "%Y-%m-%d")
+    except ValueError:
+        return None
 
-@bp.get("/stock-out/list")
-def stock_out_list_page():
+
+# ==================== 通用列表 ====================
+@bp.get("/documents/<direction>")
+def document_list_page(direction):
+    """
+    direction='in'  → 入库单列表
+    direction='out' → 出库单列表
+    """
+    if direction not in ("in", "out"):
+        abort(404)
+    direction_code = "IN" if direction == "in" else "OUT"
+
     keyword = request.args.get("keyword", "").strip() or None
     status = request.args.get("status", "").strip() or None
+    inbound_type = request.args.get("inbound_type", "").strip() or None
+    outbound_type = request.args.get("outbound_type", "").strip() or None
     date_from_raw = request.args.get("date_from", "").strip() or None
     date_to_raw = request.args.get("date_to", "").strip() or None
-
-    def _parse_date(s):
-        if not s:
-            return None
-        try:
-            return datetime.strptime(s, "%Y-%m-%d")
-        except ValueError:
-            return None
-
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 50
 
-    rows, total = InventoryQueryService.list_stock_out_documents(
-        keyword=keyword,
-        status=status,
+    rows, total = InventoryQueryService.list_documents(
+        direction=direction_code,
+        keyword=keyword, status=status,
+        inbound_type=inbound_type,
+        outbound_type=outbound_type,
         date_from=_parse_date(date_from_raw),
         date_to=_parse_date(date_to_raw),
         page=page, page_size=page_size,
@@ -253,37 +277,86 @@ def stock_out_list_page():
     total_pages = max((total + page_size - 1) // page_size, 1)
 
     return render_template(
-        "inventory/stock_out_list.html",
+        "inventory/document_list.html",
+        direction=direction,
+        direction_code=direction_code,
         rows=rows, total=total, page=page,
         page_size=page_size, total_pages=total_pages,
         keyword=keyword or "",
         status=status or "",
+        inbound_type=inbound_type or "",
+        outbound_type=outbound_type or "",
         date_from=date_from_raw or "",
         date_to=date_to_raw or "",
-        status_labels=STOCK_OUT_STATUS_LABELS,
-        doc_type_labels=DOCUMENT_TYPE_LABELS,
+        status_labels=DOC_STATUS_LABELS,
+        doc_type_labels=DOC_TYPE_LABELS,
+        inbound_types=INBOUND_TYPE_LABELS,
+        outbound_types=OUTBOUND_TYPE_LABELS,
+        new_doc_url=(
+            url_for("purchase_in.purchase_in_page")
+            if direction == "in"
+            else url_for("stock_out.stock_out_page")
+        ),
+        confirm_endpoint=(
+            "inventory_query.purchase_in_confirm"
+            if direction == "in"
+            else "inventory_query.stock_out_confirm"
+        ),
     )
 
 
-@bp.get("/stock-out/<int:document_id>")
-def stock_out_detail_page(document_id):
-    detail = InventoryQueryService.get_stock_out_detail(document_id)
+# ==================== 通用详情 ====================
+@bp.get("/documents/<direction>/<int:document_id>")
+def document_detail_page(direction, document_id):
+    if direction not in ("in", "out"):
+        abort(404)
+
+    detail = InventoryQueryService.get_document_detail(document_id)
     if not detail:
         return render_template(
-            "inventory/stock_out_detail.html",
+            "inventory/document_detail.html",
+            direction=direction,
             detail=None,
-            error="单据不存在或不是出库单",
+            error="单据不存在",
+            doc_type_labels=DOC_TYPE_LABELS,
+            status_labels=DOC_STATUS_LABELS,
+            transaction_types=TRANSACTION_TYPE_LABELS,
+            confirm_endpoint=None,
+            list_url=url_for("inventory_query.document_list_page",
+                             direction=direction),
         ), 404
 
+    # 校验方向匹配：入库单不能在出库视图里打开
+    doc_type = detail["document"]["document_type"]
+    is_inbound = doc_type in ("PURCHASE_IN", "STOCKTAKE") and all(
+        l["transaction_type"] in ("PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN")
+        for l in detail["lines"]
+    )
+    if direction == "in" and not is_inbound:
+        abort(404)
+    if direction == "out" and is_inbound:
+        abort(404)
+
+    confirm_endpoint = (
+        "inventory_query.purchase_in_confirm"
+        if direction == "in"
+        else "inventory_query.stock_out_confirm"
+    )
+
     return render_template(
-        "inventory/stock_out_detail.html",
+        "inventory/document_detail.html",
+        direction=direction,
         detail=detail,
-        status_labels=STOCK_OUT_STATUS_LABELS,
-        doc_type_labels=DOCUMENT_TYPE_LABELS,
+        doc_type_labels=DOC_TYPE_LABELS,
+        status_labels=DOC_STATUS_LABELS,
         transaction_types=TRANSACTION_TYPE_LABELS,
+        confirm_endpoint=confirm_endpoint,
+        list_url=url_for("inventory_query.document_list_page",
+                         direction=direction),
     )
 
 
+# ==================== 保留确认路由 ====================
 @bp.post("/stock-out/<int:document_id>/confirm")
 def stock_out_confirm(document_id):
     try:
@@ -293,81 +366,8 @@ def stock_out_confirm(document_id):
         flash(str(e), "error")
     return redirect(
         request.referrer
-        or url_for("inventory_query.stock_out_detail_page",
-                   document_id=document_id)
-    )
-
-INBOUND_STATUS_LABELS = {
-    "DRAFT": "草稿",
-    "CONFIRMED": "已确认",
-    "CANCELLED": "已取消",
-}
-
-INBOUND_TYPE_FOR_DISPLAY = {
-    "PURCHASE_IN": "采购入库",
-    "STOCKTAKE_GAIN": "盘点盘盈",
-    "RETURN_IN": "退货回仓",
-}
-
-@bp.get("/purchase-in/list")
-def purchase_in_list_page():
-    keyword = request.args.get("keyword", "").strip() or None
-    status = request.args.get("status", "").strip() or None
-    inbound_type = request.args.get("inbound_type", "").strip() or None
-    date_from_raw = request.args.get("date_from", "").strip() or None
-    date_to_raw = request.args.get("date_to", "").strip() or None
-
-    def _parse_date(s):
-        if not s:
-            return None
-        try:
-            return datetime.strptime(s, "%Y-%m-%d")
-        except ValueError:
-            return None
-
-    page = max(int(request.args.get("page", 1) or 1), 1)
-    page_size = 50
-
-    rows, total = InventoryQueryService.list_purchase_in_documents(
-        keyword=keyword,
-        status=status,
-        inbound_type=inbound_type,
-        date_from=_parse_date(date_from_raw),
-        date_to=_parse_date(date_to_raw),
-        page=page, page_size=page_size,
-    )
-    total_pages = max((total + page_size - 1) // page_size, 1)
-
-    return render_template(
-        "inventory/purchase_in_list.html",
-        rows=rows, total=total, page=page,
-        page_size=page_size, total_pages=total_pages,
-        keyword=keyword or "",
-        status=status or "",
-        inbound_type=inbound_type or "",
-        date_from=date_from_raw or "",
-        date_to=date_to_raw or "",
-        status_labels=INBOUND_STATUS_LABELS,
-        inbound_types=INBOUND_TYPE_FOR_DISPLAY,
-    )
-
-
-@bp.get("/purchase-in/<int:document_id>")
-def purchase_in_detail_page(document_id):
-    detail = InventoryQueryService.get_purchase_in_detail(document_id)
-    if not detail:
-        return render_template(
-            "inventory/purchase_in_detail.html",
-            detail=None,
-            error="单据不存在或不是入库单",
-        ), 404
-
-    return render_template(
-        "inventory/purchase_in_detail.html",
-        detail=detail,
-        status_labels=INBOUND_STATUS_LABELS,
-        inbound_types=INBOUND_TYPE_FOR_DISPLAY,
-        transaction_types=TRANSACTION_TYPE_LABELS,
+        or url_for("inventory_query.document_detail_page",
+                   direction="out", document_id=document_id)
     )
 
 
@@ -380,6 +380,6 @@ def purchase_in_confirm(document_id):
         flash(str(e), "error")
     return redirect(
         request.referrer
-        or url_for("inventory.purchase_in_detail_page",
-                   document_id=document_id)
+        or url_for("inventory_query.document_detail_page",
+                   direction="in", document_id=document_id)
     )

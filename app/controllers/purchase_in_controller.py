@@ -16,6 +16,7 @@ from app.generated.models.inventory_cost_layers import InventoryCostLayer
 from app.schemas.purchase_in_schema import PurchaseInRequestSchema
 from app.services.inventory_service import PurchaseInService, InventoryError
 from app.services.form_parser import parse_purchase_in_form, FormParseError
+from app.services.inventory_query_service import INBOUND_TYPE_LABELS
 
 bp = Blueprint("purchase_in", __name__, url_prefix="/inventory")
 schema = PurchaseInRequestSchema()
@@ -48,12 +49,6 @@ def api_purchase_in():
         return jsonify({"code": 400, "msg": str(e)}), 400
     return jsonify({"code": 0, "msg": "采购入库成功", "data": result})
 
-
-INBOUND_TYPE_LABELS = {
-    "PURCHASE_IN": "采购入库",
-    "STOCKTAKE_GAIN": "盘点盘盈",
-    "RETURN_IN": "退货回仓",
-}
 
 # ========== 模板页面：GET 渲染表单 ==========
 @bp.get("/purchase-in")

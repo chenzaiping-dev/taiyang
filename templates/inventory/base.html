@@ -148,11 +148,8 @@
     <div class="nav-group">
       <div class="nav-label">原料管理</div>
       <div class="nav-dropdown">
-        <a href="{{ url_for('purchase_in.purchase_in_page') }}">原料入库</a>
-        <a href="{{ url_for('stock_out.stock_out_page') }}">原料出库</a>
-        <div class="divider"></div>
-        <a href="{{ url_for('inventory_query.purchase_in_list_page') }}">原料入库单</a>
-        <a href="{{ url_for('inventory_query.stock_out_list_page') }}">原料出库单</a>
+        <a href="{{ url_for('inventory_query.document_list_page', direction='in') }}">原料入库</a>
+        <a href="{{ url_for('inventory_query.document_list_page', direction='out') }}">原料出库</a>
         <div class="divider"></div>
         <a href="{{ url_for('inventory_query.material_stock_page') }}">原料库存</a>
         <a href="{{ url_for('inventory_query.material_io_summary_page') }}">原料出入库汇总</a>

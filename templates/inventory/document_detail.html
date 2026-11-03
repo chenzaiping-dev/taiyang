@@ -1,28 +1,31 @@
 {% extends "inventory/base.html" %}
-{% block title %}原料出库单详情{% endblock %}
+{% block title %}
+  {{ '原料入库单详情' if direction == 'in' else '原料出库单详情' }}
+{% endblock %}
 {% block content %}
 {% if not detail %}
-  <h2>⚠️ 出库单不存在</h2>
+  <h2>⚠️ 单据不存在</h2>
   <div class="error-box">{{ error }}</div>
-  <a class="btn" href="{{ url_for('inventory_query.stock_out_list_page') }}">返回列表</a>
+  <a class="btn" href="{{ list_url }}">返回列表</a>
 {% else %}
   {% set doc = detail.document %}
   <h2>
-    出库单详情
+    {{ '入库单详情' if direction == 'in' else '出库单详情' }}
     <span style="color:#888;font-size:14px;">#{{ doc.document_no }}</span>
 
-    {% if doc.status == 'DRAFT' %}
+    {% if doc.status == 'DRAFT' and confirm_endpoint %}
       <form method="post"
-            action="{{ url_for('inventory_query.stock_out_confirm',
-                     document_id=doc.id) }}"
-            onsubmit="return confirm('确认该出库单？将按 FIFO 扣减成本层，不可撤销。');"
+            action="{{ url_for(confirm_endpoint, document_id=doc.id) }}"
+            onsubmit="return confirm('确认该单据？将生成/扣减 FIFO 成本层。');"
             style="float:right;">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-primary">确认出库</button>
+        <button type="submit" class="btn btn-primary">
+          {{ '确认入库' if direction == 'in' else '确认出库' }}
+        </button>
       </form>
     {% endif %}
     <a class="btn" style="float:right;margin-right:8px;"
-       href="{{ url_for('inventory_query.stock_out_list_page') }}">返回列表</a>
+       href="{{ list_url }}">返回列表</a>
   </h2>
 
   <fieldset>
@@ -31,7 +34,8 @@
     <div class="form-row"><label>单据类型：</label>
       {{ doc_type_labels.get(doc.document_type, doc.document_type) }}
     </div>
-    <div class="form-row"><label>出库时间：</label>
+    <div class="form-row">
+      <label>{{ '入库时间' if direction == 'in' else '出库时间' }}：</label>
       {{ doc.document_time.strftime("%Y-%m-%d %H:%M:%S")
          if doc.document_time else "-" }}
     </div>
@@ -51,19 +55,26 @@
     {% endif %}
     <div class="form-row"><label>备注：</label>{{ doc.remark or "-" }}</div>
     <div class="form-row"><label>合计：</label>
-      出库数量 {{ detail.total_qty }}，成本 {{ detail.total_cost }}
+      {{ '入库' if direction == 'in' else '出库' }}数量 {{ detail.total_qty }}，
+      成本 {{ detail.total_cost }}
     </div>
   </fieldset>
 
   <fieldset>
-    <legend>出库明细与 FIFO 成本分配（{{ detail.lines|length }} 行）</legend>
+    <legend>
+      {{ '入库' if direction == 'in' else '出库' }}明细
+      与 FIFO {{ '成本层' if direction == 'in' else '成本分配' }}
+      （{{ detail.lines|length }} 行）
+    </legend>
     <table style="width:100%;border-collapse:collapse;font-size:13px;">
       <thead>
         <tr style="background:#f5f5f5;">
           <th style="width:50px;">行号</th>
           <th>原料</th>
           <th>仓库</th>
-          <th style="width:110px;text-align:right;">出库数量</th>
+          <th style="width:110px;text-align:right;">
+            {{ '入库数量' if direction == 'in' else '出库数量' }}
+          </th>
           <th style="width:110px;text-align:right;">单位成本</th>
           <th style="width:120px;text-align:right;">成本金额</th>
           <th style="width:130px;">业务类型</th>
@@ -79,7 +90,9 @@
             <span style="color:#999;">({{ l.unit }})</span>
           </td>
           <td>{{ l.warehouse_code }} - {{ l.warehouse_name }}</td>
-          <td style="text-align:right;">{{ -l.quantity_delta }}</td>
+          <td style="text-align:right;">
+            {{ l.quantity_delta if direction == 'in' else -l.quantity_delta }}
+          </td>
           <td style="text-align:right;">{{ l.unit_cost or "-" }}</td>
           <td style="text-align:right;">{{ l.total_cost or "-" }}</td>
           <td>{{ transaction_types.get(l.transaction_type, l.transaction_type) }}</td>
@@ -96,25 +109,53 @@
           </td>
         </tr>
 
-        {# FIFO 成本层分配 #}
-        {% set allocs = detail.allocations_map.get(l.transaction_id, []) %}
-        {% if allocs %}
-        <tr>
-          <td></td>
-          <td colspan="7" style="padding:4px 12px;background:#fafafa;font-size:12px;">
-            <strong>成本分配：</strong>
-            {% for a in allocs %}
-              <div style="margin:2px 0;color:#555;">
-                层#{{ a.cost_layer_id }}
-                （{{ {'PURCHASE':'采购','STOCKTAKE_RESET':'盘点重置','RETURN':'退货'}
-                     .get(a.layer_type, a.layer_type) }}，
-                {{ a.effective_time.strftime("%Y-%m-%d") if a.effective_time else "-" }}）：
-                {{ a.quantity }} × {{ a.unit_cost }}
-                = <strong>{{ a.cost_amount }}</strong>
-              </div>
-            {% endfor %}
-          </td>
-        </tr>
+        {# 出库：成本分配明细 #}
+        {% if direction == 'out' %}
+          {% set allocs = detail.allocations_map.get(l.transaction_id, []) %}
+          {% if allocs %}
+          <tr>
+            <td></td>
+            <td colspan="7" style="padding:4px 12px;background:#fafafa;font-size:12px;">
+              <strong>成本分配：</strong>
+              {% for a in allocs %}
+                <div style="margin:2px 0;color:#555;">
+                  层#{{ a.cost_layer_id }}
+                  （{{ {'PURCHASE':'采购','STOCKTAKE_RESET':'盘点重置','RETURN':'退货'}
+                       .get(a.layer_type, a.layer_type) }}，
+                  {{ a.effective_time.strftime("%Y-%m-%d")
+                     if a.effective_time else "-" }}）：
+                  {{ a.quantity }} × {{ a.unit_cost }}
+                  = <strong>{{ a.cost_amount }}</strong>
+                </div>
+              {% endfor %}
+            </td>
+          </tr>
+          {% endif %}
+        {% endif %}
+
+        {# 入库：成本层 #}
+        {% if direction == 'in' %}
+          {% set layers = detail.layers_map.get(l.transaction_id, []) %}
+          {% if layers %}
+          <tr>
+            <td></td>
+            <td colspan="7" style="padding:4px 12px;background:#fafafa;font-size:12px;">
+              <strong>成本层：</strong>
+              {% for layer in layers %}
+                <div style="margin:2px 0;color:#555;">
+                  层#{{ layer.layer_id }}
+                  （{{ {'PURCHASE':'采购','STOCKTAKE_RESET':'盘点重置','RETURN':'退货'}
+                       .get(layer.layer_type, layer.layer_type) }}，
+                  {{ layer.effective_time.strftime("%Y-%m-%d")
+                     if layer.effective_time else "-" }}）：
+                  {{ layer.original_qty }} × {{ layer.unit_cost }}
+                  = <strong>{{ layer.original_cost }}</strong>
+                  （剩余 {{ layer.remaining_qty }}）
+                </div>
+              {% endfor %}
+            </td>
+          </tr>
+          {% endif %}
         {% endif %}
         {% endfor %}
       </tbody>
