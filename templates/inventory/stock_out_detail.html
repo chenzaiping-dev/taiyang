@@ -1,0 +1,131 @@
+{% extends "inventory/base.html" %}
+{% block title %}原料出库单详情{% endblock %}
+{% block content %}
+{% if not detail %}
+  <h2>⚠️ 出库单不存在</h2>
+  <div class="error-box">{{ error }}</div>
+  <a class="btn" href="{{ url_for('inventory_query.stock_out_list_page') }}">返回列表</a>
+{% else %}
+  {% set doc = detail.document %}
+  <h2>
+    出库单详情
+    <span style="color:#888;font-size:14px;">#{{ doc.document_no }}</span>
+
+    {% if doc.status == 'DRAFT' %}
+      <form method="post"
+            action="{{ url_for('inventory_query.stock_out_confirm',
+                     document_id=doc.id) }}"
+            onsubmit="return confirm('确认该出库单？将按 FIFO 扣减成本层，不可撤销。');"
+            style="float:right;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-primary">确认出库</button>
+      </form>
+    {% endif %}
+    <a class="btn" style="float:right;margin-right:8px;"
+       href="{{ url_for('inventory_query.stock_out_list_page') }}">返回列表</a>
+  </h2>
+
+  <fieldset>
+    <legend>单据信息</legend>
+    <div class="form-row"><label>单据号：</label>{{ doc.document_no }}</div>
+    <div class="form-row"><label>单据类型：</label>
+      {{ doc_type_labels.get(doc.document_type, doc.document_type) }}
+    </div>
+    <div class="form-row"><label>出库时间：</label>
+      {{ doc.document_time.strftime("%Y-%m-%d %H:%M:%S")
+         if doc.document_time else "-" }}
+    </div>
+    <div class="form-row"><label>状态：</label>
+      <span class="status-badge status-{{ doc.status|lower }}">
+        {{ status_labels.get(doc.status, doc.status) }}
+      </span>
+    </div>
+    <div class="form-row"><label>创建时间：</label>
+      {{ doc.created_at.strftime("%Y-%m-%d %H:%M:%S")
+         if doc.created_at else "-" }}
+    </div>
+    {% if doc.confirmed_at %}
+    <div class="form-row"><label>确认时间：</label>
+      {{ doc.confirmed_at.strftime("%Y-%m-%d %H:%M:%S") }}
+    </div>
+    {% endif %}
+    <div class="form-row"><label>备注：</label>{{ doc.remark or "-" }}</div>
+    <div class="form-row"><label>合计：</label>
+      出库数量 {{ detail.total_qty }}，成本 {{ detail.total_cost }}
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>出库明细与 FIFO 成本分配（{{ detail.lines|length }} 行）</legend>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="background:#f5f5f5;">
+          <th style="width:50px;">行号</th>
+          <th>原料</th>
+          <th>仓库</th>
+          <th style="width:110px;text-align:right;">出库数量</th>
+          <th style="width:110px;text-align:right;">单位成本</th>
+          <th style="width:120px;text-align:right;">成本金额</th>
+          <th style="width:130px;">业务类型</th>
+          <th>关联（供应商/工艺单）</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for l in detail.lines %}
+        <tr>
+          <td>{{ l.line_no }}</td>
+          <td>
+            {{ l.material_code }} - {{ l.material_name }}
+            <span style="color:#999;">({{ l.unit }})</span>
+          </td>
+          <td>{{ l.warehouse_code }} - {{ l.warehouse_name }}</td>
+          <td style="text-align:right;">{{ -l.quantity_delta }}</td>
+          <td style="text-align:right;">{{ l.unit_cost or "-" }}</td>
+          <td style="text-align:right;">{{ l.total_cost or "-" }}</td>
+          <td>{{ transaction_types.get(l.transaction_type, l.transaction_type) }}</td>
+          <td>
+            {% if l.supplier_name %}🏭 {{ l.supplier_name }}{% endif %}
+            {% if l.process_order_no %}
+              {% if l.supplier_name %}<br>{% endif %}
+              <a href="{{ url_for('process_order.detail_page',
+                       order_id=l.process_order_id) }}">
+                📋 {{ l.process_order_no }}
+              </a>
+            {% endif %}
+            {% if not l.supplier_name and not l.process_order_no %}-{% endif %}
+          </td>
+        </tr>
+
+        {# FIFO 成本层分配 #}
+        {% set allocs = detail.allocations_map.get(l.transaction_id, []) %}
+        {% if allocs %}
+        <tr>
+          <td></td>
+          <td colspan="7" style="padding:4px 12px;background:#fafafa;font-size:12px;">
+            <strong>成本分配：</strong>
+            {% for a in allocs %}
+              <div style="margin:2px 0;color:#555;">
+                层#{{ a.cost_layer_id }}
+                （{{ {'PURCHASE':'采购','STOCKTAKE_RESET':'盘点重置','RETURN':'退货'}
+                     .get(a.layer_type, a.layer_type) }}，
+                {{ a.effective_time.strftime("%Y-%m-%d") if a.effective_time else "-" }}）：
+                {{ a.quantity }} × {{ a.unit_cost }}
+                = <strong>{{ a.cost_amount }}</strong>
+              </div>
+            {% endfor %}
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </fieldset>
+
+  <style>
+    .status-badge { display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px; }
+    .status-draft     { background:#eee;color:#555; }
+    .status-confirmed { background:#e8f5e9;color:#2e7d32; }
+    .status-cancelled { background:#fdecea;color:#c62828; }
+  </style>
+{% endif %}
+{% endblock %}

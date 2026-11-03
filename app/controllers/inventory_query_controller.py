@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request
+from flask import Blueprint, render_template, request, flash
 from sqlalchemy import distinct
 
 from app.extensions import db
@@ -7,6 +7,7 @@ from app.generated.models.materials import Material
 from app.generated.models.warehouses import Warehouse
 from app.generated.models.inventory_cost_layers import InventoryCostLayer
 from app.services.inventory_query_service import InventoryQueryService
+from app.services.inventory_service import StockOutService, InventoryError
 
 bp = Blueprint("inventory_query", __name__, url_prefix="/inventory")
 
@@ -215,4 +216,83 @@ def material_transactions_page():
         warehouses=warehouses,
         transaction_types=TRANSACTION_TYPE_LABELS,
         document_types=DOCUMENT_TYPE_LABELS,
+    )
+
+
+STOCK_OUT_STATUS_LABELS = {
+    "DRAFT": "草稿",
+    "CONFIRMED": "已确认",
+    "CANCELLED": "已取消",
+}
+
+@bp.get("/stock-out/list")
+def stock_out_list_page():
+    keyword = request.args.get("keyword", "").strip() or None
+    status = request.args.get("status", "").strip() or None
+    date_from_raw = request.args.get("date_from", "").strip() or None
+    date_to_raw = request.args.get("date_to", "").strip() or None
+
+    def _parse_date(s):
+        if not s:
+            return None
+        try:
+            return datetime.strptime(s, "%Y-%m-%d")
+        except ValueError:
+            return None
+
+    page = max(int(request.args.get("page", 1) or 1), 1)
+    page_size = 50
+
+    rows, total = InventoryQueryService.list_stock_out_documents(
+        keyword=keyword,
+        status=status,
+        date_from=_parse_date(date_from_raw),
+        date_to=_parse_date(date_to_raw),
+        page=page, page_size=page_size,
+    )
+    total_pages = max((total + page_size - 1) // page_size, 1)
+
+    return render_template(
+        "inventory/stock_out_list.html",
+        rows=rows, total=total, page=page,
+        page_size=page_size, total_pages=total_pages,
+        keyword=keyword or "",
+        status=status or "",
+        date_from=date_from_raw or "",
+        date_to=date_to_raw or "",
+        status_labels=STOCK_OUT_STATUS_LABELS,
+        doc_type_labels=DOCUMENT_TYPE_LABELS,
+    )
+
+
+@bp.get("/stock-out/<int:document_id>")
+def stock_out_detail_page(document_id):
+    detail = InventoryQueryService.get_stock_out_detail(document_id)
+    if not detail:
+        return render_template(
+            "inventory/stock_out_detail.html",
+            detail=None,
+            error="单据不存在或不是出库单",
+        ), 404
+
+    return render_template(
+        "inventory/stock_out_detail.html",
+        detail=detail,
+        status_labels=STOCK_OUT_STATUS_LABELS,
+        doc_type_labels=DOCUMENT_TYPE_LABELS,
+        transaction_types=TRANSACTION_TYPE_LABELS,
+    )
+
+
+@bp.post("/stock-out/<int:document_id>/confirm")
+def stock_out_confirm(document_id):
+    try:
+        StockOutService.confirm_document(document_id)
+        flash("出库单已确认，FIFO 成本已分配", "success")
+    except InventoryError as e:
+        flash(str(e), "error")
+    return redirect(
+        request.referrer
+        or url_for("inventory_query.stock_out_detail_page",
+                   document_id=document_id)
     )

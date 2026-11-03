@@ -52,7 +52,6 @@ def api_purchase_in():
 # ========== 模板页面：GET 渲染表单 ==========
 @bp.get("/purchase-in")
 def purchase_in_page():
-    print("purchase_in_page")
     warehouses = Warehouse.query.filter_by(status=1).order_by(Warehouse.id).all()
     suppliers = Supplier.query.filter_by(status=1).order_by(Supplier.id).all()
     materials = Material.query.filter_by(status=1).order_by(Material.material_code).all()
@@ -80,7 +79,6 @@ def purchase_in_page():
 @bp.post("/purchase-in")
 def purchase_in_submit():
     try:
-        print("purchase_in_submit")
         data = parse_purchase_in_form(request.form)
         print("data:", data)
         result = PurchaseInService.create_purchase_in(

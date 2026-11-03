@@ -1,0 +1,125 @@
+{% extends "inventory/base.html" %}
+{% block title %}原料出库单{% endblock %}
+{% block content %}
+<h2>原料出库单</h2>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for cat, msg in messages %}
+      <div class="flash flash-{{ cat }}">{{ msg }}</div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<form method="get" action="{{ url_for('inventory_query.stock_out_list_page') }}"
+      style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+  <input type="text" name="keyword" value="{{ keyword }}"
+         placeholder="单据号" maxlength="64">
+  <select name="status">
+    <option value="">-- 全部状态 --</option>
+    {% for code, label in status_labels.items() %}
+      <option value="{{ code }}"
+        {% if status == code %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <label style="font-size:12px;color:#666;">
+    从 <input type="date" name="date_from" value="{{ date_from }}">
+    到 <input type="date" name="date_to" value="{{ date_to }}">
+  </label>
+  <button type="submit" class="btn btn-primary">查询</button>
+  <a class="btn" href="{{ url_for('inventory_query.stock_out_list_page') }}">重置</a>
+  <a class="btn btn-primary" style="float:right;"
+     href="{{ url_for('stock_out.stock_out_page') }}">+ 新建出库单</a>
+</form>
+
+<table style="width:100%;border-collapse:collapse;font-size:13px;">
+  <thead>
+    <tr style="background:#f5f5f5;">
+      <th style="width:60px;">ID</th>
+      <th>单据号</th>
+      <th style="width:110px;">单据类型</th>
+      <th style="width:140px;">出库时间</th>
+      <th style="width:90px;text-align:right;">明细行数</th>
+      <th style="width:130px;text-align:right;">出库数量合计</th>
+      <th style="width:130px;text-align:right;">出库成本合计</th>
+      <th style="width:90px;">状态</th>
+      <th style="width:150px;">创建时间</th>
+      <th style="width:100px;">操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if rows %}
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.id }}</td>
+        <td>
+          <a href="{{ url_for('inventory_query.stock_out_detail_page',
+                     document_id=r.id) }}">
+            {{ r.document_no }}
+          </a>
+        </td>
+        <td>{{ doc_type_labels.get(r.document_type, r.document_type) }}</td>
+        <td>{{ r.document_time.strftime("%Y-%m-%d %H:%M")
+               if r.document_time else "-" }}</td>
+        <td style="text-align:right;">{{ r.line_count }}</td>
+        <td style="text-align:right;">{{ r.total_qty }}</td>
+        <td style="text-align:right;">{{ r.total_cost }}</td>
+        <td>
+          <span class="status-badge status-{{ r.status|lower }}">
+            {{ status_labels.get(r.status, r.status) }}
+          </span>
+        </td>
+        <td>{{ r.created_at.strftime("%Y-%m-%d %H:%M")
+               if r.created_at else "-" }}</td>
+        <td style="text-align:center;white-space:nowrap;">
+          {% if r.status == 'DRAFT' %}
+            <form method="post"
+                  action="{{ url_for('inventory_query.stock_out_confirm',
+                           document_id=r.id) }}"
+                  onsubmit="return confirm('确认该出库单？将按 FIFO 扣减成本层，不可撤销。');"
+                  style="display:inline;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-primary">确认</button>
+            </form>
+          {% else %}
+            <span class="btn btn-sm disabled">确认</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr><td colspan="10" style="text-align:center;color:#999;padding:24px;">
+        暂无出库单
+      </td></tr>
+    {% endif %}
+  </tbody>
+</table>
+
+<div style="margin-top:16px;display:flex;gap:8px;align-items:center;">
+  <span>共 {{ total }} 条，第 {{ page }}/{{ total_pages }} 页</span>
+  {% if page > 1 %}
+    <a class="btn" href="{{ url_for('inventory_query.stock_out_list_page',
+         keyword=keyword, status=status,
+         date_from=date_from, date_to=date_to, page=page-1) }}">上一页</a>
+  {% endif %}
+  {% if page < total_pages %}
+    <a class="btn" href="{{ url_for('inventory_query.stock_out_list_page',
+         keyword=keyword, status=status,
+         date_from=date_from, date_to=date_to, page=page+1) }}">下一页</a>
+  {% endif %}
+</div>
+
+<style>
+  .btn-sm { padding:2px 10px;font-size:12px;border:1px solid #ccc;
+            border-radius:3px;background:#fff;color:#333;cursor:pointer; }
+  .btn-sm.btn-primary { background:#1976d2;color:#fff;border-color:#1976d2; }
+  .btn-sm.disabled    { opacity:.45;cursor:not-allowed;pointer-events:none; }
+  .status-badge { display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px; }
+  .status-draft     { background:#eee;color:#555; }
+  .status-confirmed { background:#e8f5e9;color:#2e7d32; }
+  .status-cancelled { background:#fdecea;color:#c62828; }
+  .flash { padding:8px 12px;border-radius:4px;margin-bottom:12px;font-size:13px; }
+  .flash-success { background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9; }
+  .flash-error   { background:#fdecea;color:#b3261e;border:1px solid #f5c2c0; }
+</style>
+{% endblock %}

@@ -11,12 +11,11 @@
     </ul>
   </div>
 {% endif %}
-
 <form id="stock-out-form"
       method="post"
       action="{{ url_for('stock_out.stock_out_submit') }}"
       data-next-index="{{ form_data.lines|length }}">
-
+  <h3>盘点时，实物数量 < 账面数量，才盘亏出库</h3>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
   <div class="form-row">

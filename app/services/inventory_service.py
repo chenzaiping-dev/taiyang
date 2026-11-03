@@ -1,6 +1,6 @@
 from decimal import Decimal
 from datetime import datetime
-from sqlalchemy import func
+from sqlalchemy import func, and_
 
 from app.extensions import db
 from app.generated.models.materials import Material
@@ -10,6 +10,7 @@ from app.generated.models.suppliers import Supplier
 from app.generated.models.inventory_documents import InventoryDocument
 from app.generated.models.inventory_transactions import InventoryTransaction
 from app.generated.models.inventory_cost_layers import InventoryCostLayer
+from app.generated.models.inventory_cost_allocations import InventoryCostAllocation
 
 from app.utils.datetime_utils import now_beijing_naive
 from app.utils.decimal_utils import _q3, _q6, _q6_amount
@@ -219,8 +220,6 @@ class PurchaseInService:
 
         return {"document_id": doc.id, "status": doc.status}
 
-from app.generated.models.inventory_cost_allocations import InventoryCostAllocation
-from sqlalchemy import and_
 
 class StockOutService:
     """原料出库（FIFO 成本层消耗）"""

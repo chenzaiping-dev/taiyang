@@ -17,7 +17,7 @@
       method="post"
       action="{{ url_for('purchase_in.purchase_in_submit') }}"
       data-next-index="{{ form_data.lines|length }}">
-  
+  <h3>盘点时，实物数量 > 账面数量，才盘盈入库</h3>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
   <div class="form-row">
