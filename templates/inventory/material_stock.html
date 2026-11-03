@@ -94,9 +94,9 @@
             </a>
           </td>
         {% endif %}
-        <td style="text-align:right;">{{ r.total_qty }}</td>
+        <td style="text-align:right;color:#2440b3;">{{ r.total_qty }}</td>
         <td style="text-align:right;">{{ r.avg_unit_cost }}</td>
-        <td style="text-align:right;">{{ r.total_cost }}</td>
+        <td style="text-align:right;color:#ef6c00;">{{ r.total_cost }}</td>
       </tr>
       {% endfor %}
     {% else %}
@@ -112,6 +112,20 @@
       </tr>
     {% endif %}
   </tbody>
+  <tfoot>
+    <tr style="background:#fafafa;font-weight:600;">
+      {% if group_by_warehouse %}
+        <td colspan="5" style="text-align:right;">本页合计：</td>
+      {% else %}
+        <td colspan="4" style="text-align:right;">本页合计：</td>
+      {% endif %}
+      <td style="text-align:right;color:#2440b3;">{{ rows|sum(attribute='total_qty') }}</td>
+      <td></td>
+      <td style="text-align:right;color:#ef6c00;">
+        {{ rows|sum(attribute='total_cost') }}
+      </td>
+    </tr>
+  </tfoot>
 </table>
 
 <!-- 分页 -->

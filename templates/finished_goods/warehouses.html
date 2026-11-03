@@ -49,8 +49,8 @@
         <td>{{ r.product_specification or "-" }}</td>
         <td>{{ r.unit or "" }}</td>
         <td>{{ quality_labels.get(r.quality_status, r.quality_status) }}</td>
-        <td style="text-align:right;">{{ r.total_qty }}</td>
-        <td style="text-align:right;color:#ef6c00;font-weight:600;">
+        <td style="text-align:right;color:#2440b3;">{{ r.total_qty }}</td>
+        <td style="text-align:right;color:#f00;font-weight:600;">
           {{ r.locked_qty }}
         </td>
         <td style="text-align:right;font-weight:600;
@@ -58,7 +58,7 @@
           {{ r.available_qty }}
         </td>
         <td style="text-align:right;">{{ r.unit_cost or "" }}</td>
-        <td style="text-align:right;">{{ r.total_cost }}</td>
+        <td style="text-align:right;color:#ef6c00;">{{ r.total_cost }}</td>
         <td>{{ r.updated_at.strftime("%Y-%m-%d %H:%M") if r.updated_at else "-" }}</td>
       </tr>
       {% endfor %}
@@ -69,12 +69,16 @@
   <tfoot>
     <tr style="background:#fafafa;font-weight:600;">
       <td colspan="7" style="text-align:right;">本页合计：</td>
-      <td style="text-align:right;">{{ rows|sum(attribute='total_qty') }}</td>
-      <td style="text-align:right;color:#ef6c00;">
+      <td style="text-align:right;color:#2440b3;">{{ rows|sum(attribute='total_qty') }}</td>
+      <td style="text-align:right;color:#f00;">
         {{ rows|sum(attribute='locked_qty') }}
       </td>
       <td style="text-align:right;color:#2e7d32;">
         {{ rows|sum(attribute='available_qty') }}
+      </td>
+      <td></td>
+      <td style="text-align:right;color:#ef6c00;">
+        {{ rows|sum(attribute='total_cost') }}
       </td>
       <td></td>
     </tr>

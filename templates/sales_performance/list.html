@@ -68,9 +68,9 @@
         <td style="text-align:right;">{{ r.quantity }}</td>
         <td>{{ r.unit or "" }}</td>
         <td style="text-align:right;">{{ r.unit_price }}</td>
-        <td style="text-align:right;">{{ r.amount }}</td>
-        <td style="text-align:right;">{{ r.cost }}</td>
-        <td style="text-align:right;">{{ r.profit }}</td>
+        <td style="text-align:right;color:#2440b3;">{{ r.amount }}</td>
+        <td style="text-align:right;color:#ef6c00;">{{ r.cost }}</td>
+        <td style="text-align:right;color:#2e7d32;">{{ r.profit }}</td>
         <td style="text-align:right;">{{ r.salesperson_name }}</td>
         <td style="text-align:right;">{{ r.is_joint_sales }}</td>
         <td style="text-align:right;">{{ r.is_changzhou_factory }}</td>
@@ -184,6 +184,32 @@
       </td></tr>
     {% endif %}
   </tbody>
+  <tfoot>
+    <tr style="background:#fafafa;font-weight:600;">
+      <td colspan="5" style="text-align:right;">本页合计：</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='quantity') }}</td>
+      <td></td>
+      <td></td>
+      <td style="text-align:right;color:#2440b3;">
+        {{ rows|sum(attribute='amount') }}
+      </td>
+      <td style="text-align:right;color:#ef6c00;">
+        {{ rows|sum(attribute='cost') }}
+      </td>
+      <td style="text-align:right;color:#2e7d32;">
+        {{ rows|sum(attribute='profit') }}
+      </td>
+      <td></td>
+      <td></td>
+      <td></td>
+      <td></td>
+      <td></td>
+      <td></td>
+      <td></td>
+      <td></td>
+      <td></td>
+    </tr>
+  </tfoot>
 </table>
 
 <div style="margin-top:16px;display:flex;gap:8px;align-items:center;">

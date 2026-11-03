@@ -36,7 +36,9 @@
     {{ order.planned_quantity }}{% if order.unit %} {{ order.unit }}{% endif %}
   </div>
   <div class="form-row"><label>业绩单号：</label>
-    {{ performance.performance_no if performance else "-" }}
+    <a href="{{ url_for('sales_performance.detail_page', perf_id=performance.id) }}">
+      {{ performance.performance_no if performance else "-" }}
+    </a>
   </div>
   <div class="form-row"><label>下单时间：</label>
     {{ order.order_time.strftime("%Y-%m-%d %H:%M") if order.order_time else "-" }}

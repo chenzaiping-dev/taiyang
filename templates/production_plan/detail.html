@@ -19,8 +19,7 @@
   <div class="form-row"><label>生产计划单号：</label>{{ plan.plan_no }}</div>
   <div class="form-row"><label>业绩单：</label>
     {% if performance %}
-      <a href="{{ url_for('production_plan.list_page',
-           performance_id=performance.id) }}">
+      <a href="{{ url_for('sales_performance.detail_page', perf_id=performance.id) }}">
         {{ performance.performance_no }} - {{ performance.company_name }}
         / {{ performance.product_name }}
       </a>
