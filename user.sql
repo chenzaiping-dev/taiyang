@@ -238,15 +238,15 @@ CREATE TABLE sales_performance (
     product_specification VARCHAR(500) NULL COMMENT '产品规格',
     unit VARCHAR(20) DEFAULT 'KG' COMMENT '单位',
 
-    unit_price DECIMAL(24, 6) NOT NULL DEFAULT 0 COMMENT '销售单价',
-    quantity DECIMAL(18, 6) NOT NULL DEFAULT 0 COMMENT '销售数量',
-    amount DECIMAL(24, 6) NOT NULL DEFAULT 0 COMMENT '销售金额',
+    unit_price DECIMAL(18, 4) NOT NULL DEFAULT 0 COMMENT '销售单价',
+    quantity DECIMAL(16, 4) NOT NULL DEFAULT 0 COMMENT '销售数量',
+    amount DECIMAL(18, 4) NOT NULL DEFAULT 0 COMMENT '销售金额',
 
     payment_status ENUM('UNPAID', 'PAID')
         NOT NULL DEFAULT 'UNPAID' COMMENT '收款状态: UNPAID未收款, PAID已收款',
 
-    cost DECIMAL(24, 6) NOT NULL DEFAULT 0 COMMENT '成本',
-    profit DECIMAL(24, 6) NOT NULL DEFAULT 0 COMMENT '利润',
+    cost DECIMAL(18, 4) NOT NULL DEFAULT 0 COMMENT '成本',
+    profit DECIMAL(18, 4) NOT NULL DEFAULT 0 COMMENT '利润',
 
     main_salesperson_id BIGINT UNSIGNED NULL COMMENT '主销售员ID',
     is_changzhou_factory TINYINT(1) NOT NULL DEFAULT 0
@@ -316,12 +316,12 @@ CREATE TABLE process_orders (
 
     followup_employee_id BIGINT UNSIGNED NOT NULL COMMENT '跟单员ID',
 
-    planned_quantity DECIMAL(18, 6) NOT NULL COMMENT '计划生产数量',
-    planned_cost_price DECIMAL(24, 6) DEFAULT 0 COMMENT '预计单位成本',
-    planned_total_cost DECIMAL(24, 6) DEFAULT 0 COMMENT '预计总成本',
+    planned_quantity DECIMAL(16, 4) NOT NULL COMMENT '计划生产数量',
+    planned_cost_price DECIMAL(18, 4) DEFAULT 0 COMMENT '预计单位成本',
+    planned_total_cost DECIMAL(18, 4) DEFAULT 0 COMMENT '预计总成本',
 
-    actual_total_cost DECIMAL(24, 6) DEFAULT 0 COMMENT '实际生产总成本',
-    completed_quantity DECIMAL(18, 6) DEFAULT 0 COMMENT '实际完工数量',
+    actual_total_cost DECIMAL(18, 4) DEFAULT 0 COMMENT '实际生产总成本',
+    completed_quantity DECIMAL(16, 4) DEFAULT 0 COMMENT '实际完工数量',
     
     status ENUM(
         'DRAFT',
@@ -365,9 +365,9 @@ CREATE TABLE process_order_materials (
 
     process_order_id BIGINT UNSIGNED NOT NULL COMMENT '工艺单ID',
     material_id BIGINT UNSIGNED NOT NULL COMMENT '原料ID',
-    ratio_value DECIMAL(18, 8) NOT NULL COMMENT '原料配比，小数形式，同一工艺单配比合计为1',
-    quantity DECIMAL(18, 6) NOT NULL DEFAULT 0 COMMENT '数量',
-    cost DECIMAL(24, 6) NOT NULL DEFAULT 0 COMMENT '成本',
+    ratio_value DECIMAL(16, 6) NOT NULL COMMENT '原料配比，小数形式，同一工艺单配比合计为1',
+    quantity DECIMAL(16, 4) NOT NULL DEFAULT 0 COMMENT '数量',
+    cost DECIMAL(18, 4) NOT NULL DEFAULT 0 COMMENT '成本',
     remark VARCHAR(255) DEFAULT NULL,
 
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -448,13 +448,13 @@ CREATE TABLE inventory_transactions (
 
     transaction_time DATETIME NOT NULL COMMENT '业务生效时间',
 
-    quantity_delta DECIMAL(18, 6) NOT NULL
+    quantity_delta DECIMAL(16, 4) NOT NULL
         COMMENT '库存变化数量：入库正数，出库负数',
 
-    unit_cost DECIMAL(24, 6) DEFAULT NULL
+    unit_cost DECIMAL(18, 4) DEFAULT NULL
         COMMENT '入库成本单价或调整计价单价',
 
-    total_cost DECIMAL(24, 6) DEFAULT NULL
+    total_cost DECIMAL(18, 4) DEFAULT NULL
         COMMENT '本流水对应的成本金额',
 
     supplier_id BIGINT UNSIGNED DEFAULT NULL COMMENT '供应商ID',
@@ -498,11 +498,11 @@ CREATE TABLE inventory_cost_layers (
 
     effective_time DATETIME NOT NULL COMMENT '成本层生效时间',
 
-    original_qty DECIMAL(18, 6) NOT NULL COMMENT '初始数量',
-    remaining_qty DECIMAL(18, 6) NOT NULL COMMENT '剩余数量',
+    original_qty DECIMAL(16, 4) NOT NULL COMMENT '初始数量',
+    remaining_qty DECIMAL(16, 4) NOT NULL COMMENT '剩余数量',
 
-    unit_cost DECIMAL(24, 6) NOT NULL COMMENT '成本单价',
-    original_cost DECIMAL(24, 6) NOT NULL COMMENT '初始成本金额',
+    unit_cost DECIMAL(18, 4) NOT NULL COMMENT '成本单价',
+    original_cost DECIMAL(18, 4) NOT NULL COMMENT '初始成本金额',
     warehouse_id BIGINT UNSIGNED NOT NULL COMMENT '成本层所属仓库',
 
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -532,9 +532,9 @@ CREATE TABLE inventory_cost_allocations (
     cost_layer_id BIGINT UNSIGNED NOT NULL
         COMMENT '被消耗的FIFO成本层ID',
 
-    quantity DECIMAL(18, 6) NOT NULL COMMENT '本层消耗数量',
-    unit_cost DECIMAL(24, 6) NOT NULL COMMENT '出库时的成本单价',
-    cost_amount DECIMAL(24, 6) NOT NULL COMMENT '本次分配成本金额',
+    quantity DECIMAL(16, 4) NOT NULL COMMENT '本层消耗数量',
+    unit_cost DECIMAL(18, 4) NOT NULL COMMENT '出库时的成本单价',
+    cost_amount DECIMAL(18, 4) NOT NULL COMMENT '本次分配成本金额',
 
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
@@ -562,7 +562,7 @@ CREATE TABLE finished_goods_batches (
     product_name VARCHAR(200) NOT NULL COMMENT '产品名称快照',
     product_specification VARCHAR(500) NULL COMMENT '产品规格快照',
     unit VARCHAR(20) DEFAULT 'KG' COMMENT '成品计量单位',
-    unit_cost DECIMAL(24, 6) DEFAULT NULL COMMENT '成品计价单价，由用户指定或者从工艺单传过来',
+    unit_cost DECIMAL(18, 4) DEFAULT NULL COMMENT '成品计价单价，由用户指定或者从工艺单传过来',
 
     batch_source ENUM(
         'PRODUCTION',
@@ -644,8 +644,8 @@ CREATE TABLE finished_goods_document_lines (
     batch_id BIGINT UNSIGNED NOT NULL COMMENT '成品批次ID',
     from_warehouse_id BIGINT UNSIGNED DEFAULT NULL COMMENT '调出仓库；入库时可为空',
     to_warehouse_id BIGINT UNSIGNED DEFAULT NULL COMMENT '调入仓库；出库时可为空',
-    quantity DECIMAL(18, 6) NOT NULL COMMENT '本行业务数量，始终为正数',
-    unit_cost DECIMAL(24, 6) DEFAULT NULL COMMENT '可选成本快照，不用于FIFO分配',
+    quantity DECIMAL(16, 4) NOT NULL COMMENT '本行业务数量，始终为正数',
+    unit_cost DECIMAL(18, 4) DEFAULT NULL COMMENT '可选成本快照，不用于FIFO分配',
     related_outbound_line_id BIGINT UNSIGNED DEFAULT NULL COMMENT '退货时关联原出库明细行',
     remark VARCHAR(500) DEFAULT NULL,
 
@@ -687,7 +687,7 @@ CREATE TABLE finished_goods_inventory (
     warehouse_id BIGINT UNSIGNED NOT NULL COMMENT '仓库ID',
     batch_id BIGINT UNSIGNED NOT NULL COMMENT '成品批次ID',
 
-    quantity DECIMAL(18, 6) NOT NULL DEFAULT 0 COMMENT '当前库存数量',
+    quantity DECIMAL(16, 4) NOT NULL DEFAULT 0 COMMENT '当前库存数量',
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,
 
@@ -730,7 +730,7 @@ CREATE TABLE finished_goods_transactions (
         COMMENT '流水类型: PRODUCTION_IN生产入库, OUTBOUND出库, TRANSFER_OUT调拨出库, 
         TRANSFER_IN调拨入库, CUSTOMER_RETURN客户退货, ADJUSTMENT库存调整',
 
-    quantity_delta DECIMAL(18, 6) NOT NULL COMMENT '库存变化数量：入库正数，出库负数',
+    quantity_delta DECIMAL(16, 4) NOT NULL COMMENT '库存变化数量：入库正数，出库负数',
 
     transaction_time DATETIME NOT NULL COMMENT '库存变动生效时间',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -770,10 +770,10 @@ CREATE TABLE production_plans (
     plan_no VARCHAR(64) NOT NULL COMMENT '生产计划单号',
     performance_id BIGINT UNSIGNED NOT NULL COMMENT '业绩ID',
 
-    total_quantity DECIMAL(18, 6) NOT NULL
+    total_quantity DECIMAL(16, 4) NOT NULL
         COMMENT '计划覆盖总数量',
 
-    process_quantity DECIMAL(18, 6) NOT NULL DEFAULT 0
+    process_quantity DECIMAL(16, 4) NOT NULL DEFAULT 0
         COMMENT '计划新生产数量',
 
     status ENUM(
@@ -815,8 +815,8 @@ CREATE TABLE production_plan_process_orders (
     production_plan_id BIGINT UNSIGNED NOT NULL COMMENT '生产计划ID',
     process_order_id BIGINT UNSIGNED NOT NULL COMMENT '工艺单ID',
 
-    planned_quantity DECIMAL(18, 6) NOT NULL
-        COMMENT '该工艺单计划生产数量',
+    locked_quantity DECIMAL(16, 4) NOT NULL
+        COMMENT '该工艺单锁定数量',
 
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
@@ -832,7 +832,7 @@ CREATE TABLE production_plan_process_orders (
         FOREIGN KEY (process_order_id)
         REFERENCES process_orders(id),
 
-    CHECK (planned_quantity > 0)
+    CHECK (locked_quantity >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 COMMENT='生产计划与工艺单关联表';
 
@@ -885,9 +885,9 @@ CREATE TABLE shipment_plan_lines (
     product_specification VARCHAR(500) NULL COMMENT '产品规格快照',
     unit VARCHAR(20) DEFAULT 'KG' COMMENT '单位快照',
 
-    unit_price DECIMAL(24, 6) NOT NULL DEFAULT 0 COMMENT '销售单价',
-    quantity DECIMAL(18, 6) NOT NULL COMMENT '计划发货数量',
-    shipped_quantity DECIMAL(18, 6) NOT NULL DEFAULT 0
+    unit_price DECIMAL(18, 4) NOT NULL DEFAULT 0 COMMENT '销售单价',
+    quantity DECIMAL(16, 4) NOT NULL COMMENT '计划发货数量',
+    shipped_quantity DECIMAL(16, 4) NOT NULL DEFAULT 0
         COMMENT '累计实际发货数量',
 
     remark VARCHAR(500) NULL COMMENT '备注',
@@ -915,9 +915,9 @@ CREATE TABLE shipment_plan_allocations (
     warehouse_id BIGINT UNSIGNED NOT NULL COMMENT '仓库ID',
     batch_id BIGINT UNSIGNED NOT NULL COMMENT '成品批次ID',
 
-    planned_quantity DECIMAL(18, 6) NOT NULL
+    planned_quantity DECIMAL(16, 4) NOT NULL
         COMMENT '该批次计划发货数量',
-    shipped_quantity DECIMAL(18, 6) NOT NULL DEFAULT 0
+    shipped_quantity DECIMAL(16, 4) NOT NULL DEFAULT 0
         COMMENT '该批次累计实际发货数量',
 
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -962,10 +962,10 @@ CREATE TABLE finished_goods_reservations (
     warehouse_id BIGINT UNSIGNED NOT NULL COMMENT '预留仓库ID',
     batch_id BIGINT UNSIGNED NOT NULL COMMENT '预留成品批次ID',
 
-    reserved_quantity DECIMAL(18, 6) NOT NULL
+    reserved_quantity DECIMAL(16, 4) NOT NULL
         COMMENT '初始预留数量',
 
-    remaining_quantity DECIMAL(18, 6) NOT NULL
+    remaining_quantity DECIMAL(16, 4) NOT NULL
         COMMENT '当前仍占用的预留数量',
 
     status ENUM(

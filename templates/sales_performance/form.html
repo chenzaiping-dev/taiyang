@@ -71,16 +71,16 @@
     <legend>金额与数量</legend>
     <div class="form-row">
       <label>销售单价 *</label>
-      <input type="number" step="0.000001" min="0" name="unit_price"
+      <input type="number" step="0.0001" min="0" name="unit_price"
              value="{{ form_data.unit_price }}" required>
 
       <label>销售数量 *</label>
-      <input type="number" step="0.000001" min="0.000001" name="quantity"
+      <input type="number" step="0.0001" min="0.0001" name="quantity"
              value="{{ form_data.quantity }}" required>
     </div>
     <div class="form-row">
       <label>销售金额 *</label>
-      <input type="number" step="0.000001" min="0" name="amount"
+      <input type="number" step="0.0001" min="0" name="amount"
              value="{{ form_data.amount }}" required>
 
       <label>收款状态</label>
@@ -93,11 +93,11 @@
     </div>
     <div class="form-row">
       <label>成本</label>
-      <input type="number" step="0.000001" min="0" name="cost"
+      <input type="number" step="0.0001" min="0" name="cost"
              value="{{ form_data.cost }}">
 
       <label>利润</label>
-      <input type="number" step="0.000001" name="profit"
+      <input type="number" step="0.0001" name="profit"
              value="{{ form_data.profit }}">
     </div>
   </fieldset>

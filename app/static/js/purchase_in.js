@@ -23,9 +23,9 @@
   }
 
   function formatMoney(n) {
-    // 保留 6 位小数，去除多余尾零
+    // 保留 4 位小数，去除多余尾零
     return n
-      .toFixed(6)
+      .toFixed(4)
       .replace(/\.?0+$/, "") || "0";
   }
 

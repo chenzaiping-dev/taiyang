@@ -1,4 +1,4 @@
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from datetime import datetime
 from sqlalchemy import func
 
@@ -12,22 +12,10 @@ from app.generated.models.inventory_transactions import InventoryTransaction
 from app.generated.models.inventory_cost_layers import InventoryCostLayer
 
 from app.utils.datetime_utils import now_beijing_naive
-
-Q2 = Decimal("0.000001")   # DECIMAL(18,6)
-Q4 = Decimal("0.0001")
-
+from app.utils.decimal_utils import _q3, _q6, _q6_amount
 
 class InventoryError(Exception):
     pass
-
-
-def _q6(v) -> Decimal:
-    return Decimal(str(v)).quantize(Q2, rounding=ROUND_HALF_UP)
-
-
-def _q6_amount(v) -> Decimal:
-    return Decimal(str(v)).quantize(Q2, rounding=ROUND_HALF_UP)
-
 
 def generate_document_no(prefix: str = "PI") -> str:
     """生成单据号：前缀 + yyyyMMddHHmmss + 4位流水"""

@@ -1,4 +1,4 @@
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from datetime import date, datetime
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select, case, func, or_, exists
@@ -9,12 +9,7 @@ from app.generated.models.sales_performance import SalesPerformance
 from app.generated.models.production_plans import ProductionPlan
 from app.generated.models.shipment_plans import ShipmentPlan
 from app.utils.datetime_utils import now_beijing_naive
-
-Q6 = Decimal("0.000001")
-
-def _q6(v):
-    return Decimal(str(v)).quantize(Q6, rounding=ROUND_HALF_UP)
-
+from app.utils.decimal_utils import _q3, _q6
 
 ALLOWED_STATUS = {"DRAFT", "SUBMITTED", "PRODUCTION_PLANNED",
                   "FINISHED_GOODS_STOCKED", "SHIPMENT_SCHEDULED",

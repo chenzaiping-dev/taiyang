@@ -1,4 +1,4 @@
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, case, func, or_
 
@@ -13,12 +13,7 @@ from app.generated.models.finished_goods_inventory import FinishedGoodsInventory
 from app.generated.models.finished_goods_transactions import FinishedGoodsTransaction
 from app.generated.models.finished_goods_reservations import FinishedGoodsReservation
 from app.utils.datetime_utils import now_beijing, now_beijing_naive
-
-Q6 = Decimal("0.000001")
-
-
-def _q6(v):
-    return Decimal(str(v)).quantize(Q6, rounding=ROUND_HALF_UP)
+from app.utils.decimal_utils import _q3, _q6
 
 
 def gen_doc_no(prefix: str) -> str:

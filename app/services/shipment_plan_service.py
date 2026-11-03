@@ -1,5 +1,5 @@
 from sqlalchemy import select, case, func, or_
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 
 
@@ -19,9 +19,7 @@ from app.generated.models.production_plans import ProductionPlan
 from app.services.finished_goods_service import FinishedGoodsError, FinishedGoodsService
 
 from app.utils.datetime_utils import now_beijing, now_beijing_naive
-
-Q6 = Decimal("0.000001")
-
+from app.utils.decimal_utils import _q3, _q6
 
 # ==================== 状态流转 ====================
 
@@ -37,10 +35,6 @@ def _get_plan_or_raise(plan_id: int) -> ShipmentPlan:
     if not plan:
         raise ShipmentPlanError("发货计划不存在")
     return plan
-
-def _q6(v):
-    return Decimal(str(v)).quantize(Q6, rounding=ROUND_HALF_UP)
-
 
 def gen_shipment_no() -> str:
     ts = now_beijing().strftime("%Y%m%d%H%M%S")

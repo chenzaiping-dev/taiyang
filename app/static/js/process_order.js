@@ -10,7 +10,7 @@
   let nextIndex = parseInt(form?.dataset.nextIndex || "0", 10);
 
   const toNum = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
-  const fmt   = (n) => (n.toFixed(6).replace(/\.?0+$/, "") || "0");
+  const fmt   = (n) => (n.toFixed(4).replace(/\.?0+$/, "") || "0");
 
   function renumber() {
     tbody.querySelectorAll(".mat-row").forEach((tr, i) => {
@@ -115,7 +115,7 @@
     if (!valid) err = err || "请至少填写一条原料配比";
     if (!err && planQty <= 0) err = "计划数量必须大于 0";
     if (!err && Math.abs(sum - 1) > 1e-6) {
-      err = `原料配比合计必须为 1，当前为 ${sum.toFixed(8)}`;
+      err = `原料配比合计必须为 1，当前为 ${sum.toFixed(6)}`;
     }
     if (err) { e.preventDefault(); alert(err); return; }
 

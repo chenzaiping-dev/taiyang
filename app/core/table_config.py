@@ -143,8 +143,8 @@ TABLES = {
     },
     "production_plan_process_orders": {
         "label": "生产计划与工艺单关联表", "module": "生产管理", "mode": "crud",
-        "list_fields": ["id", "production_plan_id", "process_order_id", "planned_quantity"],
-        "form_fields": ["production_plan_id", "process_order_id", "planned_quantity"],
+        "list_fields": ["id", "production_plan_id", "process_order_id", "locked_quantity"],
+        "form_fields": ["production_plan_id", "process_order_id", "locked_quantity"],
         "search_fields": ["production_plan_id", "process_order_id", "phone"],
         "can_create": True, "can_edit": True, "can_delete": False,
     },    

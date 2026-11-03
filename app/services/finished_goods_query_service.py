@@ -1,4 +1,4 @@
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from sqlalchemy import select, case, func, or_
 from app.extensions import db
 from app.generated.models.warehouses import Warehouse

@@ -1,6 +1,5 @@
-from decimal import Decimal
 from sqlalchemy import select, case, func, or_
-
+from decimal import Decimal
 from app.extensions import db
 from app.generated.models.employees import Employee
 from app.generated.models.materials import Material
@@ -12,6 +11,7 @@ from app.generated.models.inventory_transactions import InventoryTransaction
 from app.generated.models.inventory_cost_layers import InventoryCostLayer
 
 from app.generated.models.process_orders import ProcessOrder
+from app.utils.decimal_utils import _q3, _q6
 
 class InventoryQueryService:
 
@@ -115,9 +115,10 @@ class InventoryQueryService:
             qty = d.get("total_qty") or Decimal("0")
             cost = d.get("total_cost") or Decimal("0")
             d["avg_unit_cost"] = (
-                (cost / qty).quantize(Decimal("0.000001"))
+                (cost / qty).quantize(Decimal("0.0001"))
                 if qty > 0 else Decimal("0")
             )
+            d["total_cost"] = _q6(d.get("total_cost"))
             rows.append(d)
 
         return rows, total

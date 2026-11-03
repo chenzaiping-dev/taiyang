@@ -271,7 +271,7 @@ def edit_page(plan_id):
                     if po.factory_id else ""
                 ),
                 "planned_quantity": str(po.planned_quantity),
-                "locked_quantity": str(rel.planned_quantity),
+                "locked_quantity": str(rel.locked_quantity),
                 "batch_no": po.batch_no,
                 "status": po.status,
             })

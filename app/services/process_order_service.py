@@ -1,4 +1,4 @@
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from sqlalchemy import select
 from datetime import datetime
 
@@ -17,10 +17,7 @@ from app.generated.models.inventory_transactions import InventoryTransaction
 from app.services.finished_goods_service import FinishedGoodsError, FinishedGoodsService
 from app.generated.models.finished_goods_batches import FinishedGoodsBatch
 
-
-
-Q6 = Decimal("0.000001")
-RATIO_TOLERANCE = Decimal("0.000001")   # 配比合计容差
+from app.utils.decimal_utils import _q3, _q6, RATIO_TOLERANCE
 
 # ---------- 状态机 ----------
 # 允许的动作：当前状态 -> 目标状态
@@ -66,11 +63,6 @@ class PlaceOrderResult(dict):
 
 class ProcessOrderError(Exception):
     pass
-
-
-def _q6(v) -> Decimal:
-    return Decimal(str(v)).quantize(Q6, rounding=ROUND_HALF_UP)
-
 
 def generate_process_order_no() -> str:
     ts = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -150,7 +142,7 @@ class ProcessOrderService:
 
         # 数量补齐
         total_qty = sum((it["quantity"] for it in normalized), Decimal("0"))
-        if normalized and abs(total_qty - q) > Decimal("0.000001"):
+        if normalized and abs(total_qty - q) > Decimal("0.0001"):
             diff = q - total_qty
             normalized[-1]["quantity"] = _q6(normalized[-1]["quantity"] + diff)
 
@@ -331,6 +323,7 @@ class ProcessOrderService:
                 ProcessOrder.process_order_no,
                 ProcessOrder.factory_id,
                 Factory.factory_name.label("factory_name"),
+                ProcessOrder.batch_no,
                 ProcessOrder.product_name,
                 ProcessOrder.planned_quantity,
                 ProcessOrder.unit,

@@ -1,4 +1,4 @@
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
@@ -21,11 +21,7 @@ from app.generated.models.finished_goods_inventory import FinishedGoodsInventory
 from app.generated.models.finished_goods_transactions import FinishedGoodsTransaction
 from app.generated.models.finished_goods_reservations import FinishedGoodsReservation
 from app.utils.datetime_utils import now_beijing, now_beijing_naive
-
-Q6 = Decimal("0.000001")
-
-def _q6(v):
-    return Decimal(str(v)).quantize(Q6, rounding=ROUND_HALF_UP)
+from app.utils.decimal_utils import _q3, _q6
 
 def gen_plan_no() -> str:
     ts = now_beijing().strftime("%Y%m%d%H%M%S")
@@ -308,10 +304,10 @@ class ProductionPlanService:
                         f"关联工艺单 #{po_id} 不存在"
                     )
 
-                old_locked_qty = _q6(rel.planned_quantity)
+                old_locked_qty = _q6(rel.locked_quantity)
                 if old_locked_qty != locked_qty:
                     print(f"工艺单 {order.process_order_no} 锁定数量由 {old_locked_qty} 改为 {locked_qty}")
-                    rel.planned_quantity = locked_qty
+                    rel.locked_quantity = locked_qty
                 # 只有草稿状态允许工艺单信息修改
                 if order.status != "DRAFT":
                     total_planned += locked_qty
@@ -424,7 +420,7 @@ class ProductionPlanService:
             rel = ProductionPlanProcessOrder(
                 production_plan_id=plan.id,
                 process_order_id=order.id,
-                planned_quantity=locked_qty,
+                locked_quantity=locked_qty,
                 created_at=now_beijing_naive(),
             )
             db.session.add(rel)
@@ -556,7 +552,7 @@ class ProductionPlanService:
         po_rows = (
             db.session.query(
                 ProductionPlanProcessOrder.id.label("relation_id"),
-                ProductionPlanProcessOrder.planned_quantity.label("locked_quantity"),
+                ProductionPlanProcessOrder.locked_quantity,
                 ProcessOrder.id.label("process_order_id"),
                 ProcessOrder.process_order_no,
                 ProcessOrder.factory_id,
@@ -712,7 +708,7 @@ class ProductionPlanService:
                 f"以下工艺单尚未入库，无法完成：{details}"
             )
 
-        # 3. 逐关联行写预留（按 planned_quantity）
+        # 3. 逐关联行写预留（按 locked_quantity
         try:
             for rel in rels:
                 po = pos_map.get(rel.process_order_id)
@@ -723,7 +719,7 @@ class ProductionPlanService:
                 ProductionPlanService._reserve_finished_goods_for_po(
                     plan=plan,
                     po=po,
-                    planned_quantity=_q6(rel.planned_quantity),  # ⭐ 按计划量锁
+                    planned_quantity=_q6(rel.locked_quantity),  # ⭐ 按锁定量
                     operator_id=operator_id,
                 )
             plan.status = "COMPLETED"

@@ -95,7 +95,7 @@
           </select>
         </td>
         <td>
-          <input type="number" step="0.000001" min="0"
+          <input type="number" step="0.0001" min="0"
                  name="lines[{{ loop.index0 }}][quantity]"
                  value="{{ line.quantity }}" required>
         </td>
@@ -125,7 +125,7 @@
         {% endfor %}
       </select>
     </td>
-    <td><input type="number" step="0.000001" min="0" name="lines[__IDX__][quantity]" required></td>
+    <td><input type="number" step="0.0001" min="0" name="lines[__IDX__][quantity]" required></td>
     <td><button type="button" class="btn btn-danger btn-remove-row">删除</button></td>
   </tr>
 </template>
