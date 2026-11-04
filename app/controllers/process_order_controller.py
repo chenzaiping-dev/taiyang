@@ -13,7 +13,7 @@ from app.generated.models.process_order_materials import ProcessOrderMaterial
 
 from app.schemas.process_order_schema import ProcessOrderRequestSchema
 from app.services.process_order_service import (
-    ProcessOrderService, ProcessOrderError,
+    ProcessOrderService, ProcessOrderError, STATUS_LABELS
 )
 from app.services.form_parser import parse_process_order_form, FormParseError
 
@@ -61,6 +61,7 @@ def list_page():
         keyword=keyword or "", status=status or "",
         factory_id=factory_id or "",
         factories=Factory.query.filter_by(status=1).order_by(Factory.id).all(),
+        status_labels=STATUS_LABELS,
         warehouses=(
             Warehouse.query
             .filter_by(warehouse_type="raw_material", status=1)
@@ -107,6 +108,7 @@ def detail_page(order_id: int):
         order=order,
         materials=materials,
         material_map=material_map,   # ⭐ 传给模板
+        status_labels=STATUS_LABELS,
         factory=factory,
         performance=performance,
         follow=follow,

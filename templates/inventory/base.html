@@ -137,6 +137,64 @@
       .nav-group > .nav-label { padding: 0 8px; font-size: 13px; }
       .nav-dropdown { position: fixed; left: 12px; right: 12px; top: 52px; }
     }
+
+    .btn-sm { padding:2px 8px;font-size:12px;text-decoration:none;
+              border:1px solid #ccc;border-radius:3px;background:#fff;color:#333;cursor:pointer; }
+    .btn-sm.btn-primary { background:#1976d2;color:#fff;border-color:#1976d2; }
+    .btn-sm.btn-warn    { background:#ff9800;color:#fff;border-color:#ff9800; }
+    .btn-sm.btn-success { background:#2e7d32;color:#fff;border-color:#2e7d32; }
+    .btn-sm.btn-danger  { background:#c62828;color:#fff;border-color:#c62828; }
+    .btn-sm[disabled]   { opacity:.45;cursor:not-allowed; }
+
+    .status-badge { display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px; }
+    .status-draft       { background:#eee;color:#555; }
+    .status-confirmed   { background:#e3f2fd;color:#1565c0; }
+    .status-in_progress { background:#fff3e0;color:#ef6c00; }
+    .status-completed   { background:#e8f5e9;color:#2e7d32; }
+    .status-cancelled   { background:#fdecea;color:#c62828; }
+
+    .res-badge { display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px; }
+    .res-active   { background:#e8f5e9;color:#2e7d32; }
+    .res-released { background:#eee;color:#555; }
+    .res-consumed { background:#e3f2fd;color:#1565c0; }
+
+    .po-badge { display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px; }
+    .po-draft      { background:#eee;color:#555; }
+    .po-ordered    { background:#e3f2fd;color:#1565c0; }
+    .po-producing  { background:#fff3e0;color:#ef6c00; }
+    .po-completed  { background:#e8f5e9;color:#2e7d32; }
+    .po-received   { background:#ede7f6;color:#4527a0; }
+    .po-cancelled  { background:#fdecea;color:#c62828; }
+
+    .status-ordered    { background:#e3f2fd; color:#1565c0; }
+    .status-producing  { background:#fff3e0; color:#ef6c00; }
+    .status-completed  { background:#e8f5e9; color:#2e7d32; }
+    .status-received   { background:#ede7f6; color:#4527a0; }
+
+
+    .btn-small { padding:2px 8px;font-size:12px; }
+    .btn-warn  { background:#ff9800;color:#fff;border-color:#ff9800; }
+    .btn[disabled] { opacity:.4;cursor:not-allowed; }
+    .btn-sm.disabled    { opacity:.45;cursor:not-allowed;pointer-events:none; }
+
+    .detail-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .detail-table th {
+      background:#f8f8f8; text-align:left; padding:8px 10px;
+      border:1px solid #eee; width:150px; color:#555; font-weight:500;
+    }
+    .detail-table td { padding:8px 10px; border:1px solid #eee; }
+    .status-submitted { background:#e3f2fd;color:#1565c0; }
+    .status-production_planned { background:#fff3e0;color:#ef6c00; }
+    .status-finished_goods_stocked { background:#e8f5e9;color:#2e7d32; }
+    .status-shipment_scheduled { background:#ede7f6;color:#4527a0; }
+    .pay-badge { display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px; }
+    .pay-unpaid { background:#fdecea;color:#c62828; }
+    .pay-paid { background:#e8f5e9;color:#1b5e20; }
+    .btn-success { background:#2e7d32;color:#fff;border-color:#2e7d32; }
+
+    .status-planned           { background:#e3f2fd;color:#1565c0; }
+    .status-partially_shipped { background:#fff3e0;color:#ef6c00; }
+    .status-shipped           { background:#e8f5e9;color:#2e7d32; }
   </style>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/po_suggest.css') }}">
 </head>

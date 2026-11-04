@@ -9,13 +9,12 @@
   <input type="text" name="keyword" value="{{ keyword }}" placeholder="单号/产品/批号">
   <select name="status">
     <option value="">-- 全部状态 --</option>
-    {% for code, label in [
-      ('DRAFT','草稿'),('ORDERED','已下单'),('PRODUCING','生产中'),
-      ('COMPLETED','已完工'),('RECEIVED','已出库'),('CANCELLED','已取消')
-    ] %}
-      <option value="{{ code }}" {% if status == code %}selected{% endif %}>{{ label }}</option>
+    {% for code, label in status_labels.items() %}
+      <option value="{{ code }}"
+        {% if status == code %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
   </select>
+
   <select name="factory_id">
     <option value="">-- 全部加工厂 --</option>
     {% for f in factories %}
@@ -188,22 +187,6 @@
   {% endif %}
 </div>
 
-<style>
-  .status-badge { display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px; }
-  .status-draft      { background:#eee;    color:#555; }
-  .status-ordered    { background:#e3f2fd; color:#1565c0; }
-  .status-producing  { background:#fff3e0; color:#ef6c00; }
-  .status-completed  { background:#e8f5e9; color:#2e7d32; }
-  .status-received   { background:#ede7f6; color:#4527a0; }
-  .status-cancelled  { background:#fdecea; color:#c62828; }
-
-  .btn-small { padding:2px 8px;font-size:12px; }
-  .btn-warn  { background:#ff9800;color:#fff;border-color:#ff9800; }
-  .btn[disabled] { opacity:.4;cursor:not-allowed; }
-  .flash { padding:8px 12px;border-radius:4px;margin-bottom:12px;font-size:13px; }
-  .flash-success { background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9; }
-  .flash-error   { background:#fdecea;color:#b3261e;border:1px solid #f5c2c0; }
-</style>
 {% endblock %}
 
 <script>

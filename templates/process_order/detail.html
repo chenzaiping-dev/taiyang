@@ -53,7 +53,9 @@
   <div class="form-row"><label>预计总成本：</label>{{ order.planned_total_cost }}</div>
   <div class="form-row"><label>实际总成本：</label>{{ order.actual_total_cost }}</div>
   <div class="form-row"><label>状态：</label>
-    <span class="status-badge status-{{ order.status|lower }}">{{ order.status }}</span>
+    <span class="status-badge status-{{ order.status|lower }}">
+      {{ status_labels.get(order.status, order.status) }}
+    </span>
   </div>
   <div class="form-row"><label>备注：</label>{{ order.remark or "-" }}</div>
 </fieldset>

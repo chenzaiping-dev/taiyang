@@ -1,0 +1,166 @@
+{% extends "inventory/base.html" %}
+{% block title %}原料库存（FIFO 成本层）{% endblock %}
+
+{% block content %}
+<h2>原料库存查询（按 FIFO 成本层展示）</h2>
+
+<form method="get" action="{{ url_for('inventory_query.material_stock_with_cost_layers_page') }}"
+      style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+  {% if available_materials %}
+  <select name="material_id">
+    <option value="">-- 全部原料 --</option>
+    {% for m in available_materials %}
+      <option value="{{ m.material_code }}"
+        {% if material_code == m.material_code %}selected{% endif %}>
+        {{ m.material_code }} - {{ m.material_name }}
+      </option>
+    {% endfor %}
+  </select>
+  <input type="hidden" name="material_code" value="{{ material_code }}">
+  {% else %}
+  <input type="text" name="material_code" value="{{ material_code }}"
+         placeholder="原料编码/名称" maxlength="50">
+  {% endif %}
+
+  <select name="warehouse_id" onchange="this.form.submit()">
+    <option value="">-- 全部仓库 --</option>
+    {% for w in warehouses %}
+      <option value="{{ w.id }}"
+        {% if warehouse_id|string == w.id|string %}selected{% endif %}>
+        [{{ {'raw_material':'原料','general':'普通'}.get(w.warehouse_type, w.warehouse_type) }}]
+        {{ w.warehouse_code }} - {{ w.warehouse_name }}
+      </option>
+    {% endfor %}
+  </select>
+
+  <label style="display:inline-flex;align-items:center;gap:4px;font-size:13px;">
+    <input type="checkbox" name="group_by_warehouse" value="1"
+           {% if group_by_warehouse %}checked{% endif %}>
+    显示仓库列
+  </label>
+
+  <button type="submit" class="btn btn-primary">查询</button>
+  <a class="btn" href="{{ url_for('inventory_query.material_stock_with_cost_layers_page') }}">重置</a>
+</form>
+
+{% if current_wh %}
+  <div style="margin-bottom:12px;padding:8px 12px;background:#e3f2fd;
+              border:1px solid #90caf9;border-radius:4px;font-size:13px;">
+    当前仓库：
+    <strong>{{ current_wh.warehouse_code }} - {{ current_wh.warehouse_name }}</strong>
+    <a style="margin-left:12px;color:#1565c0;"
+       href="{{ url_for('inventory_query.material_stock_with_cost_layers_page',
+            material_code=material_code) }}">清除仓库筛选</a>
+  </div>
+{% endif %}
+
+<table style="width:100%;border-collapse:collapse;font-size:13px;">
+  <thead>
+    <tr style="background:#f5f5f5;">
+      <th style="width:60px;">层ID</th>
+      <th>原料编码</th>
+      <th>原料名称</th>
+      <th style="width:60px;">单位</th>
+      {% if group_by_warehouse %}
+        <th>仓库</th>
+      {% endif %}
+      <th style="width:100px;">成本层类型</th>
+      <th style="width:140px;">生效时间</th>
+      <th style="width:120px;text-align:right;">原始数量</th>
+      <th style="width:120px;text-align:right;">剩余数量</th>
+      <th style="width:110px;text-align:right;">单价</th>
+      <th style="width:130px;text-align:right;">剩余金额</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if rows %}
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.layer_id }}</td>
+        <td>{{ r.material_code }}</td>
+        <td>{{ r.material_name }}</td>
+        <td>{{ r.unit or "" }}</td>
+        {% if group_by_warehouse %}
+          <td>
+            <a href="{{ url_for('inventory_query.material_stock_with_cost_layers_page',
+                 warehouse_id=r.warehouse_id,
+                 material_code=r.material_code,
+                 group_by_warehouse='1') }}"
+               title="只看该原料在此仓库的库存">
+              {{ r.warehouse_code }} - {{ r.warehouse_name }}
+            </a>
+          </td>
+        {% endif %}
+        <td>
+          <span class="layer-badge layer-{{ r.layer_type|lower }}">
+            {{ {'PURCHASE':'采购',
+                'STOCKTAKE_RESET':'盘点重置',
+                'RETURN':'退货'}.get(r.layer_type, r.layer_type) }}
+          </span>
+        </td>
+        <td>{{ r.effective_time.strftime("%Y-%m-%d %H:%M:%S")
+               if r.effective_time else "-" }}</td>
+        <td style="text-align:right;">{{ r.original_qty }}</td>
+        <td style="text-align:right;color:#2440b3;font-weight:600;">
+          {{ r.remaining_qty }}
+        </td>
+        <td style="text-align:right;">{{ r.unit_cost }}</td>
+        <td style="text-align:right;color:#ef6c00;">{{ r.remaining_cost }}</td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr>
+        <td colspan="{{ 11 if group_by_warehouse else 10 }}"
+            style="text-align:center;color:#999;padding:24px;">
+          {% if current_wh %}
+            仓库【{{ current_wh.warehouse_name }}】中暂无剩余库存成本层
+          {% else %}
+            没有符合条件的成本层
+          {% endif %}
+        </td>
+      </tr>
+    {% endif %}
+  </tbody>
+  <tfoot>
+    <tr style="background:#fafafa;font-weight:600;">
+      {% if group_by_warehouse %}
+        <td colspan="8" style="text-align:right;">本页合计：</td>
+      {% else %}
+        <td colspan="7" style="text-align:right;">本页合计：</td>
+      {% endif %}
+      <td style="text-align:right;color:#2440b3;">
+        {{ rows|sum(attribute='remaining_qty') }}
+      </td>
+      <td></td>
+      <td style="text-align:right;color:#ef6c00;">
+        {{ rows|sum(attribute='remaining_cost') }}
+      </td>
+    </tr>
+  </tfoot>
+</table>
+
+<div style="margin-top:16px;display:flex;align-items:center;gap:8px;">
+  <span>共 {{ total }} 条，第 {{ page }}/{{ total_pages }} 页</span>
+  {% if page > 1 %}
+    <a class="btn" href="{{ url_for('inventory_query.material_stock_with_cost_layers_page',
+         material_code=material_code,
+         warehouse_id=warehouse_id,
+         group_by_warehouse='1' if group_by_warehouse else '',
+         page=page-1) }}">上一页</a>
+  {% endif %}
+  {% if page < total_pages %}
+    <a class="btn" href="{{ url_for('inventory_query.material_stock_with_cost_layers_page',
+         material_code=material_code,
+         warehouse_id=warehouse_id,
+         group_by_warehouse='1' if group_by_warehouse else '',
+         page=page+1) }}">下一页</a>
+  {% endif %}
+</div>
+
+<style>
+  .layer-badge { display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px; }
+  .layer-purchase        { background:#e8f5e9;color:#2e7d32; }
+  .layer-stocktake_reset { background:#fff3e0;color:#ef6c00; }
+  .layer-return          { background:#ede7f6;color:#4527a0; }
+</style>
+{% endblock %}

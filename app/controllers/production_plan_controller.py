@@ -429,14 +429,6 @@ def _render_error(performance_id, msg, plan_id=None):
         errors=[msg],
     )
 
-PLAN_STATUS_LABELS = {
-    "DRAFT": "草稿",
-    "CONFIRMED": "已确认",
-    "IN_PROGRESS": "进行中",
-    "COMPLETED": "已完成",
-    "CANCELLED": "已取消",
-}
-
 PO_STATUS_LABELS = {
     "DRAFT": "草稿",
     "ORDERED": "已下单",

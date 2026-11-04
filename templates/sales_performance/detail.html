@@ -122,27 +122,4 @@
   更新时间：{{ perf.updated_at.strftime("%Y-%m-%d %H:%M") if perf.updated_at else "-" }}
 </div>
 
-<style>
-  .detail-table { width:100%; border-collapse:collapse; font-size:13px; }
-  .detail-table th {
-    background:#f8f8f8; text-align:left; padding:8px 10px;
-    border:1px solid #eee; width:150px; color:#555; font-weight:500;
-  }
-  .detail-table td { padding:8px 10px; border:1px solid #eee; }
-  .status-badge { display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px; }
-  .status-draft { background:#eee;color:#555; }
-  .status-submitted { background:#e3f2fd;color:#1565c0; }
-  .status-production_planned { background:#fff3e0;color:#ef6c00; }
-  .status-finished_goods_stocked { background:#e8f5e9;color:#2e7d32; }
-  .status-shipment_scheduled { background:#ede7f6;color:#4527a0; }
-  .status-completed { background:#e8f5e9;color:#1b5e20; }
-  .status-cancelled { background:#fdecea;color:#c62828; }
-  .pay-badge { display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px; }
-  .pay-unpaid { background:#fdecea;color:#c62828; }
-  .pay-paid { background:#e8f5e9;color:#1b5e20; }
-  .btn-success { background:#2e7d32;color:#fff;border-color:#2e7d32; }
-  .flash { padding:10px 14px;border-radius:4px;margin-bottom:12px; }
-  .flash.success { background:#e8f5e9;color:#1b5e20;border:1px solid #a5d6a7; }
-  .flash.error { background:#fdecea;color:#c62828;border:1px solid #ef9a9a; }
-</style>
 {% endblock %}
