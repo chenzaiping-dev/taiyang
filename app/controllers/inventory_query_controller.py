@@ -144,10 +144,11 @@ def material_io_summary_page():
 
 TRANSACTION_TYPE_LABELS = {
     "PURCHASE_IN":   "采购入库",
-    "PRODUCTION_OUT": "生产领料",
+    "PRODUCTION_OUT": "生产出库",
     "STOCKTAKE_GAIN": "盘盈入库",
     "STOCKTAKE_LOSS": "盘亏出库",
     "RETURN_IN":     "退货入库",
+    "RETURN_OUT":    "退货出库",
 }
 
 TRANSACTION_TYPE_DIRECTION = {
@@ -156,6 +157,7 @@ TRANSACTION_TYPE_DIRECTION = {
     "STOCKTAKE_GAIN": "in",
     "STOCKTAKE_LOSS": "out",
     "RETURN_IN":     "in",
+    "RETURN_OUT":    "out",
 }
 
 DOC_STATUS_LABELS = {
@@ -166,7 +168,7 @@ DOC_STATUS_LABELS = {
 
 DOC_TYPE_LABELS = {
     "PURCHASE_IN": "采购入库单",
-    "PRODUCTION_OUT": "生产领料单",
+    "PRODUCTION_OUT": "生产出库单",
     "STOCKTAKE": "盘点单",
     "ADJUSTMENT": "调整单",
     "RETURN": "退货单",
@@ -329,7 +331,7 @@ def document_detail_page(direction, document_id):
 
     # 校验方向匹配：入库单不能在出库视图里打开
     doc_type = detail["document"]["document_type"]
-    is_inbound = doc_type in ("PURCHASE_IN", "STOCKTAKE") and all(
+    is_inbound = doc_type in ("PURCHASE_IN", "STOCKTAKE", "RETURN") and all(
         l["transaction_type"] in ("PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN")
         for l in detail["lines"]
     )

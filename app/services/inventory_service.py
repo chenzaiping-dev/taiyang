@@ -22,9 +22,10 @@ class InventoryError(Exception):
 doc_type_map = {
     "PURCHASE_IN": "PURCHASE_IN",
     "STOCKTAKE_GAIN": "STOCKTAKE",
-    "RETURN_IN": "PURCHASE_IN",     # 单据类型复用
+    "RETURN_IN": "RETURN",
     "PRODUCTION_OUT": "PRODUCTION_OUT",
-    "STOCKTAKE_LOSS": "STOCKTAKE", 
+    "STOCKTAKE_LOSS": "STOCKTAKE",
+    "RETURN_OUT": "RETURN",
 }
 tx_type_map = {
     "PURCHASE_IN": "PURCHASE_IN",
@@ -32,6 +33,7 @@ tx_type_map = {
     "RETURN_IN": "RETURN_IN",
     "PRODUCTION_OUT": "PRODUCTION_OUT",
     "STOCKTAKE_LOSS": "STOCKTAKE_LOSS",
+    "RETURN_OUT": "RETURN_OUT", 
 }
 # 单号前缀
 prefix_map = {
@@ -40,6 +42,7 @@ prefix_map = {
     "RETURN_IN": "RI",
     "PRODUCTION_OUT": "PO",
     "STOCKTAKE_LOSS": "SL",
+    "RETURN_OUT": "RO",
 }
 layer_type_map = {
     "PURCHASE_IN": "PURCHASE",
@@ -219,8 +222,8 @@ class PurchaseInService:
         doc = db.session.get(InventoryDocument, document_id)
         if not doc:
             raise InventoryError("单据不存在")
-        if doc.document_type not in ("PURCHASE_IN", "STOCKTAKE"):
-            raise InventoryError("仅采购入库单可确认")
+        if doc.document_type not in ("PURCHASE_IN", "STOCKTAKE", "ADJUSTMENT", "RETURN"):
+            raise InventoryError("仅入库单可确认")
         if doc.status != "DRAFT":
             raise InventoryError(f"单据状态不为草稿，当前: {doc.status}")
 
@@ -354,12 +357,12 @@ class StockOutService:
           {"material_id": 1, "quantity": 10, "line_no": 1},
           ...
         ]
-        outbound_type: PRODUCTION_OUT | STOCKTAKE_LOSS
+        outbound_type: PRODUCTION_OUT | STOCKTAKE_LOSS | RETURN_OUT
         """
         if not lines:
             raise InventoryError("出库明细不能为空")
 
-        if outbound_type not in ("PRODUCTION_OUT", "STOCKTAKE_LOSS"):
+        if outbound_type not in ("PRODUCTION_OUT", "STOCKTAKE_LOSS", "RETURN_OUT"):
             raise InventoryError(f"不支持的出库类型: {outbound_type}")
 
         # 1. 校验仓库
@@ -484,7 +487,7 @@ class StockOutService:
         doc = db.session.get(InventoryDocument, document_id)
         if not doc:
             raise InventoryError("单据不存在")
-        if doc.document_type not in ("PRODUCTION_OUT", "STOCKTAKE", "ADJUSTMENT"):
+        if doc.document_type not in ("PRODUCTION_OUT", "STOCKTAKE", "ADJUSTMENT", "RETURN"):
             raise InventoryError("非出库类单据不可确认")
         if doc.status != "DRAFT":
             raise InventoryError(f"单据状态不为草稿，当前: {doc.status}")
