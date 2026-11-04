@@ -48,8 +48,7 @@
         </td>
         <!-- ⭐ 业绩单ID -->
         <td>
-          <a href="{{ url_for('shipment_plan.list_page', performance_id=r.performance_id) }}"
-            title="按此业绩单筛选">
+          <a href="{{ url_for('sales_performance.detail_page', perf_id=r.performance_id) }}">
             {{ r.performance_no or ('#' ~ r.performance_id) }}
           </a>
         </td>

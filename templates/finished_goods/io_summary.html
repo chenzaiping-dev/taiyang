@@ -98,6 +98,20 @@
               style="text-align:center;color:#999;padding:24px;">没有符合条件的汇总数据</td></tr>
     {% endif %}
   </tbody>
+  <tfoot>
+    <tr style="background:#fafafa;font-weight:600;">
+      <td colspan="{{ 6 if group_by == 'batch' else 4 }}" style="text-align:right;">本页合计：</td>
+      <td style="text-align:right;color:#2e7d32;">{{ rows|sum(attribute='total_in') }}</td>
+      <td style="text-align:right;color:#c62828;">{{ rows|sum(attribute='total_out') }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='net_qty') }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='current_qty') }}</td>
+      <td></td>
+      <td style="text-align:right;">{{ rows|sum(attribute='in_production') }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='in_return') }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='in_adjustment') }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='out_outbound') }}</td>
+    </tr>
+  </tfoot>
 </table>
 
 <div style="margin-top:16px;display:flex;gap:8px;align-items:center;">

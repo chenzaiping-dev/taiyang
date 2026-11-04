@@ -42,7 +42,8 @@
       <th style="width:100px;text-align:right;">成本</th>
       <th style="width:100px;text-align:right;">利润</th>
       <th style="width:80px;text-align:right;">主销售</th>
-      <th style="width:40px;text-align:right;">是否共同销售</th>
+      <th style="width:50px;text-align:right;">是否共同销售</th>
+      <th style="width:80px;text-align:right;">副销售</th>
       <th style="width:40px;text-align:right;">走常州工厂</th>
       <th style="width:60px;text-align:right;">期待发货日期</th>
       <th style="width:50px;">收款状态</th>
@@ -73,6 +74,7 @@
         <td style="text-align:right;color:#2e7d32;">{{ r.profit }}</td>
         <td style="text-align:right;">{{ r.salesperson_name }}</td>
         <td style="text-align:right;">{{ r.is_joint_sales }}</td>
+        <td style="text-align:right;">{{ r.co_salesperson_name }}</td>
         <td style="text-align:right;">{{ r.is_changzhou_factory }}</td>
         <td style="text-align:right;">{{ r.expected_delivery_date }}</td>
         <td>{{ payment_labels.get(r.payment_status, r.payment_status) }}</td>
@@ -179,7 +181,7 @@
       </tr>
       {% endfor %}
     {% else %}
-      <tr><td colspan="20" style="text-align:center;color:#999;padding:24px;">
+      <tr><td colspan="21" style="text-align:center;color:#999;padding:24px;">
         暂无业绩单
       </td></tr>
     {% endif %}
@@ -199,6 +201,7 @@
       <td style="text-align:right;color:#2e7d32;">
         {{ rows|sum(attribute='profit') }}
       </td>
+      <td></td>
       <td></td>
       <td></td>
       <td></td>

@@ -531,8 +531,11 @@ def process_plan(plan_id):
 @bp.post("/<int:plan_id>/complete")
 def complete_plan(plan_id):
     try:
-        ProductionPlanService.complete_plan(plan_id, operator_id=1)
+        plan = ProductionPlanService.complete_plan(plan_id, operator_id=1)
         flash("已完成，成品已预留", "success")
+        # ⭐ 成本缺失提示
+        if getattr(plan, "_cost_warning", None):
+            flash(plan._cost_warning, "error")
     except ProductionPlanError as e:
         flash(str(e), "error")
     return redirect(url_for("production_plan.list_page"))

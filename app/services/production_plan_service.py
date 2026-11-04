@@ -731,6 +731,9 @@ class ProductionPlanService:
             db.session.rollback()
             raise ProductionPlanError(f"完成失败: {e}")
 
+        #4. 计算生产成本
+        ProductionPlanService._calc_cost_for_production(plan)
+
         return plan
 
     @staticmethod
@@ -847,3 +850,74 @@ class ProductionPlanService:
             )
             db.session.add(res)
             remaining -= take
+
+    @staticmethod
+    def _calc_cost_for_production(plan):
+        # ============ 生产入库：校验 + 计算成本 ============
+        if not plan:
+            raise ProductionPlanError(
+                "没有生产计划，无法执行成本计算"
+            )
+        if plan.status != "COMPLETED":
+            plan_label = PLAN_STATUS_LABELS.get(plan.status, plan.status)
+            raise ProductionPlanError(
+                f"生产计划【{plan.plan_no}】状态为【{plan_label}】，"
+                f"必须为【已完成】才能执行成本计算"
+            )
+
+        rows = (
+            db.session.query(
+                FinishedGoodsReservation.remaining_quantity,
+                FinishedGoodsBatch.unit_cost,
+                FinishedGoodsBatch.batch_no,
+            )
+            .join(FinishedGoodsBatch,
+                FinishedGoodsBatch.id == FinishedGoodsReservation.batch_id)
+            .filter(
+                FinishedGoodsReservation.production_plan_id == plan.id,
+                FinishedGoodsReservation.reservation_type == "PRODUCTION_PLAN",
+                FinishedGoodsReservation.status == "ACTIVE",
+                FinishedGoodsReservation.remaining_quantity > 0,
+            )
+            .all()
+        )
+
+        if not rows:
+            plan._cost_warning = (
+                f"生产计划【{plan.plan_no}】没有可用的成品预留，"
+                f"成本计算为0"
+            )
+            return
+
+        perf = db.session.get(SalesPerformance, plan.performance_id)
+        if not perf:
+            raise SalesPerformanceError("业绩单不存在")
+        total_cost = Decimal("0")
+        missing_cost_batches = []
+        for remaining_qty, unit_cost, batch_no in rows:
+            q = _q6(remaining_qty or 0)
+            if unit_cost is None:
+                missing_cost_batches.append(batch_no)
+                continue
+            total_cost += _q6(q * _q6(unit_cost))
+
+        total_cost = _q6(total_cost)
+        amount = _q6(perf.amount or 0)
+        new_profit = _q6(amount - total_cost)
+
+        # 覆盖写入
+        perf.cost = total_cost
+        perf.profit = new_profit
+
+        # 供 Controller 读取并 flash
+        if missing_cost_batches:
+            plan._cost_warning = (
+                f"以下批次缺少 unit_cost，按 0 计入成本："
+                f"{'、'.join(missing_cost_batches)}"
+            )
+
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            raise ProductionPlanError(f"状态更新失败: {e}")
