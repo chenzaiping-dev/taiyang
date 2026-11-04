@@ -113,6 +113,18 @@
       </td></tr>
     {% endif %}
   </tbody>
+  <tfoot>
+    <tr style="background:#fafafa;font-weight:600;">
+      <td colspan="5" style="text-align:right;">本页合计：</td>
+      <td style="text-align:right;color:#2440b3;">{{ rows|sum(attribute='total_qty') }}</td>
+      <td style="text-align:right;color:#ef6c00;">
+        {{ rows|sum(attribute='total_cost') }}
+      </td>
+      <td></td>
+      <td></td>
+      <td></td>
+    </tr>
+  </tfoot>
 </table>
 
 <div style="margin-top:16px;display:flex;gap:8px;align-items:center;">

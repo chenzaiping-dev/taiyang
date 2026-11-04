@@ -13,7 +13,7 @@ class StockOutLineSchema(Schema):
 class StockOutRequestSchema(Schema):
     document_no = fields.Str(required=False, allow_none=True, validate=validate.Length(max=50))
     warehouse_id = fields.Int(required=True)
-    out_type = fields.Str(
+    outbound_type = fields.Str(
         required=False, load_default="PRODUCTION_OUT",
         validate=validate.OneOf(["PRODUCTION_OUT", "STOCKTAKE_LOSS"]),
     )

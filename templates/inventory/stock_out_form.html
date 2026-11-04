@@ -19,6 +19,17 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
   <div class="form-row">
+    <label for="outbound_type">出库类型 *</label>
+    <select id="outbound_type" name="outbound_type" required>
+      {% for code, label in outbound_types.items() %}
+        <option value="{{ code }}"
+          {% if form_data.outbound_type == code %}selected{% endif %}>
+          {{ label }}
+        </option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="form-row">
     <label for="warehouse_id">仓库</label>
     <select id="warehouse_id" name="warehouse_id" required>
       <option value="">-- 请选择 --</option>
@@ -28,14 +39,6 @@
           {{ w.warehouse_code }} - {{ w.warehouse_name }}
         </option>
       {% endfor %}
-    </select>
-
-    <label for="out_type">出库类型</label>
-    <select id="out_type" name="out_type">
-      <option value="PRODUCTION_OUT"
-        {% if form_data.out_type == "PRODUCTION_OUT" %}selected{% endif %}>生产领料</option>
-      <option value="STOCKTAKE_LOSS"
-        {% if form_data.out_type == "STOCKTAKE_LOSS" %}selected{% endif %}>盘点盘亏</option>
     </select>
   </div>
 

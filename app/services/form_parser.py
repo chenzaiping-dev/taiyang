@@ -94,8 +94,8 @@ def parse_stock_out_form(form) -> dict:
     if not warehouse_id:
         raise FormParseError("请选择仓库")
 
-    out_type = form.get("out_type", "PRODUCTION_OUT")
-    if out_type not in ("PRODUCTION_OUT", "STOCKTAKE_LOSS"):
+    outbound_type = form.get("outbound_type", "PRODUCTION_OUT")
+    if outbound_type not in ("PRODUCTION_OUT", "STOCKTAKE_LOSS"):
         raise FormParseError("出库类型非法")
 
     # 收集行
@@ -135,7 +135,7 @@ def parse_stock_out_form(form) -> dict:
     process_order_id = form.get("process_order_id", type=int)
     return {
         "warehouse_id": warehouse_id,
-        "out_type": out_type,
+        "outbound_type": outbound_type,
         "process_order_id": process_order_id or None,
         "document_time": form.get("document_time") or None,
         "remark": form.get("remark") or None,

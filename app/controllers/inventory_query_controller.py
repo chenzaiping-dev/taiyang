@@ -169,6 +169,7 @@ DOC_TYPE_LABELS = {
     "PRODUCTION_OUT": "生产领料单",
     "STOCKTAKE": "盘点单",
     "ADJUSTMENT": "调整单",
+    "RETURN": "退货单",
 }
 
 

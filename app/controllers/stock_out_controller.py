@@ -9,6 +9,7 @@ from app.generated.models.warehouses import Warehouse
 from app.schemas.stock_out_schema import StockOutRequestSchema
 from app.services.inventory_service import StockOutService, InventoryError
 from app.services.form_parser import parse_stock_out_form, FormParseError
+from app.services.inventory_query_service import OUTBOUND_TYPE_LABELS
 
 bp = Blueprint("stock_out", __name__, url_prefix="/inventory")
 schema = StockOutRequestSchema()
@@ -31,7 +32,7 @@ def api_stock_out():
                  "quantity": l["quantity"]}
                 for l in data["lines"]
             ],
-            out_type=data["out_type"],
+            outbound_type=data["outbound_type"],
             document_no=data.get("document_no"),
             document_time=data.get("document_time"),
             process_order_id=data.get("process_order_id"),
@@ -62,9 +63,10 @@ def stock_out_page():
         "inventory/stock_out_form.html",
         warehouses=warehouses,
         materials=materials,
+        outbound_types=OUTBOUND_TYPE_LABELS,
         form_data={
             "warehouse_id": "",
-            "out_type": "PRODUCTION_OUT",
+            "outbound_type": "PRODUCTION_OUT",
             "process_order_id": "",
             "document_time": datetime.now().strftime("%Y-%m-%dT%H:%M"),
             "remark": "",
@@ -83,7 +85,7 @@ def stock_out_submit():
         result = StockOutService.create_stock_out(
             warehouse_id=data["warehouse_id"],
             lines=data["lines"],
-            out_type=data["out_type"],
+            outbound_type=data.get("outbound_type", "PRODUCTION_OUT"),   # ⭐
             process_order_id=data.get("process_order_id"),
             document_time=(
                 datetime.fromisoformat(data["document_time"])
@@ -119,12 +121,12 @@ def _render_stock_out_error(error_msg: str):
 
     form_data = {
         "warehouse_id": request.form.get("warehouse_id", ""),
-        "out_type": request.form.get("out_type", "PRODUCTION_OUT"),
         "process_order_id": request.form.get("process_order_id", ""),
         "document_time": request.form.get("document_time", ""),
         "remark": request.form.get("remark", ""),
         "auto_confirm": request.form.get("auto_confirm") == "on",
         "allow_partial": request.form.get("allow_partial") == "on",
+        "outbound_type": request.form.get("outbound_type", "PRODUCTION_OUT"),
         "lines": lines,
     }
 
@@ -133,6 +135,7 @@ def _render_stock_out_error(error_msg: str):
             "inventory/stock_out_form.html",
             warehouses=warehouses,
             materials=materials,
+            outbound_types=OUTBOUND_TYPE_LABELS,   # ⭐
             form_data=form_data,
             errors=[error_msg],
         ),

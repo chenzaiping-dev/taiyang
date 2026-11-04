@@ -18,6 +18,35 @@ from app.utils.decimal_utils import _q3, _q6, _q6_amount
 class InventoryError(Exception):
     pass
 
+# 单据类型映射
+doc_type_map = {
+    "PURCHASE_IN": "PURCHASE_IN",
+    "STOCKTAKE_GAIN": "STOCKTAKE",
+    "RETURN_IN": "PURCHASE_IN",     # 单据类型复用
+    "PRODUCTION_OUT": "PRODUCTION_OUT",
+    "STOCKTAKE_LOSS": "STOCKTAKE", 
+}
+tx_type_map = {
+    "PURCHASE_IN": "PURCHASE_IN",
+    "STOCKTAKE_GAIN": "STOCKTAKE_GAIN",
+    "RETURN_IN": "RETURN_IN",
+    "PRODUCTION_OUT": "PRODUCTION_OUT",
+    "STOCKTAKE_LOSS": "STOCKTAKE_LOSS",
+}
+# 单号前缀
+prefix_map = {
+    "PURCHASE_IN": "PI",
+    "STOCKTAKE_GAIN": "SG",
+    "RETURN_IN": "RI",
+    "PRODUCTION_OUT": "PO",
+    "STOCKTAKE_LOSS": "SL",
+}
+layer_type_map = {
+    "PURCHASE_IN": "PURCHASE",
+    "STOCKTAKE_GAIN": "STOCKTAKE_RESET",
+    "RETURN_IN": "RETURN",
+}
+
 def generate_document_no(prefix: str = "PI") -> str:
     """生成单据号：前缀 + yyyyMMddHHmmss + 4位流水"""
     now = datetime.now()
@@ -26,7 +55,6 @@ def generate_document_no(prefix: str = "PI") -> str:
     import random
     suffix = f"{random.randint(0, 9999):04d}"
     return f"{prefix}{base}{suffix}"
-
 
 class PurchaseInService:
     """纯材料采购入库（FIFO 成本层）"""
@@ -54,25 +82,6 @@ class PurchaseInService:
 
         if inbound_type not in ("PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN"):
             raise InventoryError(f"不支持的入库类型: {inbound_type}")
-
-        # 单据类型映射
-        doc_type_map = {
-            "PURCHASE_IN": "PURCHASE_IN",
-            "STOCKTAKE_GAIN": "STOCKTAKE",
-            "RETURN_IN": "PURCHASE_IN",     # 单据类型复用
-        }
-        tx_type_map = {
-            "PURCHASE_IN": "PURCHASE_IN",
-            "STOCKTAKE_GAIN": "STOCKTAKE_GAIN",
-            "RETURN_IN": "RETURN_IN",
-        }
-
-        # 单号前缀
-        prefix_map = {
-            "PURCHASE_IN": "PI",
-            "STOCKTAKE_GAIN": "SG",
-            "RETURN_IN": "RI",
-        }
 
         # 1. 校验仓库
         wh = db.session.get(Warehouse, warehouse_id)
@@ -108,7 +117,7 @@ class PurchaseInService:
                 raise InventoryError("单价不能为负数")
 
         # 4. 生成单据号
-        doc_no = document_no or generate_document_no("PI")
+        doc_no = document_no or generate_document_no(prefix_map[inbound_type])
         if InventoryDocument.query.filter_by(document_no=doc_no).first():
             raise InventoryError(f"单据号重复: {doc_no}")
 
@@ -158,7 +167,7 @@ class PurchaseInService:
                 layer = InventoryCostLayer(
                     material_id=mid,
                     source_transaction_id=tx.id,
-                    layer_type="PURCHASE",
+                    layer_type=layer_type_map[inbound_type],
                     effective_time=doc_time,
                     original_qty=qty,
                     remaining_qty=qty,
@@ -230,7 +239,7 @@ class PurchaseInService:
             layer = InventoryCostLayer(
                 material_id=tx.material_id,
                 source_transaction_id=tx.id,
-                layer_type="PURCHASE",
+                layer_type=layer_type_map[tx.transaction_type],
                 effective_time=tx.transaction_time,
                 original_qty=tx.quantity_delta,
                 remaining_qty=tx.quantity_delta,
@@ -331,7 +340,7 @@ class StockOutService:
     def create_stock_out(
         warehouse_id: int,
         lines: list,
-        out_type: str = "PRODUCTION_OUT",
+        outbound_type: str = "PRODUCTION_OUT",
         document_no: str = None,
         document_time: datetime = None,
         process_order_id: int = None,
@@ -345,13 +354,13 @@ class StockOutService:
           {"material_id": 1, "quantity": 10, "line_no": 1},
           ...
         ]
-        out_type: PRODUCTION_OUT | STOCKTAKE_LOSS
+        outbound_type: PRODUCTION_OUT | STOCKTAKE_LOSS
         """
         if not lines:
             raise InventoryError("出库明细不能为空")
 
-        if out_type not in ("PRODUCTION_OUT", "STOCKTAKE_LOSS"):
-            raise InventoryError(f"不支持的出库类型: {out_type}")
+        if outbound_type not in ("PRODUCTION_OUT", "STOCKTAKE_LOSS"):
+            raise InventoryError(f"不支持的出库类型: {outbound_type}")
 
         # 1. 校验仓库
         wh = db.session.get(Warehouse, warehouse_id)
@@ -375,11 +384,7 @@ class StockOutService:
                 raise InventoryError(f"原料 {materials[mid].material_code} 数量必须 > 0")
 
         # 3. 单据头
-        doc_type_map = {
-            "PRODUCTION_OUT": "PRODUCTION_OUT",
-            "STOCKTAKE_LOSS": "STOCKTAKE",
-        }
-        doc_no = document_no or generate_document_no("PO")
+        doc_no = document_no or generate_document_no(prefix_map[outbound_type])
         if InventoryDocument.query.filter_by(document_no=doc_no).first():
             raise InventoryError(f"单据号重复: {doc_no}")
 
@@ -388,7 +393,7 @@ class StockOutService:
 
         document = InventoryDocument(
             document_no=doc_no,
-            document_type=doc_type_map[out_type],
+            document_type=doc_type_map[outbound_type],
             document_time=doc_time,
             status=doc_status,
             remark=remark,
@@ -409,7 +414,7 @@ class StockOutService:
                 document_id=document.id,
                 line_no=line_no,
                 material_id=mid,
-                transaction_type=out_type,
+                transaction_type=tx_type_map[outbound_type],  # ⭐
                 transaction_time=doc_time,
                 quantity_delta=-qty,        # 出库为负
                 unit_cost=None,             # FIFO 后回填加权
@@ -468,7 +473,7 @@ class StockOutService:
             "status": document.status,
             "document_time": document.document_time.isoformat(),
             "warehouse_id": warehouse_id,
-            "out_type": out_type,
+            "outbound_type": outbound_type,
             "line_count": len(tx_results),
             "lines": tx_results,
         }

@@ -409,9 +409,10 @@ CREATE TABLE inventory_documents (
         'PURCHASE_IN',
         'PRODUCTION_OUT',
         'STOCKTAKE',
-        'ADJUSTMENT'
+        'ADJUSTMENT',
+        'RETURN'
     ) NOT NULL COMMENT '单据类型: PURCHASE_IN采购入库, PRODUCTION_OUT生产出库,
-        STOCKTAKE库存盘点, ADJUSTMENT库存调整',
+        STOCKTAKE库存盘点, ADJUSTMENT库存调整，RETURN退货',
 
     document_time DATETIME NOT NULL COMMENT '业务发生时间',
 
@@ -442,9 +443,10 @@ CREATE TABLE inventory_transactions (
         'PRODUCTION_OUT',
         'STOCKTAKE_GAIN',
         'STOCKTAKE_LOSS',
-        'RETURN_IN'
+        'RETURN_IN',
+        'RETURN_OUT'
     ) NOT NULL COMMENT '业务类型: PURCHASE_IN:采购入库, PRODUCTION_OUT:生产出库, 
-        STOCKTAKE_GAIN:库存盘点-入库, STOCKTAKE_LOSS:库存盘点-出库, RETURN_IN:退货入库',
+        STOCKTAKE_GAIN:库存盘点-入库, STOCKTAKE_LOSS:库存盘点-出库, RETURN_IN:退货入库, RETURN_OUT:退货出库',
 
     transaction_time DATETIME NOT NULL COMMENT '业务生效时间',
 

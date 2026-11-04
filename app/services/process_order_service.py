@@ -468,7 +468,7 @@ class ProcessOrderService:
             stock_out_result = StockOutService.create_stock_out(
                 warehouse_id=out_warehouse_id,
                 lines=lines,
-                out_type="PRODUCTION_OUT",
+                outbound_type="PRODUCTION_OUT",
                 document_no=document_no,
                 document_time=now_beijing_naive(),
                 process_order_id=order.id,
