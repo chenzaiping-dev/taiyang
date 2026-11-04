@@ -137,6 +137,88 @@ class InventoryQueryService:
 
         return rows, total
 
+    @staticmethod
+    def query_material_stock_with_cost_layers(
+        material_code: str = None,
+        warehouse_id: int = None,
+        group_by_warehouse: bool = False,
+        page: int = 1,
+        page_size: int = 50,
+    ):
+        """
+        查询原料库存（按 FIFO 成本层逐行展示）。
+        - material_code: 模糊匹配原料编码/名称
+        - warehouse_id:  精确指定仓库
+        - group_by_warehouse: True 则展示仓库列（仅影响模板，SQL 不变）
+        返回 (rows, total)
+        rows 每行对应一个 InventoryCostLayer：
+            layer_id, material_id, material_code, material_name, unit,
+            warehouse_id, warehouse_code, warehouse_name,
+            layer_type, effective_time,
+            original_qty, remaining_qty, unit_cost,
+            remaining_cost, original_cost
+        """
+        # 只统计 remaining_qty > 0 的成本层
+        base_filter = [InventoryCostLayer.remaining_qty > 0]
+        print("I am here in query_material_stock_with_cost_layers")
+
+        if material_code:
+            like = f"%{material_code}%"
+            base_filter.append(
+                or_(
+                    Material.material_code.like(like),
+                    Material.material_name.like(like),
+                )
+            )
+        if warehouse_id:
+            base_filter.append(InventoryCostLayer.warehouse_id == warehouse_id)
+
+        stmt = (
+            select(
+                InventoryCostLayer.id.label("layer_id"),
+                InventoryCostLayer.material_id,
+                Material.material_code,
+                Material.material_name,
+                Material.unit,
+                InventoryCostLayer.warehouse_id,
+                Warehouse.warehouse_code,
+                Warehouse.warehouse_name,
+                InventoryCostLayer.layer_type,
+                InventoryCostLayer.effective_time,
+                InventoryCostLayer.original_qty,
+                InventoryCostLayer.remaining_qty,
+                InventoryCostLayer.unit_cost,
+                InventoryCostLayer.original_cost,
+                # 剩余金额 = 剩余数量 × 单价
+                (InventoryCostLayer.remaining_qty * InventoryCostLayer.unit_cost)
+                    .label("remaining_cost"),
+            )
+            .join(Material, Material.id == InventoryCostLayer.material_id)
+            .join(Warehouse, Warehouse.id == InventoryCostLayer.warehouse_id)
+            .where(*base_filter)
+            # ⭐ FIFO 顺序：与出库消耗顺序完全一致
+            .order_by(
+                Material.material_code.asc(),
+                Warehouse.warehouse_code.asc(),
+                InventoryCostLayer.effective_time.asc(),
+                InventoryCostLayer.id.asc(),
+            )
+        )
+
+        total = db.session.execute(
+            select(func.count()).select_from(stmt.subquery())
+        ).scalar() or 0
+
+        stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+        raw_rows = db.session.execute(stmt).mappings().all()
+
+        rows = []
+        for r in raw_rows:
+            d = dict(r)
+            d["original_cost"] = _q6(d.get("original_cost"))
+            d["remaining_cost"] = _q6(d.get("remaining_cost"))
+            rows.append(d)
+        return rows, total
 
     @staticmethod
     def query_material_io_summary(
