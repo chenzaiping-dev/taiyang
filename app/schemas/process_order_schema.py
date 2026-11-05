@@ -51,7 +51,7 @@ class ProcessOrderRequestSchema(Schema):
         # 配比合计 = 1（允许 1e-6 误差）
         from decimal import Decimal
         total = sum((Decimal(str(m["ratio_value"])) for m in items), Decimal("0"))
-        if abs(total - Decimal("1")) > Decimal("0.000001"):
+        if total > Decimal("1") + Decimal("0.000001"):
             raise ValidationError(
-                f"原料配比合计必须为 1，当前为 {total}", "materials"
+                f"原料配比合计必须小于等于 1，当前为 {total}", "materials"
             )

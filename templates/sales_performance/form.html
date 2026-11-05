@@ -72,17 +72,19 @@
     <div class="form-row">
       <label>销售单价 *</label>
       <input type="number" step="0.0001" min="0" name="unit_price"
-             value="{{ form_data.unit_price }}" required>
+            id="unit_price"
+            value="{{ form_data.unit_price }}" required>
 
       <label>销售数量 *</label>
       <input type="number" step="0.0001" min="0.0001" name="quantity"
-             value="{{ form_data.quantity }}" required>
+            id="quantity"
+            value="{{ form_data.quantity }}" required>
     </div>
     <div class="form-row">
       <label>销售金额 *</label>
       <input type="number" step="0.0001" min="0" name="amount"
-             value="{{ form_data.amount }}" required>
-
+            id="amount"
+            value="{{ form_data.amount }}" required>
       <label>收款状态</label>
       <select name="payment_status">
         {% for code, label in payment_labels.items() %}
@@ -163,14 +165,46 @@
 
 <script>
 (function () {
+  /* ===== 1. 共同销售员联动（原有逻辑） ===== */
   const chk = document.getElementById("is_joint_sales");
   const coSel = document.getElementById("co_salesperson_id");
-  function sync() {
+  function syncJoint() {
     coSel.disabled = !chk.checked;
     if (!chk.checked) coSel.value = "";
   }
-  chk.addEventListener("change", sync);
-  sync();
+  chk.addEventListener("change", syncJoint);
+  syncJoint();
+
+  /* ===== 2. 销售金额实时计算 ===== */
+  const priceEl  = document.getElementById("unit_price");
+  const qtyEl    = document.getElementById("quantity");
+  const amountEl = document.getElementById("amount");
+
+  // 按 4 位小数四舍五入，规避浮点误差（0.1*3 之类）
+  function round4(n) {
+    return Math.round((n + Number.EPSILON) * 1e4) / 1e4;
+  }
+
+  function recalcAmount() {
+    const price = parseFloat(priceEl.value);
+    const qty   = parseFloat(qtyEl.value);
+    // 两个都有效才计算；否则清空金额（避免留下脏值）
+    if (!isNaN(price) && !isNaN(qty) && price >= 0 && qty > 0) {
+      amountEl.value = round4(price * qty);
+    } else {
+      amountEl.value = "";
+    }
+  }
+
+  priceEl.addEventListener("input", recalcAmount);
+  qtyEl.addEventListener("input",  recalcAmount);
+
+  /* ===== 3. 初始行为 =====
+     新建模式：表单为空，等用户输入时再算，不主动覆盖。
+     编辑模式：form_data.amount 已有值，保持不动（允许人工改过的金额）。
+     若你希望"进页面就强制按公式重算"，把下面注释打开即可。 */
+  // recalcAmount();
 })();
 </script>
+
 {% endblock %}

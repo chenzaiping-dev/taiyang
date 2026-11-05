@@ -114,8 +114,8 @@
 
     if (!valid) err = err || "请至少填写一条原料配比";
     if (!err && planQty <= 0) err = "计划数量必须大于 0";
-    if (!err && Math.abs(sum - 1) > 1e-6) {
-      err = `原料配比合计必须为 1，当前为 ${sum.toFixed(6)}`;
+    if (!err && sum > 1 + 1e-6) {
+      err = `3原料配比合计必须小于等于 1，当前为 ${sum.toFixed(6)}`;
     }
     if (err) { e.preventDefault(); alert(err); return; }
 

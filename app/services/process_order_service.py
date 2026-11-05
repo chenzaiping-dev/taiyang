@@ -137,14 +137,14 @@ class ProcessOrderService:
                 "remark": m.get("remark"),
             })
 
-        if abs(ratio_sum - Decimal("1")) > RATIO_TOLERANCE:
-            raise ProcessOrderError(f"原料配比合计必须为 1，当前为 {ratio_sum}")
+        if ratio_sum > Decimal("1") + RATIO_TOLERANCE:
+            raise ProcessOrderError(f"原料配比合计必须小于等于 1，当前为 {ratio_sum}")
 
         # 数量补齐
-        total_qty = sum((it["quantity"] for it in normalized), Decimal("0"))
-        if normalized and abs(total_qty - q) > Decimal("0.0001"):
-            diff = q - total_qty
-            normalized[-1]["quantity"] = _q6(normalized[-1]["quantity"] + diff)
+        #total_qty = sum((it["quantity"] for it in normalized), Decimal("0"))
+        #if normalized and abs(total_qty - q) > Decimal("0.0001"):
+        #    diff = q - total_qty
+        #    normalized[-1]["quantity"] = _q6(normalized[-1]["quantity"] + diff)
 
         return q, normalized
 
