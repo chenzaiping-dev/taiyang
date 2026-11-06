@@ -15,7 +15,7 @@ class StockOutRequestSchema(Schema):
     warehouse_id = fields.Int(required=True)
     outbound_type = fields.Str(
         required=False, load_default="PRODUCTION_OUT",
-        validate=validate.OneOf(["PRODUCTION_OUT", "STOCKTAKE_LOSS", "RETURN_OUT", "ADJUSTMENT_OUT"]),
+        validate=validate.OneOf(["PRODUCTION_OUT", "STOCKTAKE_LOSS", "RETURN_OUT", "ADJUSTMENT_RED", "ADJUSTMENT_BLUE"]),
     )
     process_order_id = fields.Int(required=False, allow_none=True)
     document_time = fields.DateTime(required=False, allow_none=True)

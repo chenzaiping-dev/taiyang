@@ -19,55 +19,56 @@ class InventoryError(Exception):
     pass
 
 # 单据类型映射
+INBOUND_TYPE_LABELS = {
+    "PURCHASE_IN":   "采购入库",
+    "STOCKTAKE_GAIN": "盘点盘盈",
+    "RETURN_IN":     "退货回仓",
+}
+
+OUTBOUND_TYPE_LABELS = {
+    "PRODUCTION_OUT":  "生产领料",
+    "STOCKTAKE_LOSS":  "盘亏出库",
+    "RETURN_OUT":      "退货出库",
+    "ADJUSTMENT_RED":  "配比红冲出库",
+    "ADJUSTMENT_BLUE": "配比蓝补出库",
+}
+
 doc_type_map = {
-    "PURCHASE_IN": "PURCHASE_IN",
-    "PRODUCTION_OUT": "PRODUCTION_OUT",
-    "STOCKTAKE_GAIN": "STOCKTAKE",
-    "STOCKTAKE_LOSS": "STOCKTAKE",
-    "RETURN_IN": "RETURN",
-    "RETURN_OUT": "RETURN",
-    "ADJUSTMENT_IN": "ADJUSTMENT_IN",
-    "ADJUSTMENT_OUT": "ADJUSTMENT_OUT",
+    "PURCHASE_IN":      "PURCHASE_IN",
+    "STOCKTAKE_GAIN":   "STOCKTAKE",
+    "RETURN_IN":        "RETURN",
+    "PRODUCTION_OUT":   "PRODUCTION_OUT",
+    "STOCKTAKE_LOSS":   "STOCKTAKE",
+    "RETURN_OUT":       "RETURN",
+    "ADJUSTMENT_RED":   "ADJUSTMENT_RED",
+    "ADJUSTMENT_BLUE":  "ADJUSTMENT_BLUE",
 }
+
 tx_type_map = {
-    "PURCHASE_IN": "PURCHASE_IN",
-    "STOCKTAKE_GAIN": "STOCKTAKE_GAIN",
-    "RETURN_IN": "RETURN_IN",
-    "ADJUSTMENT_IN": "ADJUSTMENT_IN",
-    "PRODUCTION_OUT": "PRODUCTION_OUT",
-    "STOCKTAKE_LOSS": "STOCKTAKE_LOSS",
-    "RETURN_OUT": "RETURN_OUT",
-    "ADJUSTMENT_OUT": "ADJUSTMENT_OUT",
+    "PURCHASE_IN":      "PURCHASE_IN",
+    "STOCKTAKE_GAIN":   "STOCKTAKE_GAIN",
+    "RETURN_IN":        "RETURN_IN",
+    "PRODUCTION_OUT":   "PRODUCTION_OUT",
+    "STOCKTAKE_LOSS":   "STOCKTAKE_LOSS",
+    "RETURN_OUT":       "RETURN_OUT",
+    "ADJUSTMENT_RED":   "ADJUSTMENT_RED",
+    "ADJUSTMENT_BLUE":  "ADJUSTMENT_BLUE",
 }
-# 单号前缀
+
 prefix_map = {
-    "PURCHASE_IN": "PI",
-    "STOCKTAKE_GAIN": "SG",
-    "RETURN_IN": "RI",
-    "PRODUCTION_OUT": "PO",
-    "STOCKTAKE_LOSS": "SL",
-    "RETURN_OUT": "RO",
-    "ADJUSTMENT_IN": "AI",
-    "ADJUSTMENT_OUT": "AO"
+    "PURCHASE_IN":      "PI",
+    "STOCKTAKE_GAIN":   "SG",
+    "RETURN_IN":        "RI",
+    "PRODUCTION_OUT":   "PO",
+    "STOCKTAKE_LOSS":   "SL",
+    "RETURN_OUT":       "RO",
+    "ADJUSTMENT_RED":   "AR",
+    "ADJUSTMENT_BLUE":  "AB",
 }
 layer_type_map = {
     "PURCHASE_IN": "PURCHASE",
     "STOCKTAKE_GAIN": "STOCKTAKE_RESET",
     "RETURN_IN": "RETURN",
-}
-
-INBOUND_TYPE_LABELS = {
-    "PURCHASE_IN": "采购入库",
-    "STOCKTAKE_GAIN": "盘点盘盈",
-    "RETURN_IN": "退货回仓",
-    "ADJUSTMENT_IN": "调整入库"
-}
-
-OUTBOUND_TYPE_LABELS = {
-    "PRODUCTION_OUT": "生产领料",
-    "STOCKTAKE_LOSS": "盘亏出库",
-    "RETURN_OUT": "退货出库",
-    "ADJUSTMENT_OUT": "调整出库"
 }
 
 def _rm_warehouses():
@@ -89,6 +90,10 @@ def generate_document_no(prefix: str = "PI") -> str:
     import random
     suffix = f"{random.randint(0, 9999):04d}"
     return f"{prefix}{base}{suffix}"
+
+def generate_document_no_new(prefix: str = "PI") -> str:
+    """生成单据号：前缀 + yyyyMMddHHmmss + 4位流水"""
+    return generate_document_no(prefix_map[prefix])
 
 class PurchaseInService:
     """纯材料采购入库（FIFO 成本层）"""
@@ -253,7 +258,7 @@ class PurchaseInService:
         doc = db.session.get(InventoryDocument, document_id)
         if not doc:
             raise InventoryError("单据不存在")
-        if doc.document_type not in ("PURCHASE_IN", "STOCKTAKE", "ADJUSTMENT_IN", "RETURN"):
+        if doc.document_type not in ("PURCHASE_IN", "STOCKTAKE", "RETURN"):
             raise InventoryError("仅入库单可确认")
         if doc.status != "DRAFT":
             raise InventoryError(f"单据状态不为草稿，当前: {doc.status}")
@@ -266,7 +271,7 @@ class PurchaseInService:
             if tx.quantity_delta <= 0:
                 raise InventoryError("采购流水数量必须为正")
             # 只处理入库类流水
-            if tx.transaction_type not in ("PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN", "ADJUSTMENT_IN"):
+            if tx.transaction_type not in ("PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN"):
                 raise InventoryError(
                     f"单据 {doc.document_no} 中存在非入库流水: {tx.transaction_type}"
                 )
@@ -388,7 +393,7 @@ class StockOutService:
           {"material_id": 1, "quantity": 10, "line_no": 1},
           ...
         ]
-        outbound_type: PRODUCTION_OUT | STOCKTAKE_LOSS | RETURN_OUT | ADJUSTMENT_OUT
+        outbound_type: PRODUCTION_OUT | STOCKTAKE_LOSS | RETURN_OUT | ADJUSTMENT_RED | ADJUSTMENT_BLUE
         """
         if not lines:
             raise InventoryError("出库明细不能为空")
@@ -518,7 +523,7 @@ class StockOutService:
         doc = db.session.get(InventoryDocument, document_id)
         if not doc:
             raise InventoryError("单据不存在")
-        if doc.document_type not in ("PRODUCTION_OUT", "STOCKTAKE", "ADJUSTMENT_OUT", "RETURN"):
+        if doc.document_type not in ("PRODUCTION_OUT", "STOCKTAKE", "RETURN", "ADJUSTMENT_RED", "ADJUSTMENT_BLUE"):
             raise InventoryError("非出库类单据不可确认")
         if doc.status != "DRAFT":
             raise InventoryError(f"单据状态不为草稿，当前: {doc.status}")

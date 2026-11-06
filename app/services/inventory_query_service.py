@@ -267,8 +267,13 @@ class InventoryQueryService:
              -InventoryTransaction.quantity_delta),
             else_=0,
         )
-        out_adjust = case(
-            (InventoryTransaction.transaction_type == "ADJUSTMENT_OUT",
+        out_adjust_red = case(
+            (InventoryTransaction.transaction_type == "ADJUSTMENT_RED",
+             -InventoryTransaction.quantity_delta),
+            else_=0,
+        )
+        out_adjust_blue = case(
+            (InventoryTransaction.transaction_type == "ADJUSTMENT_BLUE",
              -InventoryTransaction.quantity_delta),
             else_=0,
         )
@@ -298,7 +303,8 @@ class InventoryQueryService:
             func.sum(in_gain).label("in_gain"),
             func.sum(out_production).label("out_production"),
             func.sum(out_loss).label("out_loss"),
-            func.sum(out_adjust).label("out_adjust"),
+            func.sum(out_adjust_red).label("out_adjust_red"),
+            func.sum(out_adjust_blue).label("out_adjust_blue"),
             func.sum(in_qty).label("total_in"),
             func.sum(out_qty).label("total_out"),
             func.sum(InventoryTransaction.quantity_delta).label("net_qty"),
@@ -455,14 +461,14 @@ class InventoryQueryService:
         direction='OUT' → PRODUCTION_OUT / STOCKTAKE / ADJUSTMENT (库存减少类流水)
         """
         if direction == "IN":
-            doc_types = ["PURCHASE_IN", "STOCKTAKE", "RETURN", "ADJUSTMENT_IN"]
-            tx_types = ["PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN", "ADJUSTMENT_IN"]
+            doc_types = ["PURCHASE_IN", "STOCKTAKE", "RETURN"]
+            tx_types = ["PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN"]
             qty_expr = func.coalesce(
                 func.sum(InventoryTransaction.quantity_delta), 0
             ).label("total_qty")
         else:
-            doc_types = ["PRODUCTION_OUT", "STOCKTAKE", "RETURN", "ADJUSTMENT_OUT"]
-            tx_types = ["PRODUCTION_OUT", "STOCKTAKE_LOSS", "RETURN_OUT", "ADJUSTMENT_OUT"]
+            doc_types = ["PRODUCTION_OUT", "STOCKTAKE", "RETURN", "ADJUSTMENT_RED", "ADJUSTMENT_BLUE"]
+            tx_types = ["PRODUCTION_OUT", "STOCKTAKE_LOSS", "RETURN_OUT", "ADJUSTMENT_RED", "ADJUSTMENT_BLUE"]
             qty_expr = func.coalesce(
                 func.sum(-InventoryTransaction.quantity_delta), 0
             ).label("total_qty")
@@ -544,7 +550,7 @@ class InventoryQueryService:
         if not doc:
             return None
         if doc.document_type not in (
-            "PURCHASE_IN", "STOCKTAKE", "PRODUCTION_OUT", "ADJUSTMENT_IN", "ADJUSTMENT_OUT", "RETURN"
+            "PURCHASE_IN", "STOCKTAKE", "PRODUCTION_OUT", "RETURN", "ADJUSTMENT_RED", "ADJUSTMENT_BLUE"
         ):
             return None
 

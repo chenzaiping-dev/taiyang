@@ -411,10 +411,10 @@ CREATE TABLE inventory_documents (
         'PRODUCTION_OUT',
         'STOCKTAKE',
         'RETURN',
-        'ADJUSTMENT_IN',
-        'ADJUSTMENT_OUT'
+        'ADJUSTMENT_RED',
+        'ADJUSTMENT_BLUE'
     ) NOT NULL COMMENT '单据类型: PURCHASE_IN采购入库, PRODUCTION_OUT生产出库,
-        STOCKTAKE库存盘点, RETURN退货, ADJUSTMENT_IN库存调整-入库, ADJUSTMENT_OUT库存调整-出库',
+        STOCKTAKE库存盘点, RETURN退货, ADJUSTMENT_RED红冲出库, ADJUSTMENT_BLUE蓝补出库',
 
     document_time DATETIME NOT NULL COMMENT '业务发生时间',
 
@@ -447,11 +447,13 @@ CREATE TABLE inventory_transactions (
         'STOCKTAKE_LOSS',
         'RETURN_IN',
         'RETURN_OUT',
-        'ADJUSTMENT_IN',
-        'ADJUSTMENT_OUT'
+        'ADJUSTMENT_RED',
+        'ADJUSTMENT_BLUE'
     ) NOT NULL COMMENT '业务类型: PURCHASE_IN:采购入库, PRODUCTION_OUT:生产出库, 
         STOCKTAKE_GAIN:库存盘点-入库, STOCKTAKE_LOSS:库存盘点-出库,
-        RETURN_IN:退货入库, RETURN_OUT:退货出库, ADJUSTMENT_IN:调整入库, ADJUSTMENT_OUT:调整出库',
+        RETURN_IN:退货入库, RETURN_OUT:退货出库,
+        ADJUSTMENT_RED红冲(delta正,total_cost负),
+        ADJUSTMENT_BLUE蓝补(delta负,total_cost正)',
 
     transaction_time DATETIME NOT NULL COMMENT '业务生效时间',
 

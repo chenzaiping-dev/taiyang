@@ -95,7 +95,7 @@ def parse_stock_out_form(form) -> dict:
         raise FormParseError("请选择仓库")
 
     outbound_type = form.get("outbound_type", "PRODUCTION_OUT")
-    if outbound_type not in ("PRODUCTION_OUT", "STOCKTAKE_LOSS", "RETURN_OUT", "ADJUSTMENT_OUT"):
+    if outbound_type not in ("PRODUCTION_OUT", "STOCKTAKE_LOSS", "RETURN_OUT", "ADJUSTMENT_RED", "ADJUSTMENT_BLUE"):
         raise FormParseError("出库类型非法")
 
     # 收集行

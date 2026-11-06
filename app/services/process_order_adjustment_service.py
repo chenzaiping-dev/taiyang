@@ -14,7 +14,9 @@ from app.generated.models.inventory_cost_allocations import InventoryCostAllocat
 from app.generated.models.process_order_material_adjustments import (
     ProcessOrderMaterialAdjustment,
 )
-from app.services.inventory_service import StockOutService, InventoryError
+from app.services.inventory_service import (
+    StockOutService, InventoryError, generate_document_no_new
+)
 
 class ProcessOrderAdjustmentError(Exception):
     pass
@@ -239,15 +241,17 @@ class ProcessOrderAdjustmentService:
                             operator_id, reason):
         """
         红冲：把原出库的某部分数量退回成本层。
-        生成 ADJUSTMENT_OUT 单据 + 负 delta 流水（虽然语义是"退回"，
+        生成 ADJUSTMENT_RED 单据 + 负 delta 流水（虽然语义是"退回"，
         但相比出库，delta 为正意味着成本层归还）。
         """
         # ⚠️ 注意方向：这里的"退回"在库存上表现为"库存不减反增"，
         # 但流程上属于"出库单的逆向"，所以流水 delta 用正数（恢复）
-        doc_no = f"ADJ-OUT-{order.process_order_no}-{adjust_no[-6:]}"
+        #doc_no = f"ADJ-RED-{order.process_order_no}-{adjust_no[-6:]}"
+        adjust_type = "ADJUSTMENT_RED"
+        doc_no = generate_document_no_new(adjust_type)
         doc = InventoryDocument(
             document_no=doc_no,
-            document_type="ADJUSTMENT_OUT",
+            document_type=adjust_type,
             document_time=now_beijing_naive(),
             status="CONFIRMED",
             remark=f"[MATERIAL_ADJUST_REVERSE] {order.process_order_no} 配比减少退回",
@@ -274,7 +278,7 @@ class ProcessOrderAdjustmentService:
                 document_id=doc.id,
                 line_no=idx,
                 material_id=mid,
-                transaction_type="ADJUSTMENT_OUT",
+                transaction_type=adjust_type,
                 transaction_time=now_beijing_naive(),
                 quantity_delta=qty,        # ⭐ 正数（库存恢复）
                 process_order_id=order.id,
@@ -288,8 +292,6 @@ class ProcessOrderAdjustmentService:
             result = ProcessOrderAdjustmentService._reverse_allocation(
                 orig_tx.id, qty, new_tx.id
             )
-            #new_tx.total_cost = result["total_cost"]
-            #new_tx.unit_cost = _q6(result["total_cost"] / qty) if qty else None
 
             # ⭐ 成本字段：
             #   total_cost  = -原消耗成本（负数，表示冲销）
@@ -331,7 +333,7 @@ class ProcessOrderAdjustmentService:
                 cost_layer_id=layer.id,
                 quantity=-give,          # ⭐ 负数（需放宽 CHECK）
                 unit_cost=alloc.unit_cost,
-                cost_amount=-cost,
+                cost_amount=-cost,       # ⭐ 负数（需放宽 CHECK）
                 created_at=now_beijing_naive(),
             ))
             # 原 allocation 数量也同步减少（保持净额准确）
@@ -353,7 +355,10 @@ class ProcessOrderAdjustmentService:
         追加：按新配比出库（沿用 FIFO）。
         复用 StockOutService.create_stock_out，用 commit=False 合并事务。
         """
-        doc_no = f"ADJ-IN-{order.process_order_no}-{adjust_no[-6:]}"
+        #doc_no = f"ADJ-BLUE-{order.process_order_no}-{adjust_no[-6:]}"
+        adjust_type = "ADJUSTMENT_BLUE"
+        doc_no = generate_document_no_new(adjust_type)
+
         lines = [
             {"material_id": mid, "quantity": str(qty), "line_no": idx + 1}
             for idx, (mid, qty, _) in enumerate(consume_items)
@@ -361,7 +366,7 @@ class ProcessOrderAdjustmentService:
         result = StockOutService.create_stock_out(
             warehouse_id=ProcessOrderAdjustmentService._default_rm_warehouse_id(),
             lines=lines,
-            outbound_type="ADJUSTMENT_OUT",   # 新类型
+            outbound_type=adjust_type,   # 新类型
             document_no=doc_no,
             document_time=now_beijing_naive(),
             process_order_id=order.id,
