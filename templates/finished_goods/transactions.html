@@ -10,7 +10,9 @@
   <select name="warehouse_id">
     <option value="">-- 全部仓库 --</option>
     {% for w in warehouses %}
-      <option value="{{ w.id }}" {% if warehouse_id|string == w.id|string %}selected{% endif %}>
+      <option value="{{ w.id }}"
+        {% if warehouse_id|string == w.id|string %}selected{% endif %}>
+        [{{ {'finished_goods':'成品','general':'普通'}.get(w.warehouse_type, w.warehouse_type) }}]
         {{ w.warehouse_code }} - {{ w.warehouse_name }}
       </option>
     {% endfor %}
@@ -112,8 +114,10 @@
   .tx-badge { display:inline-block;padding:1px 6px;border-radius:10px;font-size:11px; }
   .tx-production_in { background:#e8f5e9;color:#2e7d32; }
   .tx-outbound      { background:#fff3e0;color:#ef6c00; }
-  .tx-customer_return{ background:#ede7f6;color:#4527a0; }
-  .tx-adjustment    { background:#e3f2fd;color:#1565c0; }
+  .tx-return_in     { background:#ede7f6;color:#4527a0; }
+  .tx-return_out    { background:#ede7f6;color:#4527a0; }
+  .tx-stocktake_gain { background:#e3f2fd;color:#c62828; }
+  .tx-stocktake_loss { background:#fce4ec;color:#ad1457; }
   .tx-transfer_in   { background:#f3e5f5;color:#6a1b9a; }
   .tx-transfer_out  { background:#fce4ec;color:#ad1457; }
 
@@ -125,8 +129,8 @@
   .entry-badge.entry-发货计划出库    { background:#fff3e0;color:#ef6c00; }
   .entry-badge.entry-成品入库页      { background:#e3f2fd;color:#1565c0; }
   .entry-badge.entry-成品入库页-退货 { background:#ede7f6;color:#4527a0; }
-  .entry-badge.entry-成品入库页-盘点 { background:#fff3e0;color:#ef6c00; }
-  .entry-badge.entry-成品出库页      { background:#fdecea;color:#c62828; }
+  .entry-badge.entry-成品入库页-盘点 { background:#fff3e0;color:#c62828; }
+  .entry-badge.entry-成品出库页      { background:#fdecea;color:#ef6c00; }
   .entry-badge.entry-未知入口        { background:#eee;color:#666; }
 </style>
 {% endblock %}

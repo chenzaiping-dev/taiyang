@@ -568,9 +568,10 @@ CREATE TABLE finished_goods_batches (
 
     batch_source ENUM(
         'PRODUCTION',
+        'STOCKTAKE',
         'RETURN',
         'OTHER'
-    ) NOT NULL DEFAULT 'PRODUCTION' COMMENT '批次来源: PRODUCTION生产入库, RETURN退货待确认, OTHER其他来源',
+    ) NOT NULL DEFAULT 'PRODUCTION' COMMENT '批次来源: PRODUCTION生产入库, STOCKTAKE盘点, RETURN退货待确认, OTHER其他来源',
 
     quality_status ENUM(
         'PENDING',
@@ -1054,10 +1055,11 @@ VALUES
 
 INSERT INTO warehouses (warehouse_code, warehouse_name, warehouse_type, manager_employee_id, status)
 VALUES
-('CY1001', '金坛仓库1', 'raw_material', 1, 1),
-('CY1002', '金坛仓库2', 'raw_material', 2, 1),
-('CY1003', '金坛仓库3', 'finished_goods', 3, 1),
-('CY1004', '金坛仓库4', 'finished_goods', 4, 1);
+('CK1001', '金坛仓库1', 'raw_material', 1, 1),
+('CK1002', '金坛仓库2', 'raw_material', 2, 1),
+('CK1003', '金坛仓库3', 'finished_goods', 3, 1),
+('CK1004', '金坛仓库4', 'finished_goods', 4, 1);
+('CK1005', '金坛仓库5', 'general', 4, 1);
 
 INSERT INTO materials (material_code, material_name, status)
 VALUES

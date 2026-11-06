@@ -11,6 +11,7 @@ from app.generated.models.materials import Material
 from app.generated.models.factories import Factory
 from app.generated.models.sales_performance import SalesPerformance
 from app.generated.models.employees import Employee
+from app.generated.models.warehouses import Warehouse
 from app.generated.models.inventory_documents import InventoryDocument
 from app.generated.models.inventory_transactions import InventoryTransaction
 
@@ -53,10 +54,20 @@ STATUS_LABELS = {
     "CANCELLED": "已取消",
 }
 
+def _fg_warehouses():
+    return (
+        Warehouse.query
+        .filter(
+            Warehouse.status == 1,
+            Warehouse.warehouse_type.in_(["finished_goods", "general"]),
+        )
+        .order_by(Warehouse.id.asc())
+        .all()
+    )
+
 from app.services.inventory_service import (
     StockOutService, InventoryError,
 )
-
 
 class PlaceOrderResult(dict):
     """结构化返回，方便 controller 用"""
@@ -206,13 +217,14 @@ class ProcessOrderService:
         return {
             "process_order_id": order.id,
             "process_order_no": order.process_order_no,
+            "planned_quantity": order.planned_quantity,
             "status": order.status,
             "order_time": order.order_time.isoformat(),
             "material_count": len(rows),
             "materials": [
                 {"id": r.id, "material_id": r.material_id,
-                 "ratio_value": str(r.ratio_value),
-                 "quantity": str(r.quantity), "cost": str(r.cost)}
+                 "ratio_value": r.ratio_value,
+                 "quantity": r.quantity, "cost": r.cost, "remark": r.remark}
                 for r in rows
             ],
         }
@@ -291,12 +303,13 @@ class ProcessOrderService:
         return {
             "process_order_id": order.id,
             "process_order_no": order.process_order_no,
+            "planned_quantity": order.planned_quantity,
             "status": order.status,
             "material_count": len(rows),
             "materials": [
                 {"id": r.id, "material_id": r.material_id,
-                 "ratio_value": str(r.ratio_value),
-                 "quantity": str(r.quantity), "cost": str(r.cost)}
+                 "ratio_value": r.ratio_value,
+                 "quantity": r.quantity, "cost": r.cost, "remark": r.remark}
                 for r in rows
             ],
         }

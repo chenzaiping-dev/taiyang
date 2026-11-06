@@ -18,7 +18,7 @@
   <div class="form-row">
     <label>仓库 *</label>
     <select name="warehouse_id" required>
-      <option value="">-- 请选择成品仓 --</option>
+      <option value="">-- 全部仓库 --</option>
       {% for w in warehouses %}
         <option value="{{ w.id }}"
           {% if form_data.warehouse_id|string == w.id|string %}selected{% endif %}>
@@ -42,7 +42,7 @@
     <input type="datetime-local" name="document_time"
            value="{{ form_data.document_time }}">
     <label>备注</label>
-    <input type="text" name="remark" maxlength="500" style="flex:1;"
+    <input type="text" name="remark" maxlength="300" style="flex:1;"
            value="{{ form_data.remark }}">
   </div>
 

@@ -11,47 +11,13 @@ from app.generated.models.finished_goods_inventory import FinishedGoodsInventory
 from app.generated.models.finished_goods_transactions import FinishedGoodsTransaction
 from app.generated.models.process_orders import ProcessOrder
 
+from app.services.process_order_service import _fg_warehouses
 from app.services.finished_goods_query_service import FinishedGoodsQueryService
-from app.services.finished_goods_service import FinishedGoodsError, FinishedGoodsService
-
+from app.services.finished_goods_service import (
+    FinishedGoodsError, FinishedGoodsService, INBOUND_TYPE_LABELS, OUTBOUND_TYPE_LABELS, TX_TYPE_LABELS
+)
 
 bp = Blueprint("finished_goods", __name__, url_prefix="/finished-goods")
-
-INBOUND_TYPE_LABELS = {
-    "PRODUCTION_IN": "生产入库",
-    "STOCKTAKE_GAIN": "盘盈入库",
-    "RETURN_IN": "退货入库",
-    "TRANSFER_IN": "调拨入库",
-}
-OUTBOUND_TYPE_LABELS = {
-    "OUTBOUND": "销售出库",
-    "STOCKTAKE_LOSS": "盘亏出库",
-    "RETURN_OUT": "退货出库",
-    "TRANSFER_OUT": "调拨出库",
-}
-
-TX_TYPE_LABELS = {
-    "PRODUCTION_IN": "生产入库",
-    "OUTBOUND": "出库",
-    "STOCKTAKE_GAIN": "盘盈入库",
-    "STOCKTAKE_LOSS": "盘亏出库",
-    "RETURN_IN": "退货入库",
-    "RETURN_OUT": "退货出库",
-    "TRANSFER_IN": "调拨入库",
-    "TRANSFER_OUT": "调拨出库",
-}
-
-def _fg_warehouses():
-    return (
-        Warehouse.query
-        .filter(
-            Warehouse.status == 1,
-            Warehouse.warehouse_type.in_(["finished_goods", "general"]),
-        )
-        .order_by(Warehouse.id.asc())
-        .all()
-    )
-
 
 def _parse_qty(s):
     try:

@@ -13,9 +13,10 @@ from app.generated.models.process_order_materials import ProcessOrderMaterial
 
 from app.schemas.process_order_schema import ProcessOrderRequestSchema
 from app.services.process_order_service import (
-    ProcessOrderService, ProcessOrderError, STATUS_LABELS
+    ProcessOrderService, ProcessOrderError, STATUS_LABELS, _fg_warehouses
 )
 from app.services.form_parser import parse_process_order_form, FormParseError
+from app.services.inventory_service import _rm_warehouses
 
 bp = Blueprint("process_order", __name__, url_prefix="/process-orders")
 schema = ProcessOrderRequestSchema()
@@ -62,19 +63,9 @@ def list_page():
         factory_id=factory_id or "",
         factories=Factory.query.filter_by(status=1).order_by(Factory.id).all(),
         status_labels=STATUS_LABELS,
-        warehouses=(
-            Warehouse.query
-            .filter_by(warehouse_type="raw_material", status=1)
-            .order_by(Warehouse.id.asc())
-            .all()
-        ),
+        warehouses=_rm_warehouses(),
         # ⭐ 新增：成品仓列表
-        fg_warehouses=(
-            Warehouse.query
-            .filter_by(warehouse_type="finished_goods", status=1)
-            .order_by(Warehouse.id.asc())
-            .all()
-        ),
+        fg_warehouses=_fg_warehouses()
     )
 
 

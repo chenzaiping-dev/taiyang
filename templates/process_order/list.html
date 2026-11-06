@@ -107,9 +107,12 @@
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <select name="warehouse_id" required
                       style="font-size:11px;padding:2px;max-width:110px;">
-                  {% for w in warehouses %}
-                  <option value="{{ w.id }}">{{ w.warehouse_name }}</option>
-                  {% endfor %}
+                {% for w in warehouses %}
+                  <option value="{{ w.id }}">
+                    [{{ {'raw_material':'原料','general':'普通'}.get(w.warehouse_type, w.warehouse_type) }}]
+                    {{ w.warehouse_code }} - {{ w.warehouse_name }}
+                  </option>
+                {% endfor %}
               </select>
               <button type="submit" class="btn btn-small btn-primary">下单</button>
               </form>
@@ -140,7 +143,10 @@
               <select name="warehouse_id" required
                       style="font-size:11px;padding:1px;max-width:90px;">
                 {% for w in fg_warehouses %}
-                  <option value="{{ w.id }}">{{ w.warehouse_name }}</option>
+                  <option value="{{ w.id }}">
+                    [{{ {'finished_goods':'成品','general':'普通'}.get(w.warehouse_type, w.warehouse_type) }}]
+                    {{ w.warehouse_code }}-{{ w.warehouse_name }}
+                  </option>
                 {% endfor %}
               </select>
               <button type="submit" class="btn btn-small btn-primary">入库</button>

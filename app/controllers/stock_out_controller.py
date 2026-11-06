@@ -7,13 +7,13 @@ from app.generated.models.materials import Material
 from app.generated.models.warehouses import Warehouse
 
 from app.schemas.stock_out_schema import StockOutRequestSchema
-from app.services.inventory_service import StockOutService, InventoryError
 from app.services.form_parser import parse_stock_out_form, FormParseError
-from app.services.inventory_query_service import OUTBOUND_TYPE_LABELS
+from app.services.inventory_service import (
+    StockOutService, InventoryError, OUTBOUND_TYPE_LABELS, _rm_warehouses
+)
 
 bp = Blueprint("stock_out", __name__, url_prefix="/inventory")
 schema = StockOutRequestSchema()
-
 
 # ---------- JSON API ----------
 @bp.post("/api/stock-out")
@@ -57,11 +57,10 @@ def api_confirm(document_id):
 # ---------- HTML Form ----------
 @bp.get("/stock-out")
 def stock_out_page():
-    warehouses = Warehouse.query.filter_by(status=1).order_by(Warehouse.id).all()
     materials = Material.query.filter_by(status=1).order_by(Material.material_code).all()
     return render_template(
         "inventory/stock_out_form.html",
-        warehouses=warehouses,
+        warehouses=_rm_warehouses(),
         materials=materials,
         outbound_types=OUTBOUND_TYPE_LABELS,
         form_data={
@@ -102,7 +101,6 @@ def stock_out_submit():
 
 
 def _render_stock_out_error(error_msg: str):
-    warehouses = Warehouse.query.filter_by(status=1).order_by(Warehouse.id).all()
     materials = Material.query.filter_by(status=1).order_by(Material.material_code).all()
 
     lines = []
@@ -133,7 +131,7 @@ def _render_stock_out_error(error_msg: str):
     return (
         render_template(
             "inventory/stock_out_form.html",
-            warehouses=warehouses,
+            warehouses=_rm_warehouses(),
             materials=materials,
             outbound_types=OUTBOUND_TYPE_LABELS,   # ⭐
             form_data=form_data,

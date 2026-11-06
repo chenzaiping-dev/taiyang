@@ -32,6 +32,37 @@ doc_type_map = {
     "TRANSFER_OUT": "TRANSFER",
 }
 
+batch_source_map = {
+    "PRODUCTION_IN": "PRODUCTION",
+    "STOCKTAKE_GAIN": "STOCKTAKE",
+    "RETURN_IN": "RETURN",
+    "TRANSFER_IN": "OTHER",
+}
+
+INBOUND_TYPE_LABELS = {
+    "PRODUCTION_IN": "生产入库",
+    "STOCKTAKE_GAIN": "盘盈入库",
+    "RETURN_IN": "退货入库",
+    "TRANSFER_IN": "调拨入库",
+}
+OUTBOUND_TYPE_LABELS = {
+    "OUTBOUND": "销售出库",
+    "STOCKTAKE_LOSS": "盘亏出库",
+    "RETURN_OUT": "退货出库",
+    "TRANSFER_OUT": "调拨出库",
+}
+
+TX_TYPE_LABELS = {
+    "PRODUCTION_IN": "生产入库",
+    "OUTBOUND": "出库",
+    "STOCKTAKE_GAIN": "盘盈入库",
+    "STOCKTAKE_LOSS": "盘亏出库",
+    "RETURN_IN": "退货入库",
+    "RETURN_OUT": "退货出库",
+    "TRANSFER_IN": "调拨入库",
+    "TRANSFER_OUT": "调拨出库",
+}
+
 class FinishedGoodsError(Exception):
     pass
 
@@ -62,7 +93,7 @@ class FinishedGoodsService:
             'quantity', 'unit_cost'(可选), 'remark'
         }]
         """
-        if inbound_type not in ("PRODUCTION_IN", "RETURN_IN", "STOCKTAKE_GAIN", "TRANSFER_IN"):
+        if inbound_type not in INBOUND_TYPE_LABELS:
             raise FinishedGoodsError(f"不支持的入库类型: {inbound_type}")
 
         wh = db.session.get(Warehouse, warehouse_id)
@@ -132,8 +163,8 @@ class FinishedGoodsService:
                         product_specification=l.get("product_specification"),
                         unit=l.get("unit") or "KG",
                         unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else None,
-                        batch_source=(doc_type_map[inbound_type]
-                            if inbound_type in doc_type_map else "OTHER"),
+                        batch_source=(batch_source_map[inbound_type]
+                            if inbound_type in batch_source_map else "OTHER"),
                         quality_status=l.get("quality_status") or "QUALIFIED",
                         remark=l.get("remark"),
                         created_at=now_beijing_naive(),
@@ -262,7 +293,7 @@ class FinishedGoodsService:
         """
         # 顶部仓库校验改为"按行取仓库后校验"
         # （删除原来的"必须先传 warehouse_id"的强校验，改到循环里做）
-        if outbound_type not in ("OUTBOUND", "RETURN_OUT", "STOCKTAKE_LOSS", "TRANSFER_OUT"):
+        if outbound_type not in OUTBOUND_TYPE_LABELS:
             raise FinishedGoodsError(f"不支持的出库类型: {outbound_type}")
         if not lines:
             raise FinishedGoodsError("出库明细不能为空")

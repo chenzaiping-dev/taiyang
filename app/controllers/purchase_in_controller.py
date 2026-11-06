@@ -14,9 +14,10 @@ from app.generated.models.inventory_transactions import InventoryTransaction
 from app.generated.models.inventory_cost_layers import InventoryCostLayer
 
 from app.schemas.purchase_in_schema import PurchaseInRequestSchema
-from app.services.inventory_service import PurchaseInService, InventoryError
 from app.services.form_parser import parse_purchase_in_form, FormParseError
-from app.services.inventory_query_service import INBOUND_TYPE_LABELS
+from app.services.inventory_service import (
+    PurchaseInService, InventoryError, INBOUND_TYPE_LABELS, _rm_warehouses
+)
 
 bp = Blueprint("purchase_in", __name__, url_prefix="/inventory")
 schema = PurchaseInRequestSchema()
@@ -53,7 +54,6 @@ def api_purchase_in():
 # ========== 模板页面：GET 渲染表单 ==========
 @bp.get("/purchase-in")
 def purchase_in_page():
-    warehouses = Warehouse.query.filter_by(status=1).order_by(Warehouse.id).all()
     suppliers = Supplier.query.filter_by(status=1).order_by(Supplier.id).all()
     materials = Material.query.filter_by(status=1).order_by(Material.material_code).all()
 
@@ -61,7 +61,7 @@ def purchase_in_page():
     default_lines = [{"material_id": "", "quantity": "", "unit_cost": ""}]
     return render_template(
         "inventory/purchase_in_form.html",
-        warehouses=warehouses,
+        warehouses=_rm_warehouses(),
         suppliers=suppliers,
         materials=materials,
         inbound_types=INBOUND_TYPE_LABELS,   # ⭐
@@ -109,7 +109,6 @@ def purchase_in_submit():
 
 
 def _render_form_with_error(error_msg: str):
-    warehouses = Warehouse.query.filter_by(status=1).order_by(Warehouse.id).all()
     suppliers = Supplier.query.filter_by(status=1).order_by(Supplier.id).all()
     materials = Material.query.filter_by(status=1).order_by(Material.material_code).all()
 
@@ -144,7 +143,7 @@ def _render_form_with_error(error_msg: str):
     return (
         render_template(
             "inventory/purchase_in_form.html",
-            warehouses=warehouses,
+            warehouses=_rm_warehouses(),
             suppliers=suppliers,
             materials=materials,
             inbound_types=INBOUND_TYPE_LABELS,   # ⭐

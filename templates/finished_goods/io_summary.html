@@ -9,10 +9,11 @@
          placeholder="批次号/产品名称" maxlength="50">
 
   <select name="warehouse_id">
-    <option value="">-- 全部成品仓 --</option>
+    <option value="">-- 全部仓库 --</option>
     {% for w in warehouses %}
       <option value="{{ w.id }}"
         {% if warehouse_id|string == w.id|string %}selected{% endif %}>
+        [{{ {'finished_goods':'成品','general':'普通'}.get(w.warehouse_type, w.warehouse_type) }}]
         {{ w.warehouse_code }} - {{ w.warehouse_name }}
       </option>
     {% endfor %}

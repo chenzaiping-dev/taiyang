@@ -18,23 +18,12 @@ from app.generated.models.finished_goods_inventory import FinishedGoodsInventory
 from app.generated.models.finished_goods_transactions import FinishedGoodsTransaction
 from app.generated.models.finished_goods_reservations import FinishedGoodsReservation
 
+from app.services.process_order_service import _fg_warehouses
 from app.services.production_plan_service import (
     ProductionPlanService, ProductionPlanError, PLAN_STATUS_LABELS,
 )
 
 bp = Blueprint("production_plan", __name__, url_prefix="/production-plans")
-
-
-def _fg_warehouses():
-    return (
-        Warehouse.query
-        .filter(
-            Warehouse.status == 1,
-            Warehouse.warehouse_type.in_(["finished_goods", "general"]),
-        )
-        .order_by(Warehouse.id.asc())
-        .all()
-    )
 
 
 def _available_factories():

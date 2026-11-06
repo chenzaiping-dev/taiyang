@@ -50,6 +50,29 @@ layer_type_map = {
     "RETURN_IN": "RETURN",
 }
 
+INBOUND_TYPE_LABELS = {
+    "PURCHASE_IN": "采购入库",
+    "STOCKTAKE_GAIN": "盘点盘盈",
+    "RETURN_IN": "退货回仓",
+}
+
+OUTBOUND_TYPE_LABELS = {
+    "PRODUCTION_OUT": "生产领料",
+    "STOCKTAKE_LOSS": "盘亏出库",
+    "RETURN_OUT": "退货出库"
+}
+
+def _rm_warehouses():
+    return (
+        Warehouse.query
+        .filter(
+            Warehouse.status == 1,
+            Warehouse.warehouse_type.in_(["raw_material", "general"]),
+        )
+        .order_by(Warehouse.id.asc())
+        .all()
+    )
+
 def generate_document_no(prefix: str = "PI") -> str:
     """生成单据号：前缀 + yyyyMMddHHmmss + 4位流水"""
     now = datetime.now()
@@ -83,7 +106,7 @@ class PurchaseInService:
         if not lines:
             raise InventoryError("采购明细不能为空")
 
-        if inbound_type not in ("PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN"):
+        if inbound_type not in INBOUND_TYPE_LABELS:
             raise InventoryError(f"不支持的入库类型: {inbound_type}")
 
         # 1. 校验仓库
@@ -362,7 +385,7 @@ class StockOutService:
         if not lines:
             raise InventoryError("出库明细不能为空")
 
-        if outbound_type not in ("PRODUCTION_OUT", "STOCKTAKE_LOSS", "RETURN_OUT"):
+        if outbound_type not in OUTBOUND_TYPE_LABELS:
             raise InventoryError(f"不支持的出库类型: {outbound_type}")
 
         # 1. 校验仓库

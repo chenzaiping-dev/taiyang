@@ -267,7 +267,7 @@ class FinishedGoodsQueryService:
             else_=0,
         )
         in_stocktake = case(
-            (FinishedGoodsTransaction.transaction_type == "STOCKTAKE_IN",
+            (FinishedGoodsTransaction.transaction_type == "STOCKTAKE_GAIN",
              FinishedGoodsTransaction.quantity_delta),
             else_=0,
         )
@@ -287,7 +287,7 @@ class FinishedGoodsQueryService:
             else_=0,
         )
         out_stocktake = case(
-            (FinishedGoodsTransaction.transaction_type == "STOCKTAKE_OUT",
+            (FinishedGoodsTransaction.transaction_type == "STOCKTAKE_LOSS",
              FinishedGoodsTransaction.quantity_delta),
             else_=0,
         )

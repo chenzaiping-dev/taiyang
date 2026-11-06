@@ -16,19 +16,13 @@
   <input type="text" name="batch_keyword" value="{{ batch_keyword }}"
          placeholder="批次号/产品名称" maxlength="50">
   <select name="warehouse_id">
-    <option value="">-- 全部成品仓 --</option>
+    <option value="">-- 全部仓库 --</option>
     {% for w in warehouses %}
       <option value="{{ w.id }}"
         {% if warehouse_id|string == w.id|string %}selected{% endif %}>
+        [{{ {'finished_goods':'成品','general':'普通'}.get(w.warehouse_type, w.warehouse_type) }}]
         {{ w.warehouse_code }} - {{ w.warehouse_name }}
       </option>
-    {% endfor %}
-  </select>
-  <label>出库类型 *</label>
-  <select name="outbound_type" required>
-    {% for code, label in outbound_types.items() %}
-      <option value="{{ code }}"
-        {% if form_data.outbound_type == code %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
   </select>
   <button type="submit" class="btn btn-primary">查询</button>
@@ -39,11 +33,18 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
   <div class="form-row">
+  <label>出库类型 *</label>
+  <select id="outbound_type" name="outbound_type" required>
+    {% for code, label in outbound_types.items() %}
+      <option value="{{ code }}"
+        {% if form_data.outbound_type == code %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>    
     <label>出库时间</label>
     <input type="datetime-local" name="document_time"
            value="{{ form_data.document_time }}">
     <label>备注</label>
-    <input type="text" name="remark" maxlength="500" style="flex:1;"
+    <input type="text" name="remark" maxlength="300" style="flex:1;"
            value="{{ form_data.remark }}">
   </div>
 

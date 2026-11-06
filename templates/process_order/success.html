@@ -13,7 +13,7 @@
 <table>
   <thead>
     <tr>
-      <th>明细ID</th><th>原料ID</th><th>配比</th><th>数量</th><th>成本</th>
+      <th>明细ID</th><th>原料ID</th><th>配比</th><th>数量</th><th>成本</th><th>备注</th>
     </tr>
   </thead>
   <tbody>
@@ -24,8 +24,34 @@
       <td>{{ m.ratio_value }}</td>
       <td>{{ m.quantity }}</td>
       <td>{{ m.cost }}</td>
+      <td>{{ m.remark }}</td>
     </tr>
     {% endfor %}
+    {% if result.materials %}
+      {# ===== 固定追加：水（虚拟行，不来自数据库） ===== #}
+      {% set ns = namespace(sum_qty=0, sum_ratio=0) %}
+      {% for m in result.materials %}
+        {% set ns.sum_qty   = ns.sum_qty   + (m.quantity   or 0) %}
+        {% set ns.sum_ratio = ns.sum_ratio + (m.ratio_value or 0) %}
+      {% endfor %}
+      {% set water_qty   = (result.planned_quantity or 0) - ns.sum_qty %}
+      {% set water_ratio = 1 - ns.sum_ratio %}
+      <tr style="background:#fafafa;">
+        <td><span style="color:#999;">—</span></td>
+        <td>水 <span style="color:#999;font-size:12px;">(虚拟行)</span></td>
+        <td>{{ "%.6f"|format(water_ratio) }}</td>
+        <td>{{ "%.4f"|format(water_qty) }}</td>
+        <td>0.0000</td>
+        <td><span style="color:#999;">按计划数量补足</span></td>
+      </tr>
+      <tr style="font-weight:bold;background:#f0f0f0;">
+        <td colspan="2" style="text-align:right;">合计</td>
+        <td>{{ "%.4f"|format(ns.sum_ratio + water_ratio) }}</td>
+        <td>{{ "%.4f"|format(ns.sum_qty + water_qty) }}</td>
+        <td>{{ result.materials | sum(attribute='cost') }}</td>
+        <td></td>
+      </tr>
+    {% endif %}
   </tbody>
 </table>
 

@@ -6,11 +6,13 @@ from app.generated.models.employees import Employee
 from app.generated.models.materials import Material
 from app.generated.models.warehouses import Warehouse
 from app.generated.models.inventory_cost_layers import InventoryCostLayer
-from app.services.inventory_query_service import InventoryQueryService, INBOUND_TYPE_LABELS, OUTBOUND_TYPE_LABELS
-from app.services.inventory_service import PurchaseInService, StockOutService, InventoryError
+from app.services.inventory_query_service import InventoryQueryService
+from app.services.inventory_service import (
+    PurchaseInService, StockOutService, InventoryError, 
+    INBOUND_TYPE_LABELS, OUTBOUND_TYPE_LABELS, _rm_warehouses
+)
 
 bp = Blueprint("inventory_query", __name__, url_prefix="/inventory")
-
 
 @bp.get("/material-stock")
 def material_stock_page():
@@ -41,15 +43,6 @@ def material_stock_page():
     )
 
     # ⭐ 仓库下拉：原料仓 + 普通仓（成品仓不涉及原料库存）
-    warehouses = (
-        Warehouse.query
-        .filter(
-            Warehouse.status == 1,
-            Warehouse.warehouse_type.in_(["raw_material", "general"]),
-        )
-        .order_by(Warehouse.warehouse_type.asc(), Warehouse.id.asc())
-        .all()
-    )
 
     # 在 material_stock_page 里追加
     available_materials = []
@@ -81,7 +74,7 @@ def material_stock_page():
         warehouse_id=warehouse_id or "",
         current_wh=current_wh,            # ⭐
         group_by_warehouse=group_by_warehouse,
-        warehouses=warehouses,
+        warehouses=_rm_warehouses(),
         available_materials=available_materials,
     )
 
@@ -115,15 +108,6 @@ def material_stock_with_cost_layers_page():
     )
 
     # ⭐ 仓库下拉：原料仓 + 普通仓（成品仓不涉及原料库存）
-    warehouses = (
-        Warehouse.query
-        .filter(
-            Warehouse.status == 1,
-            Warehouse.warehouse_type.in_(["raw_material", "general"]),
-        )
-        .order_by(Warehouse.warehouse_type.asc(), Warehouse.id.asc())
-        .all()
-    )
 
     # 在 material_stock_page 里追加
     available_materials = []
@@ -155,7 +139,7 @@ def material_stock_with_cost_layers_page():
         warehouse_id=warehouse_id or "",
         current_wh=current_wh,            # ⭐
         group_by_warehouse=group_by_warehouse,
-        warehouses=warehouses,
+        warehouses=_rm_warehouses(),
         available_materials=available_materials,
     )
 
@@ -194,15 +178,6 @@ def material_io_summary_page():
     total_pages = max((total + page_size - 1) // page_size, 1)
 
     current_wh = Warehouse.query.get(warehouse_id) if warehouse_id else None
-    warehouses = (
-        Warehouse.query
-        .filter(
-            Warehouse.status == 1,
-            Warehouse.warehouse_type.in_(["raw_material", "general"]),
-        )
-        .order_by(Warehouse.warehouse_type.asc(), Warehouse.id.asc())
-        .all()
-    )
 
     return render_template(
         "inventory/material_io_summary.html",
@@ -213,7 +188,7 @@ def material_io_summary_page():
         date_from=date_from_raw or "",
         date_to=date_to_raw or "",
         current_wh=current_wh,
-        warehouses=warehouses,
+        warehouses=_rm_warehouses(),
     )
 
 TRANSACTION_TYPE_LABELS = {
@@ -285,16 +260,6 @@ def material_transactions_page():
     )
     total_pages = max((total + page_size - 1) // page_size, 1)
 
-    warehouses = (
-        Warehouse.query
-        .filter(
-            Warehouse.status == 1,
-            Warehouse.warehouse_type.in_(["raw_material", "general"]),
-        )
-        .order_by(Warehouse.warehouse_type.asc(), Warehouse.id.asc())
-        .all()
-    )
-
     return render_template(
         "inventory/material_transactions.html",
         rows=rows, total=total, page=page,
@@ -305,7 +270,7 @@ def material_transactions_page():
         document_no=document_no or "",
         date_from=date_from_raw or "",
         date_to=date_to_raw or "",
-        warehouses=warehouses,
+        warehouses=_rm_warehouses(),
         transaction_types=TRANSACTION_TYPE_LABELS,
         transaction_directions=TRANSACTION_TYPE_DIRECTION,
         document_types=DOC_TYPE_LABELS,

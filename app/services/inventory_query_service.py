@@ -15,18 +15,6 @@ from app.generated.models.process_orders import ProcessOrder
 from app.utils.decimal_utils import _q3, _q6
 
 
-INBOUND_TYPE_LABELS = {
-    "PURCHASE_IN": "采购入库",
-    "STOCKTAKE_GAIN": "盘点盘盈",
-    "RETURN_IN": "退货回仓",
-}
-
-OUTBOUND_TYPE_LABELS = {
-    "PRODUCTION_OUT": "生产领料",
-    "STOCKTAKE_LOSS": "盘亏出库",
-    "RETURN_OUT": "退货出库"
-}
-
 class InventoryQueryService:
 
     @staticmethod
