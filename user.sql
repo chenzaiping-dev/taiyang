@@ -44,6 +44,7 @@ DROP TABLE IF EXISTS `production_plans`;
 DROP TABLE IF EXISTS `process_orders`;
 
 -- 11. 业绩单
+DROP TABLE IF EXISTS `process_order_material_adjustments`;
 DROP TABLE IF EXISTS `sales_performance`;
 
 -- 12. 仓库
@@ -410,9 +411,10 @@ CREATE TABLE inventory_documents (
         'PRODUCTION_OUT',
         'STOCKTAKE',
         'RETURN',
-        'ADJUSTMENT'
+        'ADJUSTMENT_IN',
+        'ADJUSTMENT_OUT'
     ) NOT NULL COMMENT '单据类型: PURCHASE_IN采购入库, PRODUCTION_OUT生产出库,
-        STOCKTAKE库存盘点, RETURN退货, ADJUSTMENT库存调整',
+        STOCKTAKE库存盘点, RETURN退货, ADJUSTMENT_IN库存调整-入库, ADJUSTMENT_OUT库存调整-出库',
 
     document_time DATETIME NOT NULL COMMENT '业务发生时间',
 
@@ -444,9 +446,12 @@ CREATE TABLE inventory_transactions (
         'STOCKTAKE_GAIN',
         'STOCKTAKE_LOSS',
         'RETURN_IN',
-        'RETURN_OUT'
+        'RETURN_OUT',
+        'ADJUSTMENT_IN',
+        'ADJUSTMENT_OUT'
     ) NOT NULL COMMENT '业务类型: PURCHASE_IN:采购入库, PRODUCTION_OUT:生产出库, 
-        STOCKTAKE_GAIN:库存盘点-入库, STOCKTAKE_LOSS:库存盘点-出库, RETURN_IN:退货入库, RETURN_OUT:退货出库',
+        STOCKTAKE_GAIN:库存盘点-入库, STOCKTAKE_LOSS:库存盘点-出库,
+        RETURN_IN:退货入库, RETURN_OUT:退货出库, ADJUSTMENT_IN:调整入库, ADJUSTMENT_OUT:调整出库',
 
     transaction_time DATETIME NOT NULL COMMENT '业务生效时间',
 
@@ -549,12 +554,31 @@ CREATE TABLE inventory_cost_allocations (
     FOREIGN KEY (cost_layer_id)
         REFERENCES inventory_cost_layers(id),
 
-    CHECK (quantity > 0),
     CHECK (unit_cost >= 0),
-    CHECK (cost_amount >= 0)
+    CONSTRAINT chk_quantity_nonzero CHECK (quantity <> 0),
+    CONSTRAINT chk_cost_nonzero CHECK (cost_amount <> 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 COMMENT='FIFO出库成本分配明细';
 
+-- 4. 新表
+CREATE TABLE process_order_material_adjustments (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    adjustment_no VARCHAR(50) NOT NULL,
+    process_order_id BIGINT UNSIGNED NOT NULL,
+    adjust_time DATETIME NOT NULL,
+    adjust_reason VARCHAR(500),
+    old_snapshot JSON,
+    new_snapshot JSON,
+    out_document_id BIGINT UNSIGNED NULL,
+    in_document_id BIGINT UNSIGNED NULL,
+    created_by BIGINT UNSIGNED NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_adjustment_no (adjustment_no),
+    KEY idx_po_adjust (process_order_id, adjust_time),
+    CONSTRAINT fk_poma_po FOREIGN KEY (process_order_id) REFERENCES process_orders(id),
+    CONSTRAINT fk_poma_out_doc FOREIGN KEY (out_document_id) REFERENCES inventory_documents(id),
+    CONSTRAINT fk_poma_in_doc FOREIGN KEY (in_document_id) REFERENCES inventory_documents(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE finished_goods_batches (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -1058,7 +1082,7 @@ VALUES
 ('CK1001', '金坛仓库1', 'raw_material', 1, 1),
 ('CK1002', '金坛仓库2', 'raw_material', 2, 1),
 ('CK1003', '金坛仓库3', 'finished_goods', 3, 1),
-('CK1004', '金坛仓库4', 'finished_goods', 4, 1);
+('CK1004', '金坛仓库4', 'finished_goods', 4, 1),
 ('CK1005', '金坛仓库5', 'general', 4, 1);
 
 INSERT INTO materials (material_code, material_name, status)

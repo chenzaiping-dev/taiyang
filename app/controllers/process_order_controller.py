@@ -15,8 +15,11 @@ from app.schemas.process_order_schema import ProcessOrderRequestSchema
 from app.services.process_order_service import (
     ProcessOrderService, ProcessOrderError, STATUS_LABELS, _fg_warehouses
 )
+from app.services.process_order_adjustment_service import (
+    ProcessOrderAdjustmentService, ProcessOrderAdjustmentError
+)
 from app.services.form_parser import parse_process_order_form, FormParseError
-from app.services.inventory_service import _rm_warehouses
+from app.services.inventory_service import _rm_warehouses, InventoryError
 
 bp = Blueprint("process_order", __name__, url_prefix="/process-orders")
 schema = ProcessOrderRequestSchema()
@@ -468,4 +471,89 @@ def _render_error(error_msg: str):
             errors=[error_msg],
         ),
         400,
+    )
+
+@bp.post("/<int:order_id>/adjust-materials")
+def adjust_materials(order_id):
+    """
+    配比调整。表单字段：
+      materials[0][material_id] / [ratio_value] / [remark] ...
+      reason
+    """
+    # 解析新配比
+    new_materials = []
+    idx = 0
+    while True:
+        key = f"materials[{idx}][material_id]"
+        if key not in request.form:
+            break
+        mid = request.form.get(key, "").strip()
+        ratio = request.form.get(f"materials[{idx}][ratio_value]", "").strip()
+        if mid and ratio:
+            try:
+                new_materials.append({
+                    "material_id": int(mid),
+                    "ratio_value": ratio,
+                    "remark": request.form.get(
+                        f"materials[{idx}][remark]", "").strip() or None,
+                })
+            except ValueError:
+                pass
+        idx += 1
+
+    try:
+        result = ProcessOrderAdjustmentService.adjust_materials(
+            order_id=order_id,
+            new_materials=new_materials,
+            reason=request.form.get("reason", "").strip() or None,
+            operator_id=1,
+        )
+        flash(
+            f"配比调整成功，红冲单 {result['reverse_doc_no'] or '-'}，"
+            f"补充单 {result['consume_doc_no'] or '-'}",
+            "success",
+        )
+    except (ProcessOrderAdjustmentError, InventoryError) as e:
+        flash(str(e), "error")
+    return redirect(request.referrer or url_for("process_order.detail_page",
+                                                 order_id=order_id))
+
+@bp.get("/<int:order_id>/adjust-materials")
+def adjust_materials_page(order_id):
+    order = db.session.get(ProcessOrder, order_id)
+    if not order:
+        abort(404)
+    if order.status not in ("ORDERED", "PRODUCING"):
+        flash(f"当前状态【{STATUS_LABELS.get(order.status, order.status)}】"
+              f"不允许调整配比", "error")
+        return redirect(url_for("process_order.detail_page", order_id=order_id))
+
+    materials = (
+        ProcessOrderMaterial.query
+        .filter_by(process_order_id=order_id)
+        .order_by(ProcessOrderMaterial.id.asc())
+        .all()
+    )
+
+    # 原料基础信息映射
+    material_map = {}
+    if materials:
+        ids = [m.material_id for m in materials]
+        for mat in Material.query.filter(Material.id.in_(ids)).all():
+            material_map[mat.id] = mat
+
+    all_materials = (
+        Material.query.filter_by(status=1)
+        .order_by(Material.material_code.asc())
+        .all()
+    )
+
+    return render_template(
+        "process_order/adjust_materials.html",
+        order=order,
+        materials=materials,
+        material_map=material_map,
+        all_materials=all_materials,
+        status_labels=STATUS_LABELS,
+        errors=[],
     )

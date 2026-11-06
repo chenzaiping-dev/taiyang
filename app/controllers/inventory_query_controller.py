@@ -198,6 +198,8 @@ TRANSACTION_TYPE_LABELS = {
     "STOCKTAKE_LOSS": "盘亏出库",
     "RETURN_IN":     "退货入库",
     "RETURN_OUT":    "退货出库",
+    "ADJUSTMENT_IN": "调整入库",
+    "ADJUSTMENT_OUT": "调整出库"
 }
 
 TRANSACTION_TYPE_DIRECTION = {
@@ -207,6 +209,8 @@ TRANSACTION_TYPE_DIRECTION = {
     "STOCKTAKE_LOSS": "out",
     "RETURN_IN":     "in",
     "RETURN_OUT":    "out",
+    "ADJUSTMENT_IN": "in",
+    "ADJUSTMENT_OUT": "out"
 }
 
 DOC_STATUS_LABELS = {
@@ -219,7 +223,8 @@ DOC_TYPE_LABELS = {
     "PURCHASE_IN": "采购入库单",
     "PRODUCTION_OUT": "生产出库单",
     "STOCKTAKE": "盘点单",
-    "ADJUSTMENT": "调整单",
+    "ADJUSTMENT_IN": "调整入库单",
+    "ADJUSTMENT_OUT": "调整出库单",
     "RETURN": "退货单",
 }
 

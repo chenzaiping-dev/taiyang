@@ -1,0 +1,410 @@
+{% extends "inventory/base.html" %}
+{% block title %}调整原料配比 - {{ order.process_order_no }}{% endblock %}
+
+{% block content %}
+<h2>
+  调整原料配比
+  <span style="color:#888;font-size:14px;">#{{ order.process_order_no }}</span>
+
+  <a class="btn" style="float:right;"
+     href="{{ url_for('process_order.detail_page', order_id=order.id) }}">
+    返回详情
+  </a>
+</h2>
+
+{% if errors %}
+  <div class="error-box">
+    <ul style="margin:0;padding-left:20px;">
+      {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+<!-- ⭐ 顶部预警 -->
+<div style="padding:10px 14px;background:#fff3e0;border:1px solid #ffcc80;
+            border-radius:4px;margin-bottom:16px;font-size:13px;color:#ef6c00;">
+  <strong>⚠️ 操作须知：</strong>
+  调整配比会自动生成对应的<strong>红冲出库</strong>和<strong>补充出库</strong>流水：
+  配比减少 → 退回原料库；配比增加 → 从原料库补扣（FIFO）。
+  该操作<strong>不可撤销</strong>，请确认后再提交。
+</div>
+
+<form id="adjust-form" method="post"
+      action="{{ url_for('process_order.adjust_materials', order_id=order.id) }}"
+      data-next-index="{{ materials|length }}">
+
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <fieldset>
+    <legend>工艺单信息（只读）</legend>
+    <div class="form-row">
+      <label>工艺单号：</label>{{ order.process_order_no }}
+      <label style="margin-left:24px;">生产批号：</label>{{ order.batch_no }}
+    </div>
+    <div class="form-row">
+      <label>产品名称：</label>{{ order.product_name }}
+      <label style="margin-left:24px;">规格：</label>
+      {{ order.product_specification or "-" }}
+    </div>
+    <div class="form-row">
+      <label>计划数量：</label>
+      <strong>{{ order.planned_quantity }}</strong>
+      {% if order.unit %} {{ order.unit }}{% endif %}
+      <label style="margin-left:24px;">状态：</label>
+      <span class="status-badge status-{{ order.status|lower }}">
+        {{ status_labels.get(order.status, order.status) }}
+      </span>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>调整原因 *</legend>
+    <div class="form-row">
+      <label for="reason">原因：</label>
+      <input type="text" id="reason" name="reason" maxlength="500"
+             required style="flex:1;"
+             placeholder="例如：客户变更配方、生产中发现某原料不足、配方优化...">
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>原料配比（原值只读对比，新值可编辑；配比合计必须 <= 1）</legend>
+    <table id="mat-table" style="width:100%;border-collapse:collapse;">
+      <thead>
+        <tr style="background:#f5f5f5;">
+          <th style="width:40px;">#</th>
+          <th>原料 *</th>
+          <th style="width:110px;">原配比</th>
+          <th style="width:110px;">原数量</th>
+          <th style="width:130px;">新配比 *</th>
+          <th style="width:130px;">新数量（自动）</th>
+          <th style="width:130px;">差异</th>
+          <th>备注</th>
+          <th style="width:60px;">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in materials %}
+          {% set mat = material_map.get(m.material_id) %}
+          <tr class="mat-row"
+              data-original-material-id="{{ m.material_id }}"
+              data-original-ratio="{{ m.ratio_value }}"
+              data-original-qty="{{ m.quantity }}"
+              data-original-cost="{{ m.cost }}">
+            <td class="row-no">{{ loop.index }}</td>
+            <td>
+              <select name="materials[{{ loop.index0 }}][material_id]"
+                      required class="mat-select">
+                <option value="">-- 选择原料 --</option>
+                {% for mm in all_materials %}
+                  <option value="{{ mm.id }}"
+                    {% if m.material_id|string == mm.id|string %}selected{% endif %}>
+                    {{ mm.material_code }} - {{ mm.material_name }} ({{ mm.unit }})
+                  </option>
+                {% endfor %}
+              </select>
+            </td>
+            <td style="text-align:right;color:#888;">
+              {{ "%.6f"|format(m.ratio_value) }}
+            </td>
+            <td style="text-align:right;color:#888;">
+              {{ "%.4f"|format(m.quantity) }}
+            </td>
+            <td>
+              <input type="number" step="0.000001" min="0" max="1"
+                     name="materials[{{ loop.index0 }}][ratio_value]"
+                     value="{{ m.ratio_value }}"
+                     required class="ratio-input">
+            </td>
+            <td>
+              <input type="number" step="0.0001" min="0"
+                     name="materials[{{ loop.index0 }}][quantity]"
+                     value="{{ m.quantity }}"
+                     readonly class="qty-auto"
+                     title="由计划数量 × 配比自动计算">
+            </td>
+            <td class="diff-cell" style="text-align:right;font-weight:600;color:#666;">
+              —
+            </td>
+            <td>
+              <input type="text" maxlength="255"
+                     name="materials[{{ loop.index0 }}][remark]"
+                     value="{{ m.remark or '' }}">
+            </td>
+            <td>
+              <button type="button" class="btn btn-danger btn-remove-row"
+                      {% if materials|length <= 1 %}disabled{% endif %}>
+                移除
+              </button>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <th colspan="4" style="text-align:right;">新配比合计</th>
+          <th id="ratio-sum" style="text-align:right;">0</th>
+          <th id="qty-sum" style="text-align:right;">0</th>
+          <th colspan="3"></th>
+        </tr>
+      </tfoot>
+    </table>
+
+    <button type="button" id="add-row-btn" class="btn">+ 添加原料</button>
+
+    <p style="color:#666;font-size:12px;margin-top:8px;">
+      提示：新配比合计必须小于等于 1（允许 ±0.000001 误差）。
+      新增原料行时，原配比/原数量默认为 0。
+    </p>
+  </fieldset>
+
+  <div style="margin-top:24px;">
+    <button type="submit" class="btn btn-primary">
+      确认调整并生成出入库流水
+    </button>
+    <a class="btn"
+       href="{{ url_for('process_order.detail_page', order_id=order.id) }}">
+      取消
+    </a>
+  </div>
+</form>
+
+<!-- 动态行模板（新增原料用；原值都为 0） -->
+<template id="mat-template">
+  <tr class="mat-row"
+      data-original-material-id=""
+      data-original-ratio="0"
+      data-original-qty="0"
+      data-original-cost="0">
+    <td class="row-no"></td>
+    <td>
+      <select name="materials[__IDX__][material_id]" required class="mat-select">
+        <option value="">-- 选择原料 --</option>
+        {% for mm in all_materials %}
+          <option value="{{ mm.id }}">
+            {{ mm.material_code }} - {{ mm.material_name }} ({{ mm.unit }})
+          </option>
+        {% endfor %}
+      </select>
+    </td>
+    <td style="text-align:right;color:#888;">0.000000</td>
+    <td style="text-align:right;color:#888;">0.0000</td>
+    <td>
+      <input type="number" step="0.000001" min="0" max="1"
+             name="materials[__IDX__][ratio_value]"
+             required class="ratio-input">
+    </td>
+    <td>
+      <input type="number" step="0.0001" min="0"
+             name="materials[__IDX__][quantity]"
+             readonly class="qty-auto"
+             title="由计划数量 × 配比自动计算">
+    </td>
+    <td class="diff-cell" style="text-align:right;font-weight:600;color:#666;">
+      —
+    </td>
+    <td>
+      <input type="text" maxlength="255"
+             name="materials[__IDX__][remark]">
+    </td>
+    <td>
+      <button type="button" class="btn btn-danger btn-remove-row">移除</button>
+    </td>
+  </tr>
+</template>
+
+<script>
+(function () {
+  const plannedQty = parseFloat("{{ order.planned_quantity }}") || 0;
+  const tbody      = document.querySelector("#mat-table tbody");
+  const tpl        = document.getElementById("mat-template");
+  const addBtn     = document.getElementById("add-row-btn");
+  const ratioSumEl = document.getElementById("ratio-sum");
+  const qtySumEl   = document.getElementById("qty-sum");
+  let nextIdx      = {{ materials|length }};
+
+  // ---- 工具 ----
+  const toNum = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+  const fmt6  = (n) => (n.toFixed(6).replace(/\.?0+$/, "") || "0");
+  const fmt4  = (n) => (n.toFixed(4).replace(/\.?0+$/, "") || "0");
+
+  // ---- 行号重排 ----
+  function renumber() {
+    tbody.querySelectorAll("tr.mat-row").forEach((tr, i) => {
+      const c = tr.querySelector(".row-no");
+      if (c) c.textContent = i + 1;
+    });
+  }
+
+  // ---- 每行：根据配比自动算新数量 + 差异 ----
+  function recalcRow(tr) {
+    const ratioInput = tr.querySelector(".ratio-input");
+    const qtyInput   = tr.querySelector(".qty-auto");
+    const diffCell   = tr.querySelector(".diff-cell");
+
+    const ratio = toNum(ratioInput?.value);
+    const newQty = plannedQty * ratio;
+    if (qtyInput) qtyInput.value = fmt4(newQty);
+
+    // 原配比 / 原数量：通过 data-* 拿
+    const origRatio = toNum(tr.dataset.originalRatio);
+    const origQty   = toNum(tr.dataset.originalQty);
+
+    const diffQty = newQty - origQty;
+    if (diffCell) {
+      if (Math.abs(diffQty) < 1e-6) {
+        diffCell.textContent = "—";
+        diffCell.style.color = "#999";
+      } else if (diffQty > 0) {
+        diffCell.textContent = `+${fmt4(diffQty)}`;
+        diffCell.style.color = "#c62828";   // 增加 → 需补扣原料
+        diffCell.title = "配比增加，将补扣原料库存";
+      } else {
+        diffCell.textContent = fmt4(diffQty);
+        diffCell.style.color = "#2e7d32";   // 减少 → 退回原料库
+        diffCell.title = "配比减少，将退回原料库存";
+      }
+    }
+  }
+
+  // ---- 汇总 ----
+  function recalcTotals() {
+    let ratioSum = 0, qtySum = 0;
+    tbody.querySelectorAll("tr.mat-row").forEach((tr) => {
+      const r = toNum(tr.querySelector(".ratio-input")?.value);
+      const q = toNum(tr.querySelector(".qty-auto")?.value);
+      ratioSum += r;
+      qtySum += q;
+      recalcRow(tr);
+    });
+    ratioSumEl.textContent = fmt6(ratioSum);
+    ratioSumEl.style.color =
+      Math.abs(ratioSum - 1) < 1e-6 ? "#2e7d32" : "#c62828";
+    qtySumEl.textContent = fmt4(qtySum);
+    qtySumEl.style.color =
+      Math.abs(qtySum - plannedQty) < 1e-4 ? "#2e7d32" : "#c62828";
+  }
+
+  // ---- 事件绑定 ----
+  addBtn.addEventListener("click", () => {
+    tbody.insertAdjacentHTML(
+      "beforeend",
+      tpl.innerHTML.replaceAll("__IDX__", nextIdx++)
+    );
+    renumber();
+    recalcTotals();
+    const last = tbody.querySelector(".mat-row:last-child");
+    last?.querySelector(".ratio-input")?.focus();
+  });
+
+  tbody.addEventListener("click", (e) => {
+    if (e.target.classList.contains("btn-remove-row")) {
+      if (tbody.querySelectorAll("tr.mat-row").length <= 1) return;
+      if (!confirm("确认移除该原料行？移除后该原料不参与本次调整。")) return;
+      e.target.closest("tr").remove();
+      renumber();
+      recalcTotals();
+    }
+  });
+
+  tbody.addEventListener("input", (e) => {
+    if (e.target.classList.contains("ratio-input")) {
+      recalcTotals();
+    }
+  });
+
+  // 防止同一原料重复
+  tbody.addEventListener("change", (e) => {
+    if (!e.target.classList.contains("mat-select")) return;
+    const v = e.target.value;
+    if (!v) return;
+    let cnt = 0;
+    tbody.querySelectorAll(".mat-select").forEach((s) => {
+      if (s.value === v) cnt++;
+    });
+    if (cnt > 1) {
+      alert("同一原料只能出现一次");
+      e.target.value = "";
+    }
+  });
+
+  // ---- 提交前校验 ----
+  document.getElementById("adjust-form").addEventListener("submit", (e) => {
+    const rows = tbody.querySelectorAll("tr.mat-row");
+    let ratioSum = 0, qtySum = 0, err = null, hasChange = false;
+    const seen = new Set();
+
+    rows.forEach((tr, i) => {
+      const mid      = tr.querySelector(".mat-select")?.value;
+      const ratioInp = tr.querySelector(".ratio-input");
+      const ratio    = toNum(ratioInp?.value);
+      const newQty   = toNum(tr.querySelector(".qty-auto")?.value);
+      const origQty  = toNum(tr.dataset.originalQty);
+
+      if (!mid) { err = err || `第 ${i + 1} 行：请选择原料`; return; }
+      if (seen.has(mid)) {
+        err = err || `第 ${i + 1} 行：原料重复`;
+        return;
+      }
+      seen.add(mid);
+
+      if (ratioInp.value === "" || ratio < 0 || ratio > 1) {
+        err = err || `第 ${i + 1} 行：配比必须在 0-1 之间`;
+        return;
+      }
+
+      ratioSum += ratio;
+      qtySum   += newQty;
+
+      if (Math.abs(newQty - origQty) > 1e-6) hasChange = true;
+    });
+
+    if (!err && ratioSum > 1 + 1e-6) {
+      err = `原料配比合计必须小于等于 1，当前为 ${ratioSum.toFixed(6)}`;
+    }
+    if (!err && qtySum > plannedQty + 1e-4) {
+      err = `新数量合计 ${qtySum.toFixed(4)} 应小于等于计划数量 ${plannedQty}`;
+    }
+    if (!err && !hasChange) {
+      err = "配比无变化，无需提交";
+    }
+
+    if (err) {
+      e.preventDefault();
+      alert(err);
+      return;
+    }
+
+    if (!confirm("确认提交配比调整？\n\n" +
+                 "→ 配比减少的原料将退回原料库\n" +
+                 "→ 配比增加的原料将从原料库补扣（FIFO）\n" +
+                 "→ 该操作不可撤销")) {
+      e.preventDefault();
+      return;
+    }
+
+    const btn = e.target.querySelector('button[type="submit"]');
+    if (btn) { btn.disabled = true; btn.textContent = "提交中..."; }
+  });
+
+  // ---- 初始化 ----
+  renumber();
+  recalcTotals();
+})();
+</script>
+
+<style>
+  .status-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: 11px;
+  }
+  .status-draft      { background:#eee;    color:#555; }
+  .status-ordered    { background:#e3f2fd; color:#1565c0; }
+  .status-producing  { background:#fff3e0; color:#ef6c00; }
+  .status-completed  { background:#e8f5e9; color:#2e7d32; }
+  .status-received   { background:#ede7f6; color:#4527a0; }
+  .status-cancelled  { background:#fdecea; color:#c62828; }
+
+  #mat-table input[type="number"] { width: 100%; box-sizing: border-box; }
+</style>
+{% endblock %}

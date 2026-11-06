@@ -8,6 +8,12 @@
      href="{{ url_for('process_order.edit_page', order_id=order.id) }}">
     编辑
   </a>
+{% if order.status in ('ORDERED', 'PRODUCING', 'RECEIVED') %}
+  <a class="btn btn-warn"
+     href="{{ url_for('process_order.adjust_materials_page', order_id=order.id) }}">
+    调整原料配比
+  </a>
+{% endif %}
   <a class="btn" style="float:right;margin-right:8px;"
      href="{{ url_for('process_order.list_page') }}">
     返回列表

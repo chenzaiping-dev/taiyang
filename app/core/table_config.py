@@ -162,6 +162,11 @@ TABLES = {
         "search_fields": ["process_order_id", "material_id"],
         "can_create": True, "can_edit": True, "can_delete": False,
     },
+    "process_order_material_adjustments": {
+        "label": "工艺单原料调整", "module": "生产管理", "mode": "readonly",
+        "list_fields": ["id", "process_order_id", "adjustment_no", "out_document_id", "in_document_id", "old_snapshot", "new_snapshot", "adjust_reason", "created_at"],
+        "search_fields": ["process_order_id", "adjustment_no"],
+    },    
     "shipment_plans": {
         "label": "发货计划单", "module": "发货管理", "mode": "crud",
         "list_fields": ["id", "shipment_plan_no", "performance_id", "destination", "transport_method", "planned_ship_time", "actual_ship_time", "status"],

@@ -522,14 +522,11 @@ class FinishedGoodsQueryService:
         成品库入库/出库单列表（方向维度）。
         """
         if direction == "IN":
-            #tx_types = ["PRODUCTION_IN", "STOCKTAKE_GAIN", "RETURN_IN", "TRANSFER_IN"]
             tx_types = INBOUND_TYPE_LABELS.keys()
             qty_expr = func.coalesce(
                 func.sum(FinishedGoodsTransaction.quantity_delta), 0
             ).label("total_qty")
         else:
-            #tx_types = ["OUTBOUND", "STOCKTAKE_LOSS", "RETURN_OUT",
-            #            "TRANSFER_OUT", "ADJUSTMENT"]
             tx_types = OUTBOUND_TYPE_LABELS.keys()
 
             qty_expr = func.coalesce(

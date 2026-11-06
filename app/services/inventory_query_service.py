@@ -267,6 +267,11 @@ class InventoryQueryService:
              -InventoryTransaction.quantity_delta),
             else_=0,
         )
+        out_adjust = case(
+            (InventoryTransaction.transaction_type == "ADJUSTMENT_OUT",
+             -InventoryTransaction.quantity_delta),
+            else_=0,
+        )
 
         filters = []
         if material_code:
@@ -293,6 +298,7 @@ class InventoryQueryService:
             func.sum(in_gain).label("in_gain"),
             func.sum(out_production).label("out_production"),
             func.sum(out_loss).label("out_loss"),
+            func.sum(out_adjust).label("out_adjust"),
             func.sum(in_qty).label("total_in"),
             func.sum(out_qty).label("total_out"),
             func.sum(InventoryTransaction.quantity_delta).label("net_qty"),
@@ -449,14 +455,14 @@ class InventoryQueryService:
         direction='OUT' → PRODUCTION_OUT / STOCKTAKE / ADJUSTMENT (库存减少类流水)
         """
         if direction == "IN":
-            doc_types = ["PURCHASE_IN", "STOCKTAKE", "RETURN"]
-            tx_types = ["PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN"]
+            doc_types = ["PURCHASE_IN", "STOCKTAKE", "RETURN", "ADJUSTMENT_IN"]
+            tx_types = ["PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN", "ADJUSTMENT_IN"]
             qty_expr = func.coalesce(
                 func.sum(InventoryTransaction.quantity_delta), 0
             ).label("total_qty")
         else:
-            doc_types = ["PRODUCTION_OUT", "STOCKTAKE", "ADJUSTMENT", "RETURN"]
-            tx_types = ["PRODUCTION_OUT", "STOCKTAKE_LOSS", "RETURN_OUT"]
+            doc_types = ["PRODUCTION_OUT", "STOCKTAKE", "RETURN", "ADJUSTMENT_OUT"]
+            tx_types = ["PRODUCTION_OUT", "STOCKTAKE_LOSS", "RETURN_OUT", "ADJUSTMENT_OUT"]
             qty_expr = func.coalesce(
                 func.sum(-InventoryTransaction.quantity_delta), 0
             ).label("total_qty")
@@ -538,7 +544,7 @@ class InventoryQueryService:
         if not doc:
             return None
         if doc.document_type not in (
-            "PURCHASE_IN", "STOCKTAKE", "PRODUCTION_OUT", "ADJUSTMENT", "RETURN"
+            "PURCHASE_IN", "STOCKTAKE", "PRODUCTION_OUT", "ADJUSTMENT_IN", "ADJUSTMENT_OUT", "RETURN"
         ):
             return None
 
