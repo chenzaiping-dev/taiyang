@@ -39,6 +39,17 @@ batch_source_map = {
     "TRANSFER_IN": "OTHER",
 }
 
+TRANSACTION_TYPE_DIRECTION = {
+    "PRODUCTION_IN":    "in",
+    "OUTBOUND":         "out",
+    "STOCKTAKE_GAIN":   "in",
+    "STOCKTAKE_LOSS":   "out",
+    "RETURN_IN":        "in",
+    "RETURN_OUT":       "out",
+    "TRANSFER_IN":      "in",
+    "TRANSFER_OUT":     "out",
+}
+
 INBOUND_TYPE_LABELS = {
     "PRODUCTION_IN": "生产入库",
     "STOCKTAKE_GAIN": "盘盈入库",
@@ -54,7 +65,7 @@ OUTBOUND_TYPE_LABELS = {
 
 TX_TYPE_LABELS = {
     "PRODUCTION_IN": "生产入库",
-    "OUTBOUND": "出库",
+    "OUTBOUND": "销售出库",
     "STOCKTAKE_GAIN": "盘盈入库",
     "STOCKTAKE_LOSS": "盘亏出库",
     "RETURN_IN": "退货入库",

@@ -68,8 +68,10 @@
           {{ '+' if r.quantity_delta > 0 }}{{ r.quantity_delta }}
         </td>
         <td>
-          <a href="{{ url_for('finished_goods.transactions_page',
-               document_no=r.document_no) }}">{{ r.document_no }}</a>
+          <a href="{{ url_for('finished_goods.document_detail_page',
+                     direction=transaction_directions.get(r.transaction_type, r.transaction_type), document_id=r.document_id) }}">
+            {{ r.document_no }}
+          </a>
         </td>
         <td>
           <span class="tx-badge tx-{{ r.transaction_type|lower }}">

@@ -14,7 +14,8 @@ from app.generated.models.process_orders import ProcessOrder
 from app.services.process_order_service import _fg_warehouses
 from app.services.finished_goods_query_service import FinishedGoodsQueryService
 from app.services.finished_goods_service import (
-    FinishedGoodsError, FinishedGoodsService, INBOUND_TYPE_LABELS, OUTBOUND_TYPE_LABELS, TX_TYPE_LABELS
+    FinishedGoodsError, FinishedGoodsService, INBOUND_TYPE_LABELS, OUTBOUND_TYPE_LABELS,
+    TX_TYPE_LABELS, TRANSACTION_TYPE_DIRECTION
 )
 
 bp = Blueprint("finished_goods", __name__, url_prefix="/finished-goods")
@@ -25,6 +26,20 @@ def _parse_qty(s):
     except ValueError:
         return None
 
+FG_STATUS_LABELS = {
+    "DRAFT": "草稿",
+    "CONFIRMED": "已确认",
+    "CANCELLED": "已取消",
+}
+
+FG_DOC_TYPE_LABELS = {
+    "PRODUCTION_IN": "生产入库单",
+    "OUTBOUND": "销售出库单",
+    "STOCKTAKE": "盘点单",
+    "RETURN": "退货单",
+    "TRANSFER": "调拨单",
+    "ADJUSTMENT": "调整单",
+}
 
 @bp.get("/api/process-orders/search")
 def api_search_process_orders():
@@ -361,6 +376,7 @@ def transactions_page():
         date_to=date_to_raw or "",
         warehouses=_fg_warehouses(),
         tx_types=TX_TYPE_LABELS,
+        transaction_directions=TRANSACTION_TYPE_DIRECTION
     )
 
 @bp.get("/io-summary")
@@ -406,4 +422,108 @@ def io_summary_page():
         group_by=group_by,
         warehouses=_fg_warehouses(),
         quality_labels={"PENDING": "待检", "QUALIFIED": "合格", "REJECTED": "不合格"},
+    )
+
+@bp.get("/documents/<direction>")
+def document_list_page(direction):
+    if direction not in ("in", "out"):
+        abort(404)
+    direction_code = "IN" if direction == "in" else "OUT"
+
+    keyword = request.args.get("keyword", "").strip() or None
+    status = request.args.get("status", "").strip() or None
+    inbound_type = request.args.get("inbound_type", "").strip() or None
+    outbound_type = request.args.get("outbound_type", "").strip() or None
+    wh_raw = request.args.get("warehouse_id", "").strip()
+    warehouse_id = int(wh_raw) if wh_raw.isdigit() else None
+    date_from_raw = request.args.get("date_from", "").strip() or None
+    date_to_raw = request.args.get("date_to", "").strip() or None
+    page = max(int(request.args.get("page", 1) or 1), 1)
+    page_size = 50
+
+    def _parse_date(s):
+        if not s:
+            return None
+        try:
+            return datetime.strptime(s, "%Y-%m-%d")
+        except ValueError:
+            return None
+
+    rows, total = FinishedGoodsQueryService.list_fg_documents(
+        direction=direction_code,
+        keyword=keyword, status=status,
+        inbound_type=inbound_type,
+        outbound_type=outbound_type,
+        warehouse_id=warehouse_id,
+        date_from=_parse_date(date_from_raw),
+        date_to=_parse_date(date_to_raw),
+        page=page, page_size=page_size,
+    )
+    total_pages = max((total + page_size - 1) // page_size, 1)
+
+    return render_template(
+        "finished_goods/document_list.html",
+        direction=direction,
+        direction_code=direction_code,
+        rows=rows, total=total, page=page,
+        page_size=page_size, total_pages=total_pages,
+        keyword=keyword or "",
+        status=status or "",
+        inbound_type=inbound_type or "",
+        outbound_type=outbound_type or "",
+        warehouse_id=warehouse_id or "",
+        date_from=date_from_raw or "",
+        date_to=date_to_raw or "",
+        status_labels=FG_STATUS_LABELS,
+        doc_type_labels=FG_DOC_TYPE_LABELS,
+        inbound_types=INBOUND_TYPE_LABELS,
+        outbound_types=OUTBOUND_TYPE_LABELS,
+        warehouses=_fg_warehouses(),
+        new_doc_url=(
+            url_for("finished_goods.inbound_page")
+            if direction == "in"
+            else url_for("finished_goods.outbound_page")
+        ),
+    )
+
+@bp.get("/documents/<direction>/<int:document_id>")
+def document_detail_page(direction, document_id):
+    if direction not in ("in", "out"):
+        abort(404)
+
+    detail = FinishedGoodsQueryService.get_fg_document_detail(document_id)
+    if not detail:
+        return render_template(
+            "finished_goods/document_detail.html",
+            direction=direction,
+            detail=None,
+            error="单据不存在",
+            status_labels=FG_STATUS_LABELS,
+            doc_type_labels=FG_DOC_TYPE_LABELS,
+            tx_types=TX_TYPE_LABELS,
+            list_url=url_for("finished_goods.document_list_page",
+                             direction=direction),
+        ), 404
+
+    # 方向校验：判断单据所有行是否同向
+    deltas = [l["quantity_delta"] for l in detail["lines"]]
+    has_in = any(d > 0 for d in deltas)
+    has_out = any(d < 0 for d in deltas)
+    if direction == "in" and not has_in:
+        abort(404)
+    if direction == "out" and not has_out:
+        abort(404)
+    # 混向单据：两个方向都能打开，但需要注意
+    if has_in and has_out and direction not in ("in", "out"):
+        abort(404)
+
+    return render_template(
+        "finished_goods/document_detail.html",
+        direction=direction,
+        detail=detail,
+        status_labels=FG_STATUS_LABELS,
+        doc_type_labels=FG_DOC_TYPE_LABELS,
+        tx_types=TX_TYPE_LABELS,
+        list_url=url_for("finished_goods.document_list_page",
+                         direction=direction),
     )

@@ -11,7 +11,9 @@ from app.generated.models.finished_goods_document_lines import FinishedGoodsDocu
 from app.generated.models.finished_goods_inventory import FinishedGoodsInventory
 from app.generated.models.finished_goods_transactions import FinishedGoodsTransaction
 from app.generated.models.finished_goods_reservations import FinishedGoodsReservation
-
+from app.services.finished_goods_service import (
+    INBOUND_TYPE_LABELS, OUTBOUND_TYPE_LABELS, TX_TYPE_LABELS
+)
 
 def _infer_source_entry(row: dict) -> str:
     doc_no = row.get("document_no") or ""
@@ -504,3 +506,221 @@ class FinishedGoodsQueryService:
         stmt = stmt.offset((page - 1) * page_size).limit(page_size)
         rows = [dict(r) for r in db.session.execute(stmt).mappings().all()]
         return rows, total
+
+
+    @staticmethod
+    def list_fg_documents(
+        direction: str,           # 'IN' | 'OUT'
+        keyword=None, status=None,
+        inbound_type=None,        # 仅 IN 方向过滤
+        outbound_type=None,       # 仅 OUT 方向过滤
+        warehouse_id=None,        # 可选：按仓库过滤（有行的仓库）
+        date_from=None, date_to=None,
+        page=1, page_size=50,
+    ):
+        """
+        成品库入库/出库单列表（方向维度）。
+        """
+        if direction == "IN":
+            #tx_types = ["PRODUCTION_IN", "STOCKTAKE_GAIN", "RETURN_IN", "TRANSFER_IN"]
+            tx_types = INBOUND_TYPE_LABELS.keys()
+            qty_expr = func.coalesce(
+                func.sum(FinishedGoodsTransaction.quantity_delta), 0
+            ).label("total_qty")
+        else:
+            #tx_types = ["OUTBOUND", "STOCKTAKE_LOSS", "RETURN_OUT",
+            #            "TRANSFER_OUT", "ADJUSTMENT"]
+            tx_types = OUTBOUND_TYPE_LABELS.keys()
+
+            qty_expr = func.coalesce(
+                func.sum(-FinishedGoodsTransaction.quantity_delta), 0
+            ).label("total_qty")
+
+        # 方向过滤：单据内所有行必须同向（避免混向单据出现在错误列表）
+        mixed_dir_subq = (
+            select(FinishedGoodsTransaction.document_id)
+            .where(
+                (FinishedGoodsTransaction.quantity_delta > 0
+                if direction == "OUT" else FinishedGoodsTransaction.quantity_delta < 0)
+            )
+            .subquery()
+        )
+
+        stmt = (
+            select(
+                FinishedGoodsDocument.id,
+                FinishedGoodsDocument.document_no,
+                FinishedGoodsDocument.document_type,
+                FinishedGoodsDocument.document_time,
+                FinishedGoodsDocument.status,
+                FinishedGoodsDocument.remark,
+                FinishedGoodsDocument.created_at,
+                FinishedGoodsDocument.confirmed_at,
+                func.count(FinishedGoodsTransaction.id).label("line_count"),
+                qty_expr,
+                func.coalesce(
+                    func.sum(FinishedGoodsDocumentLine.unit_cost), 0
+                ).label("total_cost"),  # 若成品单据头无 total_cost，用明细行 sum
+            )
+            .join(FinishedGoodsTransaction,
+                FinishedGoodsTransaction.document_id == FinishedGoodsDocument.id)
+            .join(FinishedGoodsDocumentLine,
+                FinishedGoodsDocumentLine.id == FinishedGoodsTransaction.document_line_id)
+            .where(
+                FinishedGoodsTransaction.transaction_type.in_(tx_types),
+                ~FinishedGoodsDocument.id.in_(select(mixed_dir_subq.c.document_id)),
+            )
+            .group_by(
+                FinishedGoodsDocument.id,
+                FinishedGoodsDocument.document_no,
+                FinishedGoodsDocument.document_type,
+                FinishedGoodsDocument.document_time,
+                FinishedGoodsDocument.status,
+                FinishedGoodsDocument.remark,
+                FinishedGoodsDocument.created_at,
+                FinishedGoodsDocument.confirmed_at,
+            )
+            .order_by(FinishedGoodsDocument.id.desc())
+        )
+        if keyword:
+            stmt = stmt.where(
+                FinishedGoodsDocument.document_no.like(f"%{keyword}%")
+            )
+        if status:
+            stmt = stmt.where(FinishedGoodsDocument.status == status)
+        if date_from:
+            stmt = stmt.where(FinishedGoodsDocument.document_time >= date_from)
+        if date_to:
+            stmt = stmt.where(FinishedGoodsDocument.document_time < date_to)
+        if direction == "IN" and inbound_type:
+            subq = (
+                select(FinishedGoodsTransaction.document_id)
+                .where(FinishedGoodsTransaction.transaction_type == inbound_type)
+                .subquery()
+            )
+            stmt = stmt.where(FinishedGoodsDocument.id.in_(select(subq.c.document_id)))
+        if direction == "OUT" and outbound_type:
+            subq = (
+                select(FinishedGoodsTransaction.document_id)
+                .where(FinishedGoodsTransaction.transaction_type == outbound_type)
+                .subquery()
+            )
+            stmt = stmt.where(FinishedGoodsDocument.id.in_(select(subq.c.document_id)))
+        if warehouse_id:
+            subq = (
+                select(FinishedGoodsTransaction.document_id)
+                .where(FinishedGoodsTransaction.warehouse_id == warehouse_id)
+                .subquery()
+            )
+            stmt = stmt.where(FinishedGoodsDocument.id.in_(select(subq.c.document_id)))
+
+        total = db.session.execute(
+            select(func.count()).select_from(stmt.subquery())
+        ).scalar() or 0
+
+        stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+        rows = [dict(r) for r in db.session.execute(stmt).mappings().all()]
+        return rows, total
+
+    @staticmethod
+    def get_fg_document_detail(document_id: int):
+        """
+        成品库通用单据详情。
+        返回：
+        {
+        'document': {...},
+        'lines': [{
+            line_id, line_no, batch_id, batch_no, product_name,
+            product_specification, unit, quality_status,
+            from_warehouse_id, from_warehouse_code, from_warehouse_name,
+            to_warehouse_id, to_warehouse_code, to_warehouse_name,
+            quantity, unit_cost, remark,
+            transaction_id, transaction_type, transaction_time, quantity_delta
+        }],
+        'total_in_qty', 'total_out_qty'
+        }
+        """
+        doc = db.session.get(FinishedGoodsDocument, document_id)
+        if not doc:
+            return None
+        if doc.document_type not in (
+            "PRODUCTION_IN", "OUTBOUND", "STOCKTAKE",
+            "RETURN", "TRANSFER", "ADJUSTMENT",
+        ):
+            return None
+
+        from_wh = db.aliased(Warehouse)
+        to_wh = db.aliased(Warehouse)
+
+        line_stmt = (
+            select(
+                FinishedGoodsDocumentLine.id.label("line_id"),
+                FinishedGoodsDocumentLine.line_no,
+                FinishedGoodsDocumentLine.batch_id,
+                FinishedGoodsBatch.batch_no,
+                FinishedGoodsBatch.product_name,
+                FinishedGoodsBatch.product_specification,
+                FinishedGoodsBatch.unit,
+                FinishedGoodsBatch.quality_status,
+
+                FinishedGoodsDocumentLine.from_warehouse_id,
+                from_wh.warehouse_code.label("from_warehouse_code"),
+                from_wh.warehouse_name.label("from_warehouse_name"),
+
+                FinishedGoodsDocumentLine.to_warehouse_id,
+                to_wh.warehouse_code.label("to_warehouse_code"),
+                to_wh.warehouse_name.label("to_warehouse_name"),
+
+                FinishedGoodsDocumentLine.quantity,
+                FinishedGoodsDocumentLine.unit_cost,
+                FinishedGoodsDocumentLine.remark,
+
+                FinishedGoodsTransaction.id.label("transaction_id"),
+                FinishedGoodsTransaction.transaction_type,
+                FinishedGoodsTransaction.transaction_time,
+                FinishedGoodsTransaction.quantity_delta,
+                FinishedGoodsTransaction.warehouse_id.label("tx_warehouse_id"),
+                Warehouse.warehouse_code.label("tx_warehouse_code"),
+                Warehouse.warehouse_name.label("tx_warehouse_name"),
+            )
+            .join(FinishedGoodsBatch,
+                FinishedGoodsBatch.id == FinishedGoodsDocumentLine.batch_id)
+            .join(FinishedGoodsTransaction,
+                FinishedGoodsTransaction.document_line_id
+                == FinishedGoodsDocumentLine.id)
+            .join(Warehouse,
+                Warehouse.id == FinishedGoodsTransaction.warehouse_id)
+            .outerjoin(from_wh, from_wh.id == FinishedGoodsDocumentLine.from_warehouse_id)
+            .outerjoin(to_wh, to_wh.id == FinishedGoodsDocumentLine.to_warehouse_id)
+            .where(FinishedGoodsDocumentLine.document_id == document_id)
+            .order_by(FinishedGoodsDocumentLine.line_no.asc())
+        )
+        lines = [dict(r) for r in db.session.execute(line_stmt).mappings().all()]
+
+        total_in_qty = sum(
+            (l["quantity_delta"] for l in lines if l["quantity_delta"] > 0),
+            Decimal("0"),
+        )
+        total_out_qty = sum(
+            (-l["quantity_delta"] for l in lines if l["quantity_delta"] < 0),
+            Decimal("0"),
+        )
+
+        return {
+            "document": {
+                "id": doc.id,
+                "document_no": doc.document_no,
+                "document_type": doc.document_type,
+                "document_time": doc.document_time,
+                "status": doc.status,
+                "related_document_id": doc.related_document_id,
+                "remark": doc.remark,
+                "created_by": doc.created_by,
+                "confirmed_by": doc.confirmed_by,
+                "created_at": doc.created_at,
+                "confirmed_at": doc.confirmed_at,
+            },
+            "lines": lines,
+            "total_in_qty": total_in_qty,
+            "total_out_qty": total_out_qty,
+        }

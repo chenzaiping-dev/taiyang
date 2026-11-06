@@ -220,8 +220,8 @@
     <div class="nav-group">
       <div class="nav-label">成品管理</div>
       <div class="nav-dropdown">
-        <a href="{{ url_for('finished_goods.inbound_page') }}">成品入库</a>
-        <a href="{{ url_for('finished_goods.outbound_page') }}">成品出库</a>
+        <a href="{{ url_for('finished_goods.document_list_page', direction='in') }}">成品入库</a>
+        <a href="{{ url_for('finished_goods.document_list_page', direction='out') }}">成品出库</a>
         <div class="divider"></div>
         <a href="{{ url_for('finished_goods.warehouses_page') }}">成品库存</a>
         <a href="{{ url_for('finished_goods.io_summary_page') }}">成品出入库汇总</a>
