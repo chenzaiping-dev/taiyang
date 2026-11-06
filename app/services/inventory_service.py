@@ -21,10 +21,10 @@ class InventoryError(Exception):
 # 单据类型映射
 doc_type_map = {
     "PURCHASE_IN": "PURCHASE_IN",
-    "STOCKTAKE_GAIN": "STOCKTAKE",
-    "RETURN_IN": "RETURN",
     "PRODUCTION_OUT": "PRODUCTION_OUT",
+    "STOCKTAKE_GAIN": "STOCKTAKE",
     "STOCKTAKE_LOSS": "STOCKTAKE",
+    "RETURN_IN": "RETURN",
     "RETURN_OUT": "RETURN",
 }
 tx_type_map = {

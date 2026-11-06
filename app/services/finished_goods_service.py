@@ -21,6 +21,16 @@ def gen_doc_no(prefix: str) -> str:
     import random
     return f"{prefix}{ts}{random.randint(0, 9999):04d}"
 
+doc_type_map = {
+    "PRODUCTION_IN": "PRODUCTION_IN",
+    "OUTBOUND": "OUTBOUND",
+    "STOCKTAKE_GAIN": "STOCKTAKE",
+    "STOCKTAKE_LOSS": "STOCKTAKE",
+    "RETURN_IN": "RETURN",
+    "RETURN_OUT": "RETURN",
+    "TRANSFER_IN": "TRANSFER",
+    "TRANSFER_OUT": "TRANSFER",
+}
 
 class FinishedGoodsError(Exception):
     pass
@@ -42,7 +52,7 @@ class FinishedGoodsService:
         commit: bool = True,          # ⭐ 新增
     ) -> dict:
         """
-        inbound_type ∈ {'PRODUCTION_IN', 'CUSTOMER_RETURN', 'ADJUSTMENT'}
+        inbound_type ∈ {'PRODUCTION_IN', 'RETURN_IN', 'STOCKTAKE_GAIN', 'TRANSFER_IN'}
         lines: [{
             'batch_id'(可选，用于选择已有批次),
             'batch_no'(新批次时提供),
@@ -52,8 +62,8 @@ class FinishedGoodsService:
             'quantity', 'unit_cost'(可选), 'remark'
         }]
         """
-        if inbound_type not in ("PRODUCTION_IN", "CUSTOMER_RETURN", "ADJUSTMENT"):
-            raise FinishedGoodsError("不支持的入库类型")
+        if inbound_type not in ("PRODUCTION_IN", "RETURN_IN", "STOCKTAKE_GAIN", "TRANSFER_IN"):
+            raise FinishedGoodsError(f"不支持的入库类型: {inbound_type}")
 
         wh = db.session.get(Warehouse, warehouse_id)
         if not wh or wh.status != 1:
@@ -72,7 +82,7 @@ class FinishedGoodsService:
 
         document = FinishedGoodsDocument(
             document_no=doc_no,
-            document_type=inbound_type,
+            document_type=doc_type_map[inbound_type],
             document_time=doc_time,
             status="CONFIRMED" if auto_confirm else "DRAFT",
             remark=remark,
@@ -122,11 +132,8 @@ class FinishedGoodsService:
                         product_specification=l.get("product_specification"),
                         unit=l.get("unit") or "KG",
                         unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else None,
-                        batch_source=(
-                            "RETURN" if inbound_type == "CUSTOMER_RETURN"
-                            else ("PRODUCTION" if inbound_type == "PRODUCTION_IN"
-                                else "OTHER")
-                        ),
+                        batch_source=(doc_type_map[inbound_type]
+                            if inbound_type in doc_type_map else "OTHER"),
                         quality_status=l.get("quality_status") or "QUALIFIED",
                         remark=l.get("remark"),
                         created_at=now_beijing_naive(),
@@ -146,6 +153,12 @@ class FinishedGoodsService:
                         if batch.process_order_id is None:
                             batch.process_order_id = int(incoming_po_id)
                     # 是否要做价格一致性检测, to be continued
+                    input_unit_cost = _q6(l.get("unit_cost"))
+                    if (input_unit_cost is not None and input_unit_cost != batch.unit_cost):
+                        raise FinishedGoodsError(
+                            f"第 {idx} 行批次 [{batch.batch_no}] 价格不一致，"
+                            f"当前: {batch.unit_cost}, 新输入: {input_unit_cost}"
+                        )
 
             line = FinishedGoodsDocumentLine(
                 document_id=document.id,
@@ -231,6 +244,7 @@ class FinishedGoodsService:
     @staticmethod
     def create_outbound(
         lines: list,
+        outbound_type: str = "OUTBOUND",
         warehouse_id: int = None,       # 兼容旧的单仓调用；若 lines 里都带 warehouse_id 可省略
         document_no: str = None,
         document_time: datetime = None,
@@ -248,7 +262,8 @@ class FinishedGoodsService:
         """
         # 顶部仓库校验改为"按行取仓库后校验"
         # （删除原来的"必须先传 warehouse_id"的强校验，改到循环里做）
-        print("here 1")
+        if outbound_type not in ("OUTBOUND", "RETURN_OUT", "STOCKTAKE_LOSS", "TRANSFER_OUT"):
+            raise FinishedGoodsError(f"不支持的出库类型: {outbound_type}")
         if not lines:
             raise FinishedGoodsError("出库明细不能为空")
 
@@ -259,7 +274,7 @@ class FinishedGoodsService:
 
         document = FinishedGoodsDocument(
             document_no=doc_no,
-            document_type="OUTBOUND",
+            document_type=doc_type_map[outbound_type],
             document_time=doc_time,
             status="CONFIRMED",
             remark=remark,
@@ -331,7 +346,7 @@ class FinishedGoodsService:
             FinishedGoodsService._apply_delta(
                 warehouse_id=wh_id, batch_id=batch_id,
                 delta=-qty, document=document, line=line,
-                tx_type="OUTBOUND", tx_time=doc_time,
+                tx_type=outbound_type, tx_time=doc_time,
             )
 
             line_results.append({

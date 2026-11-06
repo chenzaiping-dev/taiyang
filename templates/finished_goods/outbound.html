@@ -24,6 +24,13 @@
       </option>
     {% endfor %}
   </select>
+  <label>出库类型 *</label>
+  <select name="outbound_type" required>
+    {% for code, label in outbound_types.items() %}
+      <option value="{{ code }}"
+        {% if form_data.outbound_type == code %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
   <button type="submit" class="btn btn-primary">查询</button>
   <a class="btn" href="{{ url_for('finished_goods.outbound_page') }}">重置</a>
 </form>

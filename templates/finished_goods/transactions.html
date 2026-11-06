@@ -69,9 +69,11 @@
           <a href="{{ url_for('finished_goods.transactions_page',
                document_no=r.document_no) }}">{{ r.document_no }}</a>
         </td>
-        <td>{{ {'PRODUCTION_IN':'生产入库','OUTBOUND':'出库',
-                'TRANSFER':'调拨','CUSTOMER_RETURN':'客户退货',
-                'ADJUSTMENT':'库存调整'}.get(r.document_type, r.document_type) }}</td>
+        <td>
+          <span class="tx-badge tx-{{ r.transaction_type|lower }}">
+            {{ tx_types.get(r.transaction_type, r.transaction_type) }}
+          </span>
+        </td>
         <td>
           {% if r.process_order_no %}
             <a href="{{ url_for('process_order.detail_page', order_id=r.process_order_id) }}"

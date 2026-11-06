@@ -409,10 +409,10 @@ CREATE TABLE inventory_documents (
         'PURCHASE_IN',
         'PRODUCTION_OUT',
         'STOCKTAKE',
-        'ADJUSTMENT',
-        'RETURN'
+        'RETURN',
+        'ADJUSTMENT'
     ) NOT NULL COMMENT '单据类型: PURCHASE_IN采购入库, PRODUCTION_OUT生产出库,
-        STOCKTAKE库存盘点, ADJUSTMENT库存调整，RETURN退货',
+        STOCKTAKE库存盘点, RETURN退货, ADJUSTMENT库存调整',
 
     document_time DATETIME NOT NULL COMMENT '业务发生时间',
 
@@ -604,10 +604,12 @@ CREATE TABLE finished_goods_documents (
     document_type ENUM(
         'PRODUCTION_IN',
         'OUTBOUND',
+        'STOCKTAKE',
+        'RETURN',
         'TRANSFER',
-        'CUSTOMER_RETURN',
         'ADJUSTMENT'
-    ) NOT NULL COMMENT '单据类型: PRODUCTION_IN生产入库, OUTBOUND销售出库, TRANSFER仓库调拨, CUSTOMER_RETURN客户退货, ADJUSTMENT库存调整',
+    ) NOT NULL COMMENT '单据类型: PRODUCTION_IN生产入库, OUTBOUND销售出库,
+        STOCKTAKE盘点, RETURN客户退货, TRANSFER仓库调拨, ADJUSTMENT库存调整',
 
     document_time DATETIME NOT NULL COMMENT '业务发生时间',
     status ENUM(
@@ -724,13 +726,16 @@ CREATE TABLE finished_goods_transactions (
     transaction_type ENUM(
         'PRODUCTION_IN',
         'OUTBOUND',
-        'TRANSFER_OUT',
+        'STOCKTAKE_GAIN',
+        'STOCKTAKE_LOSS',
+        'RETURN_IN',
+        'RETURN_OUT',
         'TRANSFER_IN',
-        'CUSTOMER_RETURN',
-        'ADJUSTMENT'
+        'TRANSFER_OUT'
     ) NOT NULL DEFAULT 'PRODUCTION_IN'
-        COMMENT '流水类型: PRODUCTION_IN生产入库, OUTBOUND出库, TRANSFER_OUT调拨出库, 
-        TRANSFER_IN调拨入库, CUSTOMER_RETURN客户退货, ADJUSTMENT库存调整',
+        COMMENT '流水类型: PRODUCTION_IN生产入库, OUTBOUND出库,
+        STOCKTAKE_GAIN:库存盘点-入库, STOCKTAKE_LOSS:库存盘点-出库, RETURN_IN:退货入库, RETURN_OUT:退货出库
+        TRANSFER_IN调拨入库, TRANSFER_OUT调拨出库',
 
     quantity_delta DECIMAL(16, 4) NOT NULL COMMENT '库存变化数量：入库正数，出库负数',
 

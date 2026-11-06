@@ -25,41 +25,9 @@ def _infer_source_entry(row: dict) -> str:
         return "发货计划出库"
     if doc_type == "PRODUCTION_IN":
         return "成品入库页"
-    if doc_type == "CUSTOMER_RETURN":
+    if doc_type == "RETURN":
         return "成品入库页-退货"
-    if doc_type == "ADJUSTMENT":
-        return "成品入库页-盘点"
-    if doc_type == "OUTBOUND":
-        return "成品出库页"
-    if doc_type == "TRANSFER":
-        return "成品调拨"
-    return "未知入口"
-
-def _infer_source_entry_old(row: dict) -> str:
-    """
-    推断这张成品流水是从哪个入口生成的：
-    - document_no 前缀 + 批次是否有 process_order 决定
-    """
-    doc_no = row.get("document_no") or ""
-    doc_type = row.get("document_type") or ""
-    batch_has_process = row.get("process_order_id") is not None
-
-    if doc_type == "PRODUCTION_IN":
-        # 工艺单入库：document_no 约定为 FG-IN-<工艺单号>，且批次带 process_order_id
-        if batch_has_process and doc_no.startswith("FG-IN-"):
-            # 进一步判断是否"工艺单页面直接入库"
-            # 工艺单入库时，document_no 是 FG-IN-POxxx；而成品入库页面是 FG-IN<时间戳>
-            if doc_no.startswith("FG-IN-PO") or doc_no.startswith("FG-IN-"):
-                # 通过工艺单号判断：若后缀等于工艺单号，则为工艺单入库
-                po_no = row.get("process_order_no")
-                if po_no and doc_no.endswith(po_no):
-                    return "工艺单入库"
-        # 成品入库页面（手工录入）
-        if doc_no.startswith("FG-IN"):
-            return "成品入库页"
-    if doc_type == "CUSTOMER_RETURN":
-        return "成品入库页-退货"
-    if doc_type == "ADJUSTMENT":
+    if doc_type == "STOCKTAKE":
         return "成品入库页-盘点"
     if doc_type == "OUTBOUND":
         return "成品出库页"
@@ -294,12 +262,17 @@ class FinishedGoodsQueryService:
             else_=0,
         )
         in_return = case(
-            (FinishedGoodsTransaction.transaction_type == "CUSTOMER_RETURN",
+            (FinishedGoodsTransaction.transaction_type == "RETURN_IN",
              FinishedGoodsTransaction.quantity_delta),
             else_=0,
         )
-        in_adjust = case(
-            (FinishedGoodsTransaction.transaction_type == "ADJUSTMENT",
+        in_stocktake = case(
+            (FinishedGoodsTransaction.transaction_type == "STOCKTAKE_IN",
+             FinishedGoodsTransaction.quantity_delta),
+            else_=0,
+        )
+        in_transfer = case(
+            (FinishedGoodsTransaction.transaction_type == "TRANSFER_IN",
              FinishedGoodsTransaction.quantity_delta),
             else_=0,
         )
@@ -308,7 +281,21 @@ class FinishedGoodsQueryService:
              -FinishedGoodsTransaction.quantity_delta),
             else_=0,
         )
-
+        out_return = case(
+            (FinishedGoodsTransaction.transaction_type == "RETURN_OUT",
+             FinishedGoodsTransaction.quantity_delta),
+            else_=0,
+        )
+        out_stocktake = case(
+            (FinishedGoodsTransaction.transaction_type == "STOCKTAKE_OUT",
+             FinishedGoodsTransaction.quantity_delta),
+            else_=0,
+        )
+        out_transfer = case(
+            (FinishedGoodsTransaction.transaction_type == "TRANSFER_OUT",
+             FinishedGoodsTransaction.quantity_delta),
+            else_=0,
+        )
         filters = []
         if warehouse_id:
             filters.append(FinishedGoodsTransaction.warehouse_id == warehouse_id)
@@ -358,8 +345,12 @@ class FinishedGoodsQueryService:
         cols += [
             func.sum(in_prod).label("in_production"),
             func.sum(in_return).label("in_return"),
-            func.sum(in_adjust).label("in_adjustment"),
+            func.sum(in_stocktake).label("in_stocktake"),
+            func.sum(in_transfer).label("in_transfer"),
             func.sum(out_sale).label("out_outbound"),
+            func.sum(out_return).label("out_return"),
+            func.sum(out_stocktake).label("out_stocktake"),
+            func.sum(out_transfer).label("out_transfer"),
             func.sum(in_qty).label("total_in"),
             func.sum(out_qty).label("total_out"),
             func.sum(FinishedGoodsTransaction.quantity_delta).label("net_qty"),

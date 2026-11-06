@@ -19,19 +19,27 @@ bp = Blueprint("finished_goods", __name__, url_prefix="/finished-goods")
 
 INBOUND_TYPE_LABELS = {
     "PRODUCTION_IN": "生产入库",
-    "CUSTOMER_RETURN": "客户退货",
-    "ADJUSTMENT": "盘点/调整",
+    "STOCKTAKE_GAIN": "盘盈入库",
+    "RETURN_IN": "退货入库",
+    "TRANSFER_IN": "调拨入库",
+}
+OUTBOUND_TYPE_LABELS = {
+    "OUTBOUND": "销售出库",
+    "STOCKTAKE_LOSS": "盘亏出库",
+    "RETURN_OUT": "退货出库",
+    "TRANSFER_OUT": "调拨出库",
 }
 
 TX_TYPE_LABELS = {
     "PRODUCTION_IN": "生产入库",
     "OUTBOUND": "出库",
-    "TRANSFER_OUT": "调拨出库",
+    "STOCKTAKE_GAIN": "盘盈入库",
+    "STOCKTAKE_LOSS": "盘亏出库",
+    "RETURN_IN": "退货入库",
+    "RETURN_OUT": "退货出库",
     "TRANSFER_IN": "调拨入库",
-    "CUSTOMER_RETURN": "客户退货",
-    "ADJUSTMENT": "库存调整",
+    "TRANSFER_OUT": "调拨出库",
 }
-
 
 def _fg_warehouses():
     return (
@@ -232,6 +240,7 @@ def outbound_page():
         page_size=page_size,
         total_pages=total_pages,
         warehouse_id=warehouse_id or "",
+        outbound_types=OUTBOUND_TYPE_LABELS,
         batch_keyword=keyword or "",
         warehouses=_fg_warehouses(),
         form_data={
@@ -245,6 +254,7 @@ def outbound_page():
 @bp.post("/outbound")
 def outbound_submit():
     doc_time_str = request.form.get("document_time", "").strip()
+    outbound_type = request.form.get("outbound_type", "OUTBOUND")
     remark = request.form.get("remark", "").strip() or None
 
     lines = []
@@ -277,6 +287,7 @@ def outbound_submit():
         doc_time = datetime.fromisoformat(doc_time_str) if doc_time_str else None
         result = FinishedGoodsService.create_outbound(
             lines=lines,
+            outbound_type=outbound_type,
             document_time=doc_time,
             created_by=1,
             remark=remark,
@@ -301,6 +312,7 @@ def _render_outbound_error(msg):
             rows=rows, total=total, page=1, page_size=200,
             total_pages=max((total + 199) // 200, 1),
             warehouse_id=request.form.get("warehouse_id", ""),
+            outbound_types=OUTBOUND_TYPE_LABELS,
             batch_keyword=request.form.get("batch_keyword", ""),
             warehouses=_fg_warehouses(),
             form_data={
