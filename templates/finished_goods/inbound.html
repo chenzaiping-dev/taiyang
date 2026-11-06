@@ -113,7 +113,7 @@
   </div>
 
   <button type="submit" class="btn btn-primary">保存入库</button>
-  <a class="btn" href="{{ url_for('finished_goods.transactions_page') }}">查看历史</a>
+  <a class="btn" href="{{ url_for('finished_goods.document_list_page', direction='in') }}">查看入库历史</a>
 </form>
 
 <!-- 动态行模板 -->

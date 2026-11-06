@@ -107,7 +107,7 @@
 
   <div style="margin-top:16px;">
     <button type="submit" class="btn btn-primary">保存出库</button>
-    <a class="btn" href="{{ url_for('finished_goods.transactions_page') }}">查看历史</a>
+    <a class="btn" href="{{ url_for('finished_goods.document_list_page', direction='out') }}">查看出库历史</a>
   </div>
   {% else %}
   <p style="color:#999;">当前没有可用库存</p>
