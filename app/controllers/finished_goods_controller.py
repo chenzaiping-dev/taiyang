@@ -80,7 +80,7 @@ def _serialize_po(po):
         "batch_no": po.batch_no,
         "product_name": po.product_name,
         "product_specification": po.product_specification,
-        "quantity": str(po.quantity),
+        "quantity": str(po.planned_quantity),
         "unit": po.unit or "KG",
     }
 

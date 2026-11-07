@@ -126,6 +126,78 @@
     if (btn) { btn.disabled = true; btn.textContent = "保存中..."; }
   });
 
+  // ---------- 从其他工艺单复制配比 ----------
+  const copyFromSelect = document.getElementById("copy_from_select");
+  const copyFromBtn    = document.getElementById("copy-from-btn");
+
+  async function loadCopyFrom(orderId) {
+    if (!orderId) {
+      alert("请先选择要复制的工艺单");
+      return;
+    }
+    if (!confirm("载入后会覆盖当前原料配比，是否继续？")) return;
+
+    let data;
+    try {
+      const resp = await fetch(`/process-orders/api/${orderId}/materials`, {
+        credentials: "same-origin",
+      });
+      data = await resp.json();
+    } catch (e) {
+      alert("获取配比失败: " + e);
+      return;
+    }
+    if (!data || data.code !== 0) {
+      alert("获取配比失败: " + (data?.msg || "未知错误"));
+      return;
+    }
+    const items = data.data?.materials || [];
+    if (!items.length) {
+      alert("该工艺单没有原料配比");
+      return;
+    }
+
+    // 清空 tbody
+    tbody.innerHTML = "";
+
+    // 用模板逐行插入
+    items.forEach((it) => {
+      const html = tpl.innerHTML.replaceAll("__IDX__", nextIndex++);
+      // 先插一行空模板
+      tbody.insertAdjacentHTML("beforeend", html);
+      const tr = tbody.querySelector(".mat-row:last-child");
+
+      // 填 material_id
+      const sel = tr.querySelector('select[name$="[material_id]"]');
+      if (sel) sel.value = String(it.material_id);
+
+      // 填 ratio_value
+      const ratioInput = tr.querySelector('input[name$="[ratio_value]"]');
+      if (ratioInput) ratioInput.value = it.ratio_value;
+
+      // 数量由 recalcQuantities 负责，暂不填（保持自动计算逻辑一致）
+      // 但如果"计划数量"是 0 或未填，则用复制的 quantity 兜底
+      const qtyInput = tr.querySelector('input[name$="[quantity]"]');
+      if (qtyInput) {
+        const planQty = toNum(planQtyInput?.value);
+        qtyInput.value = planQty > 0 ? "" : (it.quantity || "");
+      }
+
+      // 填备注
+      const remarkInput = tr.querySelector('input[name$="[remark]"]');
+      if (remarkInput) remarkInput.value = it.remark || "";
+    });
+
+    renumber();
+    recalcRatio();
+    recalcQuantities();
+  }
+
+  copyFromBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    loadCopyFrom(copyFromSelect?.value);
+  });
+
   addBtn?.addEventListener("click", (e) => { e.preventDefault(); addRow(); });
   renumber();
   recalcRatio();

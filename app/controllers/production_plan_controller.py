@@ -34,6 +34,9 @@ def _stock_rows_for_performance(performance_id, current_plan_id=None):
     按业绩单的产品名称/规格，从成品库拉各批次现存 + 已锁定 + 可用。
     可用量口径与 FinishedGoodsQueryService.list_all_stock_for_outbound 完全一致：
         available = 库存 - 所有 ACTIVE 预留 + 本计划已锁的量（编辑时）
+
+    ⭐ 编辑时排除本计划关联工艺单自己的 batch_no 对应批次，
+       避免与 complete_plan 的 FRESH 预留重复锁。
     """
     from sqlalchemy import func
     from app.generated.models.finished_goods_reservations import (
@@ -45,7 +48,26 @@ def _stock_rows_for_performance(performance_id, current_plan_id=None):
     if not perf:
         return []
 
-    # ⭐ 与出库页共用同一份锁定汇总
+    # ⭐ 收集本计划关联工艺单的 batch_no（编辑时才需要）
+    self_batch_nos = set()
+    if current_plan_id:
+        rows = (
+            db.session.query(ProcessOrder.batch_no)
+            .join(ProductionPlanProcessOrder,
+                  ProductionPlanProcessOrder.process_order_id == ProcessOrder.id)
+            .filter(
+                ProductionPlanProcessOrder.production_plan_id == current_plan_id,
+                ProcessOrder.batch_no.isnot(None),
+                ProcessOrder.batch_no != "",
+                ProcessOrder.status.in_(
+                    ["DRAFT", "ORDERED", "PRODUCING", "RECEIVED"]
+                ),
+            )
+            .all()
+        )
+        self_batch_nos = {r[0] for r in rows if r[0]}
+
+    # 与出库页共用同一份锁定汇总
     locked_subq = FinishedGoodsQueryService._locked_subquery_inventory()
     locked_qty_col = func.coalesce(locked_subq.c.locked_qty, 0)
 
@@ -103,10 +125,15 @@ def _stock_rows_for_performance(performance_id, current_plan_id=None):
             & (locked_subq.c.bt_id == FinishedGoodsInventory.batch_id),
         )
         .filter(
-            FinishedGoodsInventory.quantity > 0,     # ⭐ 与出库页一致
+            FinishedGoodsInventory.quantity > 0,     # 与出库页一致
             FinishedGoodsBatch.product_name == perf.product_name,
         )
     )
+
+    # ⭐ 排除本计划工艺单自己的 batch_no 对应批次
+    if self_batch_nos:
+        q = q.filter(~FinishedGoodsBatch.batch_no.in_(self_batch_nos))
+
     if self_locked_subq is not None:
         q = q.outerjoin(
             self_locked_subq,
@@ -120,43 +147,6 @@ def _stock_rows_for_performance(performance_id, current_plan_id=None):
     return [dict(r._mapping) for r in q.order_by(
         Warehouse.warehouse_code.asc(), FinishedGoodsBatch.batch_no.asc()
     ).all()]
-
-def _old_stock_rows_for_performance(performance_id):
-    """
-    按业绩单的产品名称/规格，从成品库拉各批次现存 + 已锁定数量。
-    """
-    perf = db.session.get(SalesPerformance, performance_id)
-    if not perf:
-        return []
-    q = (
-        db.session.query(
-            FinishedGoodsInventory.id,
-            FinishedGoodsInventory.warehouse_id,
-            Warehouse.warehouse_code,
-            Warehouse.warehouse_name,
-            FinishedGoodsInventory.batch_id,
-            FinishedGoodsBatch.batch_no,
-            FinishedGoodsBatch.product_name,
-            FinishedGoodsBatch.product_specification,
-            FinishedGoodsBatch.unit,
-            FinishedGoodsInventory.quantity,
-        )
-        .join(Warehouse, Warehouse.id == FinishedGoodsInventory.warehouse_id)
-        .join(FinishedGoodsBatch,
-              FinishedGoodsBatch.id == FinishedGoodsInventory.batch_id)
-        .filter(
-            FinishedGoodsInventory.quantity >= 0,
-            FinishedGoodsBatch.product_name == perf.product_name,
-        )
-    )
-    #print(q)
-    if perf.product_specification:
-        q = q.filter(FinishedGoodsBatch.product_specification
-                     == perf.product_specification)
-    return [dict(r._mapping) for r in q.order_by(
-        Warehouse.warehouse_code.asc(), FinishedGoodsBatch.batch_no.asc()
-    ).all()]
-
 
 # ==================== 新建 ====================
 @bp.get("/new")

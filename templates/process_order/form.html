@@ -148,6 +148,35 @@
 
   <fieldset>
     <legend>原料配比（配比合计必须 <= 1, 剩余用水补足）</legend>
+    <fieldset style="margin-bottom:12px;">
+      {% if not copy_from_orders %}
+        <p style="color:#999;font-size:12px;">暂无可参考的工艺单</p>
+      {% else %}
+      <legend>从其他工艺单复制配比（可选）</legend>
+      <div class="form-row">
+        <label for="copy_from_select">参考工艺单</label>
+        <select id="copy_from_select" style="flex:1;max-width:500px;">
+          <option value="">-- 选择要复制的工艺单 --</option>
+          {% for o in copy_from_orders %}
+            <option value="{{ o.id }}">
+              {{ o.process_order_no }}
+              - {{ o.product_name }}
+              {% if o.product_specification %}（{{ o.product_specification }}）{% endif %}
+              - {{ o.batch_no }}
+              [{{ {'DRAFT':'草稿','ORDERED':'已下单','PRODUCING':'生产中',
+                    'RECEIVED':'已入库'}.get(o.status, o.status) }}]
+            </option>
+          {% endfor %}
+        </select>
+        <button type="button" id="copy-from-btn" class="btn">
+          载入该工艺单配比
+        </button>
+      </div>
+      <p style="color:#999;font-size:12px;margin:4px 0;">
+        载入后当前列表会被<strong>整体覆盖</strong>，请谨慎操作。
+      </p>
+    </fieldset>
+    {% endif %}
     <table id="mat-table">
       <thead>
         <tr>

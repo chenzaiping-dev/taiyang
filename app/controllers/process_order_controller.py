@@ -28,7 +28,19 @@ from app.generated.models.process_order_material_adjustments import ProcessOrder
 bp = Blueprint("process_order", __name__, url_prefix="/process-orders")
 schema = ProcessOrderRequestSchema()
 
-def _load_options():
+def _load_options(exclude_order_id=None):
+    q = ProcessOrder.query
+    if exclude_order_id:
+        q = q.filter(ProcessOrder.id != exclude_order_id)
+    # 只列出"有配比明细"的（有配比的通常是 DRAFT/ORDERED）
+    copy_from_orders = (
+        q.filter(ProcessOrder.status.in_(
+            ["DRAFT", "ORDERED", "PRODUCING", "COMPLETED", "RECEIVED"]
+        ))
+        .order_by(ProcessOrder.id.desc())
+        .limit(200)
+        .all()
+    )
     return {
         "factories": Factory.query.filter_by(status=1).order_by(Factory.id).all(),
         "performances": SalesPerformance.query.order_by(
@@ -38,7 +50,9 @@ def _load_options():
         "materials": Material.query.filter_by(status=1).order_by(
             Material.material_code
         ).all(),
+        "copy_from_orders": copy_from_orders,   # ⭐
     }
+
 
 @bp.get("/")
 def list_page():
@@ -278,7 +292,7 @@ def edit_page(order_id: int):
                "quantity": "", "cost": "", "remark": ""}],
     }
 
-    ctx = _load_options()
+    ctx = _load_options(exclude_order_id=order.id)
     return render_template(
         "process_order/form.html",
         **ctx,
@@ -309,7 +323,7 @@ def update_submit(order_id: int):
             "process_order_no": order.process_order_no,
             "created_by": order.created_by,
         })
-        ctx = _load_options()
+        ctx = _load_options(exclude_order_id=order_id)
         return (
             render_template(
                 "process_order/form.html",
@@ -527,9 +541,8 @@ def adjust_materials(order_id):
     except (ProcessOrderAdjustmentError, InventoryError) as e:
         flash(str(e), "error")
 
-    print("提交的 new_materials:", new_materials)
-    return redirect(request.referrer or url_for("process_order.detail_page",
-                                                 order_id=order_id))
+    print("提交的 new_materials:", new_materials, request.referrer)
+    return redirect(url_for("process_order.detail_page", order_id=order_id))
 
 @bp.get("/<int:order_id>/adjust-materials")
 def adjust_materials_page(order_id):
@@ -616,3 +629,37 @@ def adjustments_list_page(order_id: int):
         docs=docs,
         material_map=material_map,
     )
+
+@bp.get("/api/<int:order_id>/materials")
+def api_get_order_materials(order_id: int):
+    """
+    返回指定工艺单的原料配比明细，供其他工艺单页面"复制配比"使用。
+    """
+    order = db.session.get(ProcessOrder, order_id)
+    if not order:
+        return jsonify({"code": 404, "msg": "工艺单不存在"}), 404
+
+    rows = (
+        ProcessOrderMaterial.query
+        .filter_by(process_order_id=order_id)
+        .order_by(ProcessOrderMaterial.id.asc())
+        .all()
+    )
+    return jsonify({
+        "code": 0,
+        "data": {
+            "process_order_no": order.process_order_no,
+            "product_name": order.product_name,
+            "product_specification": order.product_specification,
+            "materials": [
+                {
+                    "material_id": r.material_id,
+                    "ratio_value": str(r.ratio_value),
+                    "quantity": str(r.quantity),
+                    "cost": str(r.cost),
+                    "remark": r.remark or "",
+                }
+                for r in rows
+            ],
+        },
+    })
