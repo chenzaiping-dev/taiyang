@@ -108,6 +108,12 @@
       this.hidden.value = this.selectedId;
       this.input.value = this.selectedNo;
       this.root.classList.toggle("has-value", !!this.selectedId);
+
+      // ⭐ 派发选中变化事件
+      this.root.dispatchEvent(new CustomEvent("po-suggest:change", {
+        bubbles: true,
+        detail: { id: this.selectedId, no: this.selectedNo },
+      }));
     }
 
     _onInput() {

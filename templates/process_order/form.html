@@ -148,34 +148,29 @@
 
   <fieldset>
     <legend>原料配比（配比合计必须 <= 1, 剩余用水补足）</legend>
-    <fieldset style="margin-bottom:12px;">
-      {% if not copy_from_orders %}
-        <p style="color:#999;font-size:12px;">暂无可参考的工艺单</p>
-      {% else %}
-      <legend>从其他工艺单复制配比（可选）</legend>
-      <div class="form-row">
-        <label for="copy_from_select">参考工艺单</label>
-        <select id="copy_from_select" style="flex:1;max-width:500px;">
-          <option value="">-- 选择要复制的工艺单 --</option>
-          {% for o in copy_from_orders %}
-            <option value="{{ o.id }}">
-              {{ o.process_order_no }}
-              - {{ o.product_name }}
-              {% if o.product_specification %}（{{ o.product_specification }}）{% endif %}
-              - {{ o.batch_no }}
-              [{{ {'DRAFT':'草稿','ORDERED':'已下单','PRODUCING':'生产中',
-                    'RECEIVED':'已入库'}.get(o.status, o.status) }}]
-            </option>
-          {% endfor %}
-        </select>
-        <button type="button" id="copy-from-btn" class="btn">
-          载入该工艺单配比
-        </button>
-      </div>
-      <p style="color:#999;font-size:12px;margin:4px 0;">
-        载入后当前列表会被<strong>整体覆盖</strong>，请谨慎操作。
-      </p>
-    </fieldset>
+    {% if not copy_from_orders %}
+      <p style="color:#999;font-size:12px;">暂无可参考的工艺单</p>
+    {% else %}
+      <fieldset style="margin-bottom:12px;">
+        <legend>从其他工艺单复制配比（可选）</legend>
+        <div class="form-row">
+          <label>参考工艺单</label>
+          <div style="flex:1;max-width:520px;">
+            <div class="po-suggest"
+                id="copy-from-suggest"
+                data-input-name="__copy_from_process_order_id"
+                data-initial-id=""
+                data-initial-no=""></div>
+          </div>
+          <button type="button" id="copy-from-btn" class="btn">
+            载入该工艺单配比
+          </button>
+        </div>
+        <p style="color:#999;font-size:12px;margin:4px 0;">
+          输入工艺单号 / 产品名 / 批号搜索，选中后可一键载入。
+          载入后当前列表会被<strong>整体覆盖</strong>，请谨慎操作。
+        </p>
+      </fieldset>
     {% endif %}
     <table id="mat-table">
       <thead>
@@ -261,6 +256,11 @@
     <td><button type="button" class="btn btn-danger btn-remove-row">删除</button></td>
   </tr>
 </template>
-
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    if (window.POSuggest) POSuggest.initAll();
+  });
+</script>
 <script src="{{ url_for('static', filename='js/process_order.js') }}"></script>
+<script src="{{ url_for('static', filename='js/po_suggest.js') }}"></script>
 {% endblock %}
