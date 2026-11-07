@@ -549,7 +549,7 @@ def adjust_materials_page(order_id):
     order = db.session.get(ProcessOrder, order_id)
     if not order:
         abort(404)
-    if order.status not in ("ORDERED", "PRODUCING"):
+    if order.status not in ("ORDERED", "PRODUCING", "COMPLETED", "RECEIVED"):
         flash(f"当前状态【{STATUS_LABELS.get(order.status, order.status)}】"
               f"不允许调整配比", "error")
         return redirect(url_for("process_order.detail_page", order_id=order_id))

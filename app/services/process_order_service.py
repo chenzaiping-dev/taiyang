@@ -187,6 +187,7 @@ class ProcessOrderService:
             followup_employee_id=followup_employee_id,
             planned_cost_price=_q6(planned_cost_price), 
             planned_total_cost=_q6(planned_total_cost),
+            actual_total_cost=Decimal("0"), completed_quantity=Decimal("0"),
             status=status, remark=remark, created_by=created_by,
             created_at=now_beijing_naive(), updated_at=now_beijing_naive(),
         )

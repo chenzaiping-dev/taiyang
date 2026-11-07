@@ -46,9 +46,9 @@ class ProcessOrderAdjustmentService:
         order = db.session.get(ProcessOrder, order_id)
         if not order:
             raise ProcessOrderAdjustmentError("工艺单不存在")
-        if order.status not in ("ORDERED", "PRODUCING"):
+        if order.status not in ("ORDERED", "PRODUCING", "COMPLETED", "RECEIVED"):
             raise ProcessOrderAdjustmentError(
-                f"当前状态【{order.status}】不允许调整配比，仅已下单/生产中可调整"
+                f"当前状态【{order.status}】不允许调整配比，仅已下单/生产中/完成/入库可调整"
             )
 
         # 原配比
@@ -65,22 +65,35 @@ class ProcessOrderAdjustmentService:
         old_ids = set(old_map.keys())
         all_ids = new_ids | old_ids
 
-        # 需要退回的原料 & 需要追加的原料
         to_reverse = []   # (material_id, qty_to_reverse, old_material_row)
         to_consume = []   # (material_id, qty_to_consume, new_material_dict)
+        meta_only = []    # (material_id, old_row, new_dict)  仅配比/备注变化
 
         for mid in all_ids:
-            old_qty = _q6(old_map[mid].quantity) if mid in old_map else Decimal("0")
+            old_row = old_map.get(mid)
             new_item = next((m for m in normalized if m["material_id"] == mid), None)
+
+            old_qty = _q6(old_row.quantity) if old_row else Decimal("0")
             new_qty = _q6(new_item["quantity"]) if new_item else Decimal("0")
 
             if new_qty > old_qty:
                 to_consume.append((mid, new_qty - old_qty, new_item))
+                continue
             elif new_qty < old_qty:
-                to_reverse.append((mid, old_qty - new_qty, old_map[mid]))
+                to_reverse.append((mid, old_qty - new_qty, old_row))
+                continue
 
-        if not to_reverse and not to_consume:
-            raise ProcessOrderAdjustmentError("配比无变化，无需调整")
+            # 数量相同：检查 ratio / remark 是否变了
+            if old_row and new_item:
+                old_ratio = old_row.ratio_value
+                new_ratio = new_item["ratio_value"]
+                old_remark = (old_row.remark or "").strip()
+                new_remark = ((new_item.get("remark") or "").strip())
+                if old_ratio != new_ratio or old_remark != new_remark:
+                    meta_only.append((mid, old_row, new_item))
+
+        if not to_reverse and not to_consume and not meta_only:
+            raise ProcessOrderAdjustmentError("配比及备注均无变化，无需调整")
 
         # 找原原料出库单（place_order 创建的）
         #orig_doc_no = f"PROD-OUT-{order.process_order_no}"
@@ -234,8 +247,7 @@ class ProcessOrderAdjustmentService:
                             operator_id, reason):
         """
         红冲：把某些原料的部分消耗退回成本层。
-        不再依赖单一"原领料单"，而是按 (process_order_id, material_id)
-        从所有正向消耗流水里逆序归还。
+        按 (process_order_id, material_id) 从所有正向消耗流水里逆序归还。
         """
         adjust_type = "ADJUSTMENT_RED"
         doc_no = generate_document_no_new(adjust_type)
@@ -251,24 +263,27 @@ class ProcessOrderAdjustmentService:
         db.session.add(doc)
         db.session.flush()
 
-        for idx, (mid, qty, old_material) in enumerate(reverse_items, start=1):
+        # ⭐ 单据内全局递增的 line_no（跨原料、跨 orig_tx 都唯一）
+        next_line_no = 1
+
+        for mid, qty, old_material in reverse_items:
             need = _q6(qty)
             if need <= 0:
                 continue
 
-            # ⭐ 找该工艺单该原料所有"正向消耗"流水（不只 PROD-OUT）
+            # 找该工艺单该原料所有"正向消耗"流水
             orig_txs = (
                 InventoryTransaction.query
                 .filter(
                     InventoryTransaction.process_order_id == order.id,
                     InventoryTransaction.material_id == mid,
-                    InventoryTransaction.quantity_delta < 0,       # 消耗方向
+                    InventoryTransaction.quantity_delta < 0,
                     InventoryTransaction.transaction_type.in_(
                         ["PRODUCTION_OUT", "ADJUSTMENT_BLUE"]
                     ),
                 )
                 .order_by(
-                    InventoryTransaction.transaction_time.desc(),  # 最近消耗先退（LIFO）
+                    InventoryTransaction.transaction_time.desc(),
                     InventoryTransaction.id.desc(),
                 )
                 .with_for_update()
@@ -279,12 +294,10 @@ class ProcessOrderAdjustmentService:
                     f"找不到原料 {mid} 在原领料单或调整单中的消耗流水"
                 )
 
-            # ⭐ 逆序逐条红冲，直到退够
             for orig_tx in orig_txs:
                 if need <= 0:
                     break
 
-                # 该流水还剩多少可退？= 原 allocation 的 quantity 之和
                 reversible = (
                     db.session.query(func.coalesce(
                         func.sum(InventoryCostAllocation.quantity), 0))
@@ -298,27 +311,26 @@ class ProcessOrderAdjustmentService:
 
                 take_qty = min(reversible, need)
 
-                # 创建红冲流水（一个 orig_tx 对应一条红冲流水更清晰）
                 new_tx = InventoryTransaction(
                     document_id=doc.id,
-                    line_no=idx,
+                    line_no=next_line_no,          # ⭐ 全局递增，避免重复
                     material_id=mid,
                     transaction_type=adjust_type,
                     transaction_time=now_beijing_naive(),
-                    quantity_delta=take_qty,        # 正数（库存恢复）
+                    quantity_delta=take_qty,
                     process_order_id=order.id,
                     warehouse_id=orig_tx.warehouse_id,
                     created_at=now_beijing_naive(),
                 )
+                next_line_no += 1                  # ⭐ 每插一条 +1
                 db.session.add(new_tx)
                 db.session.flush()
 
-                # 按原流水反查 allocations 归还
                 result = ProcessOrderAdjustmentService._reverse_allocation(
                     orig_tx.id, take_qty, new_tx.id
                 )
                 recovered_cost = result["total_cost"]
-                new_tx.total_cost = -_q6(recovered_cost)          # 负成本
+                new_tx.total_cost = -_q6(recovered_cost)
                 new_tx.unit_cost = (
                     _q6(recovered_cost / take_qty) if take_qty > 0 else None
                 )

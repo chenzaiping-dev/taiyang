@@ -90,7 +90,8 @@
               data-original-material-id="{{ m.material_id }}"
               data-original-ratio="{{ m.ratio_value }}"
               data-original-qty="{{ m.quantity }}"
-              data-original-cost="{{ m.cost }}">
+              data-original-cost="{{ m.cost }}"
+              data-original-remark="{{ m.remark or '' }}">
             <td class="row-no">{{ loop.index }}</td>
             <td>
               <select name="materials[{{ loop.index0 }}][material_id]"
@@ -175,7 +176,8 @@
       data-original-material-id=""
       data-original-ratio="0"
       data-original-qty="0"
-      data-original-cost="0">
+      data-original-cost="0"
+      data-original-remark="">
     <td class="row-no"></td>
     <td>
       <select name="materials[__IDX__][material_id]" required class="mat-select">
@@ -228,16 +230,13 @@
   const fmt6  = (n) => (n.toFixed(6).replace(/\.?0+$/, "") || "0");
   const fmt4  = (n) => (n.toFixed(4).replace(/\.?0+$/, "") || "0");
 
-  // ---- 行号重排 ----
   // ---- 统一重排：行号显示 + name 属性索引 ----
   function renumber() {
     const rows = tbody.querySelectorAll("tr.mat-row");
     rows.forEach((tr, i) => {
-      // 1. 行号
       const c = tr.querySelector(".row-no");
       if (c) c.textContent = i + 1;
 
-      // 2. 该行所有带 name 的字段，把索引重写为 i
       tr.querySelectorAll("[name]").forEach((el) => {
         const name = el.getAttribute("name");
         if (name && name.includes("materials[")) {
@@ -260,7 +259,6 @@
     const newQty = plannedQty * ratio;
     if (qtyInput) qtyInput.value = fmt4(newQty);
 
-    // 原配比 / 原数量：通过 data-* 拿
     const origRatio = toNum(tr.dataset.originalRatio);
     const origQty   = toNum(tr.dataset.originalQty);
 
@@ -269,13 +267,14 @@
       if (Math.abs(diffQty) < 1e-6) {
         diffCell.textContent = "—";
         diffCell.style.color = "#999";
+        diffCell.title = "";
       } else if (diffQty > 0) {
         diffCell.textContent = `+${fmt4(diffQty)}`;
-        diffCell.style.color = "#c62828";   // 增加 → 需补扣原料
+        diffCell.style.color = "#c62828";
         diffCell.title = "配比增加，将补扣原料库存";
       } else {
         diffCell.textContent = fmt4(diffQty);
-        diffCell.style.color = "#2e7d32";   // 减少 → 退回原料库
+        diffCell.style.color = "#2e7d32";
         diffCell.title = "配比减少，将退回原料库存";
       }
     }
@@ -342,18 +341,28 @@
     }
   });
 
-  // ---- 提交前校验 ----
+  // ---- 提交前校验（⭐ 同时比较 material_id / quantity / ratio / remark）----
   document.getElementById("adjust-form").addEventListener("submit", (e) => {
     const rows = tbody.querySelectorAll("tr.mat-row");
     let ratioSum = 0, qtySum = 0, err = null, hasChange = false;
     const seen = new Set();
+    const currentIds = new Set();
+    const allOriginalIds = new Set();
 
     rows.forEach((tr, i) => {
-      const mid      = tr.querySelector(".mat-select")?.value;
-      const ratioInp = tr.querySelector(".ratio-input");
-      const ratio    = toNum(ratioInp?.value);
-      const newQty   = toNum(tr.querySelector(".qty-auto")?.value);
-      const origQty  = toNum(tr.dataset.originalQty);
+      const sel       = tr.querySelector(".mat-select");
+      const mid       = sel?.value;
+      const ratioInp  = tr.querySelector(".ratio-input");
+      const ratio     = toNum(ratioInp?.value);
+      const newQty    = toNum(tr.querySelector(".qty-auto")?.value);
+      const origQty   = toNum(tr.dataset.originalQty);
+      const origRatio = toNum(tr.dataset.originalRatio);
+      const origMid   = tr.dataset.originalMaterialId || "";
+      const remarkInp = tr.querySelector('input[name$="[remark]"]');
+      const newRemark  = (remarkInp?.value || "").trim();
+      const origRemark = (tr.dataset.originalRemark || "").trim();
+
+      if (origMid) allOriginalIds.add(origMid);
 
       if (!mid) { err = err || `第 ${i + 1} 行：请选择原料`; return; }
       if (seen.has(mid)) {
@@ -361,6 +370,7 @@
         return;
       }
       seen.add(mid);
+      currentIds.add(mid);
 
       if (ratioInp.value === "" || ratio < 0 || ratio > 1) {
         err = err || `第 ${i + 1} 行：配比必须在 0-1 之间`;
@@ -370,8 +380,22 @@
       ratioSum += ratio;
       qtySum   += newQty;
 
-      if (Math.abs(newQty - origQty) > 1e-6) hasChange = true;
+      if (origMid) {
+        // 已有行：四维度比较
+        if (origMid !== mid) hasChange = true;
+        if (Math.abs(newQty - origQty) > 1e-6) hasChange = true;
+        if (Math.abs(ratio - origRatio) > 1e-10) hasChange = true;
+        if (newRemark !== origRemark) hasChange = true;
+      } else {
+        // 新增行：只要有配比就算变化
+        if (ratio > 0) hasChange = true;
+      }
     });
+
+    // ⭐ 删除行判定：原有原料是否消失
+    for (const id of allOriginalIds) {
+      if (!currentIds.has(id)) { hasChange = true; break; }
+    }
 
     if (!err && ratioSum > 1 + 1e-6) {
       err = `原料配比合计必须小于等于 1，当前为 ${ratioSum.toFixed(6)}`;
@@ -380,7 +404,7 @@
       err = `新数量合计 ${qtySum.toFixed(4)} 应小于等于计划数量 ${plannedQty}`;
     }
     if (!err && !hasChange) {
-      err = "配比无变化，无需提交";
+      err = "配比、数量、备注均无变化，无需提交";
     }
 
     if (err) {
