@@ -1,6 +1,7 @@
 from datetime import datetime
 from flask import Blueprint, request, jsonify, render_template, abort, flash, redirect, url_for
 from marshmallow import ValidationError
+import re
 
 from app.extensions import db
 from app.generated.models.materials import Material
@@ -20,10 +21,12 @@ from app.services.process_order_adjustment_service import (
 )
 from app.services.form_parser import parse_process_order_form, FormParseError
 from app.services.inventory_service import _rm_warehouses, InventoryError
+from app.generated.models.inventory_documents import InventoryDocument
+from app.generated.models.process_order_material_adjustments import ProcessOrderMaterialAdjustment
+
 
 bp = Blueprint("process_order", __name__, url_prefix="/process-orders")
 schema = ProcessOrderRequestSchema()
-
 
 def _load_options():
     return {
@@ -481,25 +484,33 @@ def adjust_materials(order_id):
       reason
     """
     # 解析新配比
+    indexes = set()
+    for key in request.form.keys():
+        m = re.match(r"materials\[(\d+)\]\[material_id\]", key)
+        if m:
+            indexes.add(int(m.group(1)))
+
     new_materials = []
-    idx = 0
-    while True:
-        key = f"materials[{idx}][material_id]"
-        if key not in request.form:
-            break
-        mid = request.form.get(key, "").strip()
+    for idx in sorted(indexes):
+        mid = request.form.get(f"materials[{idx}][material_id]", "").strip()
         ratio = request.form.get(f"materials[{idx}][ratio_value]", "").strip()
-        if mid and ratio:
-            try:
-                new_materials.append({
-                    "material_id": int(mid),
-                    "ratio_value": ratio,
-                    "remark": request.form.get(
-                        f"materials[{idx}][remark]", "").strip() or None,
-                })
-            except ValueError:
-                pass
-        idx += 1
+        if not mid or not ratio:
+            continue
+        try:
+            new_materials.append({
+                "material_id": int(mid),
+                "ratio_value": ratio,
+                "remark": request.form.get(
+                    f"materials[{idx}][remark]", "").strip() or None,
+            })
+        except ValueError:
+            continue
+
+    # 若为空，说明用户把所有行都删了 → 报错
+    if not new_materials:
+        flash("请至少保留一条原料", "error")
+        return redirect(request.referrer or url_for(
+            "process_order.detail_page", order_id=order_id))
 
     try:
         result = ProcessOrderAdjustmentService.adjust_materials(
@@ -515,6 +526,8 @@ def adjust_materials(order_id):
         )
     except (ProcessOrderAdjustmentError, InventoryError) as e:
         flash(str(e), "error")
+
+    print("提交的 new_materials:", new_materials)
     return redirect(request.referrer or url_for("process_order.detail_page",
                                                  order_id=order_id))
 
@@ -556,4 +569,50 @@ def adjust_materials_page(order_id):
         all_materials=all_materials,
         status_labels=STATUS_LABELS,
         errors=[],
+    )
+
+# 追加到 app/controllers/process_order_controller.py
+@bp.get("/<int:order_id>/adjustments")
+def adjustments_list_page(order_id: int):
+    order = db.session.get(ProcessOrder, order_id)
+    if not order:
+        abort(404)
+
+    adjustments = (
+        ProcessOrderMaterialAdjustment.query
+        .filter_by(process_order_id=order_id)
+        .order_by(ProcessOrderMaterialAdjustment.adjust_time.desc())
+        .all()
+    )
+
+    # 关联单据批量取
+    doc_ids = set()
+    for a in adjustments:
+        if a.out_document_id:
+            doc_ids.add(a.out_document_id)
+        if a.in_document_id:
+            doc_ids.add(a.in_document_id)
+    docs = {}
+    if doc_ids:
+        for d in InventoryDocument.query.filter(
+                InventoryDocument.id.in_(doc_ids)).all():
+            docs[d.id] = d
+
+    # 原料信息批量取
+    mat_ids = set()
+    for a in adjustments:
+        for snap in (a.old_snapshot or []) + (a.new_snapshot or []):
+            if isinstance(snap, dict) and snap.get("material_id"):
+                mat_ids.add(int(snap["material_id"]))
+    material_map = {}
+    if mat_ids:
+        for m in Material.query.filter(Material.id.in_(mat_ids)).all():
+            material_map[m.id] = m
+
+    return render_template(
+        "process_order/adjustments.html",
+        order=order,
+        adjustments=adjustments,
+        docs=docs,
+        material_map=material_map,
     )

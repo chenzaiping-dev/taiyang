@@ -1,0 +1,172 @@
+{% extends "inventory/base.html" %}
+{% block title %}配比调整记录 - {{ order.process_order_no }}{% endblock %}
+
+{% block content %}
+<h2>
+  配比调整记录
+  <span style="color:#888;font-size:14px;">
+    #{{ order.process_order_no }} · {{ order.product_name }}
+  </span>
+
+  <a class="btn" style="float:right;"
+     href="{{ url_for('process_order.detail_page', order_id=order.id) }}">
+    返回详情
+  </a>
+</h2>
+
+{% if not adjustments %}
+  <div style="padding:24px;text-align:center;color:#999;">
+    暂无调整记录
+  </div>
+{% else %}
+
+<div style="margin-bottom:12px;color:#666;font-size:13px;">
+  共 {{ adjustments|length }} 次调整，点击「展开」查看前后快照与关联单据。
+</div>
+
+{% for a in adjustments %}
+<fieldset style="margin-bottom:16px;">
+  <legend>
+    {{ a.adjustment_no }}
+    <span style="color:#888;font-size:12px;font-weight:normal;">
+      {{ a.adjust_time.strftime("%Y-%m-%d %H:%M:%S") if a.adjust_time else "-" }}
+    </span>
+  </legend>
+
+  <div class="form-row">
+    <label>调整单号：</label>{{ a.adjustment_no }}
+  </div>
+  <div class="form-row">
+    <label>调整时间：</label>
+    {{ a.adjust_time.strftime("%Y-%m-%d %H:%M:%S") if a.adjust_time else "-" }}
+  </div>
+  <div class="form-row">
+    <label>调整原因：</label>{{ a.adjust_reason or "-" }}
+  </div>
+  <div class="form-row">
+    <label>关联出库单：</label>
+    {% if a.out_document_id and docs.get(a.out_document_id) %}
+      <a href="{{ url_for('inventory_query.document_detail_page',
+                    direction='out', document_id=a.out_document_id) }}"
+         target="_blank">
+        {{ docs[a.out_document_id].document_no }}
+      </a>
+      <span style="color:#999;font-size:12px;">
+        （{{ {'ADJUSTMENT_RED': '配比调整-红冲出库'}
+             .get(docs[a.out_document_id].document_type,
+                  docs[a.out_document_id].document_type) }}）
+      </span>
+    {% else %}
+      <span style="color:#999;">-</span>
+    {% endif %}
+
+    <label style="margin-left:24px;">关联入库单：</label>
+    {% if a.in_document_id and docs.get(a.in_document_id) %}
+      <a href="{{ url_for('inventory_query.document_detail_page',
+                    direction='out', document_id=a.in_document_id) }}"
+         target="_blank">
+        {{ docs[a.in_document_id].document_no }}
+      </a>
+      <span style="color:#999;font-size:12px;">
+        （{{ {'ADJUSTMENT_BLUE': '配比调整-蓝补出库'}
+             .get(docs[a.in_document_id].document_type,
+                  docs[a.in_document_id].document_type) }}）
+      </span>
+    {% else %}
+      <span style="color:#999;">-</span>
+    {% endif %}
+  </div>
+
+  <!-- 前后配比快照对比 -->
+  <details style="margin-top:8px;">
+    <summary style="cursor:pointer;color:#1976d2;font-size:13px;">
+      展开前后配比快照
+    </summary>
+
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px;">
+      <thead>
+        <tr style="background:#f5f5f5;">
+          <th>原料</th>
+          <th style="width:130px;text-align:right;">调整前配比</th>
+          <th style="width:130px;text-align:right;">调整前数量</th>
+          <th style="width:130px;text-align:right;">调整前成本</th>
+          <th style="width:130px;text-align:right;">调整后配比</th>
+          <th style="width:130px;text-align:right;">调整后数量</th>
+          <th style="width:130px;text-align:right;">调整后成本</th>
+          <th style="width:130px;text-align:right;">数量差异</th>
+        </tr>
+      </thead>
+      <tbody>
+        {# 建立两个快照的 map #}
+        {% set old_map = {} %}
+        {% set new_map = {} %}
+        {% for snap in (a.old_snapshot or []) %}
+          {% if snap.material_id %}{% set _ = old_map.update({snap.material_id: snap}) %}{% endif %}
+        {% endfor %}
+        {% for snap in (a.new_snapshot or []) %}
+          {% if snap.material_id %}{% set _ = new_map.update({snap.material_id: snap}) %}{% endif %}
+        {% endfor %}
+
+        {# 所有涉及过的原料，取并集 #}
+        {% set all_ids = (old_map.keys()|list + new_map.keys()|list)|unique %}
+
+        {% for mid in all_ids %}
+          {% set om = old_map.get(mid) %}
+          {% set nm = new_map.get(mid) %}
+          {% set mat = material_map.get(mid) %}
+          {% set old_qty = om.quantity|float if om else 0 %}
+          {% set new_qty = nm.quantity|float if nm else 0 %}
+          {% set diff_qty = new_qty - old_qty %}
+          <tr>
+            <td>
+              {% if mat %}
+                {{ mat.material_code }} - {{ mat.material_name }}
+              {% else %}
+                <span style="color:#999;">#{{ mid }}</span>
+              {% endif %}
+            </td>
+            <td style="text-align:right;">{{ om.ratio_value if om else "-" }}</td>
+            <td style="text-align:right;">{{ om.quantity if om else "-" }}</td>
+            <td style="text-align:right;">{{ om.cost if om else "-" }}</td>
+            <td style="text-align:right;color:#1976d2;">
+              {{ nm.ratio_value if nm else "-" }}
+            </td>
+            <td style="text-align:right;color:#1976d2;">
+              {{ nm.quantity if nm else "-" }}
+            </td>
+            <td style="text-align:right;color:#1976d2;">
+              {{ nm.cost if nm else "-" }}
+            </td>
+            <td style="text-align:right;font-weight:600;
+                       color:{{ '#c62828' if diff_qty > 0
+                                 else ('#2e7d32' if diff_qty < 0 else '#999') }};">
+              {% if diff_qty > 0 %}+{% endif %}
+              {% if diff_qty == 0 %}
+                —
+              {% else %}
+                {{ "%.4f"|format(diff_qty) }}
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div style="font-size:12px;color:#666;margin-top:8px;">
+      说明：
+      <span style="color:#c62828;">红色正数</span> = 配比增加，会从原料库补扣；
+      <span style="color:#2e7d32;">绿色负数</span> = 配比减少，会退回原料库。
+    </div>
+  </details>
+</fieldset>
+{% endfor %}
+
+{% endif %}
+
+<style>
+  .form-row { margin: 4px 0; font-size: 13px; }
+  .form-row label { width: 100px; display: inline-block; color: #555; }
+  details summary { user-select: none; }
+  details summary:hover { text-decoration: underline; }
+</style>
+{% endblock %}

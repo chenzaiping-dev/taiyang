@@ -83,12 +83,12 @@ class ProcessOrderAdjustmentService:
             raise ProcessOrderAdjustmentError("配比无变化，无需调整")
 
         # 找原原料出库单（place_order 创建的）
-        orig_doc_no = f"PROD-OUT-{order.process_order_no}"
-        orig_doc = InventoryDocument.query.filter_by(document_no=orig_doc_no).first()
-        if not orig_doc and to_reverse:
-            raise ProcessOrderAdjustmentError(
-                "找不到原领料单，无法回溯成本层"
-            )
+        #orig_doc_no = f"PROD-OUT-{order.process_order_no}"
+        #orig_doc = InventoryDocument.query.filter_by(document_no=orig_doc_no).first()
+        #if not orig_doc and to_reverse:
+        #    raise ProcessOrderAdjustmentError(
+        #        "找不到原领料单，无法回溯成本层"
+        #    )
 
         adjust_no = f"ADJ-{order.process_order_no}-{now_beijing_naive().strftime('%Y%m%d%H%M%S')}"
         out_doc = in_doc = None
@@ -98,7 +98,7 @@ class ProcessOrderAdjustmentService:
             if to_reverse:
                 out_doc = ProcessOrderAdjustmentService._create_reverse_out(
                     order=order,
-                    orig_doc=orig_doc,
+                    #orig_doc=orig_doc,
                     reverse_items=to_reverse,
                     adjust_no=adjust_no,
                     operator_id=operator_id,
@@ -145,14 +145,7 @@ class ProcessOrderAdjustmentService:
                     InventoryTransaction.material_id,
                     func.sum(InventoryTransaction.total_cost),
                 )
-                .join(InventoryDocument,
-                      InventoryDocument.id == InventoryTransaction.document_id)
-                .filter(
-                    InventoryDocument.id.in_(
-                        [d.id for d in [orig_doc, out_doc, in_doc] if d]
-                    ),
-                    InventoryTransaction.process_order_id == order_id,
-                )
+                .filter(InventoryTransaction.process_order_id == order.id)
                 .group_by(InventoryTransaction.material_id)
                 .all()
             )
@@ -237,7 +230,110 @@ class ProcessOrderAdjustmentService:
         return result
 
     @staticmethod
-    def _create_reverse_out(order, orig_doc, reverse_items, adjust_no,
+    def _create_reverse_out(order, reverse_items, adjust_no,
+                            operator_id, reason):
+        """
+        红冲：把某些原料的部分消耗退回成本层。
+        不再依赖单一"原领料单"，而是按 (process_order_id, material_id)
+        从所有正向消耗流水里逆序归还。
+        """
+        adjust_type = "ADJUSTMENT_RED"
+        doc_no = generate_document_no_new(adjust_type)
+        doc = InventoryDocument(
+            document_no=doc_no,
+            document_type=adjust_type,
+            document_time=now_beijing_naive(),
+            status="CONFIRMED",
+            remark=f"[MATERIAL_ADJUST_RED] {order.process_order_no} 配比减少红冲",
+            created_at=now_beijing_naive(),
+            confirmed_at=now_beijing_naive(),
+        )
+        db.session.add(doc)
+        db.session.flush()
+
+        for idx, (mid, qty, old_material) in enumerate(reverse_items, start=1):
+            need = _q6(qty)
+            if need <= 0:
+                continue
+
+            # ⭐ 找该工艺单该原料所有"正向消耗"流水（不只 PROD-OUT）
+            orig_txs = (
+                InventoryTransaction.query
+                .filter(
+                    InventoryTransaction.process_order_id == order.id,
+                    InventoryTransaction.material_id == mid,
+                    InventoryTransaction.quantity_delta < 0,       # 消耗方向
+                    InventoryTransaction.transaction_type.in_(
+                        ["PRODUCTION_OUT", "ADJUSTMENT_BLUE"]
+                    ),
+                )
+                .order_by(
+                    InventoryTransaction.transaction_time.desc(),  # 最近消耗先退（LIFO）
+                    InventoryTransaction.id.desc(),
+                )
+                .with_for_update()
+                .all()
+            )
+            if not orig_txs:
+                raise ProcessOrderAdjustmentError(
+                    f"找不到原料 {mid} 在原领料单或调整单中的消耗流水"
+                )
+
+            # ⭐ 逆序逐条红冲，直到退够
+            for orig_tx in orig_txs:
+                if need <= 0:
+                    break
+
+                # 该流水还剩多少可退？= 原 allocation 的 quantity 之和
+                reversible = (
+                    db.session.query(func.coalesce(
+                        func.sum(InventoryCostAllocation.quantity), 0))
+                    .filter(
+                        InventoryCostAllocation.out_transaction_id == orig_tx.id
+                    )
+                    .scalar()
+                ) or Decimal("0")
+                if reversible <= 0:
+                    continue
+
+                take_qty = min(reversible, need)
+
+                # 创建红冲流水（一个 orig_tx 对应一条红冲流水更清晰）
+                new_tx = InventoryTransaction(
+                    document_id=doc.id,
+                    line_no=idx,
+                    material_id=mid,
+                    transaction_type=adjust_type,
+                    transaction_time=now_beijing_naive(),
+                    quantity_delta=take_qty,        # 正数（库存恢复）
+                    process_order_id=order.id,
+                    warehouse_id=orig_tx.warehouse_id,
+                    created_at=now_beijing_naive(),
+                )
+                db.session.add(new_tx)
+                db.session.flush()
+
+                # 按原流水反查 allocations 归还
+                result = ProcessOrderAdjustmentService._reverse_allocation(
+                    orig_tx.id, take_qty, new_tx.id
+                )
+                recovered_cost = result["total_cost"]
+                new_tx.total_cost = -_q6(recovered_cost)          # 负成本
+                new_tx.unit_cost = (
+                    _q6(recovered_cost / take_qty) if take_qty > 0 else None
+                )
+
+                need -= take_qty
+
+            if need > 0:
+                raise ProcessOrderAdjustmentError(
+                    f"原料 {mid} 可红冲数量不足，还差 {need}（可能超出已消耗量）"
+                )
+
+        return doc
+
+    @staticmethod
+    def _create_reverse_out_old(order, orig_doc, reverse_items, adjust_no,
                             operator_id, reason):
         """
         红冲：把原出库的某部分数量退回成本层。

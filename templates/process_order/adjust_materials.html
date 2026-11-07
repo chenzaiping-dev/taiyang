@@ -229,10 +229,24 @@
   const fmt4  = (n) => (n.toFixed(4).replace(/\.?0+$/, "") || "0");
 
   // ---- 行号重排 ----
+  // ---- 统一重排：行号显示 + name 属性索引 ----
   function renumber() {
-    tbody.querySelectorAll("tr.mat-row").forEach((tr, i) => {
+    const rows = tbody.querySelectorAll("tr.mat-row");
+    rows.forEach((tr, i) => {
+      // 1. 行号
       const c = tr.querySelector(".row-no");
       if (c) c.textContent = i + 1;
+
+      // 2. 该行所有带 name 的字段，把索引重写为 i
+      tr.querySelectorAll("[name]").forEach((el) => {
+        const name = el.getAttribute("name");
+        if (name && name.includes("materials[")) {
+          el.setAttribute(
+            "name",
+            name.replace(/materials\[\d+\]/, `materials[${i}]`)
+          );
+        }
+      });
     });
   }
 

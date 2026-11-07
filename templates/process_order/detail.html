@@ -14,6 +14,11 @@
     调整原料配比
   </a>
 {% endif %}
+  {# ⭐ 新增：调整历史入口 #}
+  <a class="btn"
+     href="{{ url_for('process_order.adjustments_list_page', order_id=order.id) }}">
+    调整记录
+  </a>
   <a class="btn" style="float:right;margin-right:8px;"
      href="{{ url_for('process_order.list_page') }}">
     返回列表
