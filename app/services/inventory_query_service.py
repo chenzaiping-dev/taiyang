@@ -228,16 +228,16 @@ class InventoryQueryService:
             total_in, total_out, net_qty
         """
         # 归一化方向：入库正、出库也显示正数
-        in_qty = case(
-            (InventoryTransaction.quantity_delta > 0,
-             InventoryTransaction.quantity_delta),
-            else_=0,
-        )
-        out_qty = case(
-            (InventoryTransaction.quantity_delta < 0,
-             -InventoryTransaction.quantity_delta),
-            else_=0,
-        )
+        #in_qty = case(
+        #    (InventoryTransaction.quantity_delta > 0,
+        #     InventoryTransaction.quantity_delta),
+        #    else_=0,
+        #)
+        #out_qty = case(
+        #    (InventoryTransaction.quantity_delta < 0,
+        #     -InventoryTransaction.quantity_delta),
+        #    else_=0,
+        #)
 
         # 按业务类型分桶
         in_purchase = case(
@@ -264,6 +264,11 @@ class InventoryQueryService:
         )
         out_loss = case(
             (InventoryTransaction.transaction_type == "STOCKTAKE_LOSS",
+             -InventoryTransaction.quantity_delta),
+            else_=0,
+        )
+        out_return = case(
+            (InventoryTransaction.transaction_type == "RETURN_OUT",
              -InventoryTransaction.quantity_delta),
             else_=0,
         )
@@ -303,10 +308,24 @@ class InventoryQueryService:
             func.sum(in_gain).label("in_gain"),
             func.sum(out_production).label("out_production"),
             func.sum(out_loss).label("out_loss"),
+            func.sum(out_return).label("out_return"),
             func.sum(out_adjust_red).label("out_adjust_red"),
             func.sum(out_adjust_blue).label("out_adjust_blue"),
-            func.sum(in_qty).label("total_in"),
-            func.sum(out_qty).label("total_out"),
+            # total_in = 采购 + 退货回 + 盘盈（不含红冲）
+            (
+                func.sum(in_purchase)
+                + func.sum(in_return)
+                + func.sum(in_gain)
+            ).label("total_in"),
+
+            # total_out = 领料 + 盘亏 + 退货出 + 蓝补 - 红冲
+            (
+                func.sum(out_production)
+                + func.sum(out_loss)
+                + func.sum(out_return)
+                + func.sum(out_adjust_blue)
+                + func.sum(out_adjust_red)
+            ).label("total_out"),
             func.sum(InventoryTransaction.quantity_delta).label("net_qty"),
         ]
 
@@ -353,7 +372,7 @@ class InventoryQueryService:
         for r in raw:
             d = dict(r)
             for k in ("in_purchase", "in_return", "in_gain", "out_production",
-                      "out_loss", "total_in", "total_out", "net_qty"):
+                      "out_loss", "out_return", "out_adjust_red", "out_adjust_blue", "total_in", "total_out", "net_qty"):
                 d[k] = d.get(k) or 0
             rows.append(d)
         return rows, total

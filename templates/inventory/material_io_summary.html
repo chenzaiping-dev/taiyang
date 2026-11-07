@@ -58,6 +58,7 @@
       <th style="width:110px;text-align:right;">退货入</th>
       <th style="width:120px;text-align:right;">领料出</th>
       <th style="width:110px;text-align:right;">盘亏出</th>
+      <th style="width:110px;text-align:right;">退货出</th>
       <th style="width:110px;text-align:right;">调整红冲出</th>
       <th style="width:110px;text-align:right;">调整蓝补出</th>
     </tr>
@@ -85,13 +86,14 @@
         <td style="text-align:right;color:#666;">{{ r.in_return }}</td>
         <td style="text-align:right;color:#666;">{{ r.out_production }}</td>
         <td style="text-align:right;color:#666;">{{ r.out_loss }}</td>
+        <td style="text-align:right;color:#666;">{{ r.out_return }}</td>
         <td style="text-align:right;color:#666;">{{ r.out_adjust_red }}</td>
         <td style="text-align:right;color:#666;">{{ r.out_adjust_blue }}</td>
       </tr>
       {% endfor %}
     {% else %}
       <tr>
-        <td colspan="{{ 14 if warehouse_id else 13 }}"
+        <td colspan="{{ 15 if warehouse_id else 14 }}"
             style="text-align:center;color:#999;padding:24px;">
           没有符合条件的流水记录
         </td>
@@ -109,6 +111,7 @@
       <td style="text-align:right;">{{ rows|sum(attribute='in_return') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='out_production') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='out_loss') }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='out_return') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='out_adjust_red') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='out_adjust_blue') }}</td>
     </tr>
