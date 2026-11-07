@@ -588,10 +588,10 @@ def adjustments_list_page(order_id: int):
     # 关联单据批量取
     doc_ids = set()
     for a in adjustments:
-        if a.out_document_id:
-            doc_ids.add(a.out_document_id)
-        if a.in_document_id:
-            doc_ids.add(a.in_document_id)
+        if a.red_document_id:
+            doc_ids.add(a.red_document_id)
+        if a.blue_document_id:
+            doc_ids.add(a.blue_document_id)
     docs = {}
     if doc_ids:
         for d in InventoryDocument.query.filter(

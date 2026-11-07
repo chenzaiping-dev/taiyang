@@ -91,12 +91,12 @@ class ProcessOrderAdjustmentService:
         #    )
 
         adjust_no = f"ADJ-{order.process_order_no}-{now_beijing_naive().strftime('%Y%m%d%H%M%S')}"
-        out_doc = in_doc = None
+        red_doc = blue_doc = None
 
         try:
             # ---------- 1. 红冲（退回）----------
             if to_reverse:
-                out_doc = ProcessOrderAdjustmentService._create_reverse_out(
+                red_doc = ProcessOrderAdjustmentService._create_reverse_out(
                     order=order,
                     #orig_doc=orig_doc,
                     reverse_items=to_reverse,
@@ -107,7 +107,7 @@ class ProcessOrderAdjustmentService:
 
             # ---------- 2. 追加（新消耗）----------
             if to_consume:
-                in_doc = ProcessOrderAdjustmentService._create_consume_in(
+                blue_doc = ProcessOrderAdjustmentService._create_consume_in(
                     order=order,
                     consume_items=to_consume,
                     adjust_no=adjust_no,
@@ -175,8 +175,8 @@ class ProcessOrderAdjustmentService:
                 adjust_reason=reason,
                 old_snapshot=old_snapshot,
                 new_snapshot=new_snapshot,
-                out_document_id=out_doc.id if out_doc else None,
-                in_document_id=in_doc.id if in_doc else None,
+                red_document_id=red_doc.id if red_doc else None,
+                blue_document_id=blue_doc.id if blue_doc else None,
                 created_by=operator_id,
                 created_at=now_beijing_naive(),
             )
@@ -190,8 +190,8 @@ class ProcessOrderAdjustmentService:
         return {
             "adjustment_no": adjust_no,
             "process_order_id": order_id,
-            "reverse_doc_no": out_doc.document_no if out_doc else None,
-            "consume_doc_no": in_doc.document_no if in_doc else None,
+            "reverse_doc_no": red_doc.document_no if red_doc else None,
+            "consume_doc_no": blue_doc.document_no if blue_doc else None,
             "new_actual_total_cost": str(order.actual_total_cost),
         }
 

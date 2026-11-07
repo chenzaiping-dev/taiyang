@@ -164,7 +164,7 @@ TABLES = {
     },
     "process_order_material_adjustments": {
         "label": "工艺单原料调整", "module": "生产管理", "mode": "readonly",
-        "list_fields": ["id", "process_order_id", "adjustment_no", "out_document_id", "in_document_id", "old_snapshot", "new_snapshot", "adjust_reason", "created_at"],
+        "list_fields": ["id", "process_order_id", "adjustment_no", "red_document_id", "blue_document_id", "old_snapshot", "new_snapshot", "adjust_reason", "created_at"],
         "search_fields": ["process_order_id", "adjustment_no"],
     },    
     "shipment_plans": {

@@ -571,15 +571,15 @@ CREATE TABLE process_order_material_adjustments (
     adjust_reason VARCHAR(500),
     old_snapshot JSON,
     new_snapshot JSON,
-    out_document_id BIGINT UNSIGNED NULL,
-    in_document_id BIGINT UNSIGNED NULL,
+    red_document_id BIGINT UNSIGNED NULL,
+    blue_document_id BIGINT UNSIGNED NULL,
     created_by BIGINT UNSIGNED NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_adjustment_no (adjustment_no),
     KEY idx_po_adjust (process_order_id, adjust_time),
     CONSTRAINT fk_poma_po FOREIGN KEY (process_order_id) REFERENCES process_orders(id),
-    CONSTRAINT fk_poma_out_doc FOREIGN KEY (out_document_id) REFERENCES inventory_documents(id),
-    CONSTRAINT fk_poma_in_doc FOREIGN KEY (in_document_id) REFERENCES inventory_documents(id)
+    CONSTRAINT fk_poma_red_doc FOREIGN KEY (red_document_id) REFERENCES inventory_documents(id),
+    CONSTRAINT fk_poma_blue_doc FOREIGN KEY (blue_document_id) REFERENCES inventory_documents(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE finished_goods_batches (

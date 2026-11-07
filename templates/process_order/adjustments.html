@@ -44,33 +44,33 @@
     <label>调整原因：</label>{{ a.adjust_reason or "-" }}
   </div>
   <div class="form-row">
-    <label>关联出库单：</label>
-    {% if a.out_document_id and docs.get(a.out_document_id) %}
+    <label>关联红冲单：</label>
+    {% if a.red_document_id and docs.get(a.red_document_id) %}
       <a href="{{ url_for('inventory_query.document_detail_page',
-                    direction='out', document_id=a.out_document_id) }}"
+                    direction='out', document_id=a.red_document_id) }}"
          target="_blank">
-        {{ docs[a.out_document_id].document_no }}
+        {{ docs[a.red_document_id].document_no }}
       </a>
       <span style="color:#999;font-size:12px;">
         （{{ {'ADJUSTMENT_RED': '配比调整-红冲出库'}
-             .get(docs[a.out_document_id].document_type,
-                  docs[a.out_document_id].document_type) }}）
+             .get(docs[a.red_document_id].document_type,
+                  docs[a.red_document_id].document_type) }}）
       </span>
     {% else %}
       <span style="color:#999;">-</span>
     {% endif %}
 
-    <label style="margin-left:24px;">关联入库单：</label>
-    {% if a.in_document_id and docs.get(a.in_document_id) %}
+    <label style="margin-left:24px;">关联蓝补单：</label>
+    {% if a.blue_document_id and docs.get(a.blue_document_id) %}
       <a href="{{ url_for('inventory_query.document_detail_page',
-                    direction='out', document_id=a.in_document_id) }}"
+                    direction='out', document_id=a.blue_document_id) }}"
          target="_blank">
-        {{ docs[a.in_document_id].document_no }}
+        {{ docs[a.blue_document_id].document_no }}
       </a>
       <span style="color:#999;font-size:12px;">
         （{{ {'ADJUSTMENT_BLUE': '配比调整-蓝补出库'}
-             .get(docs[a.in_document_id].document_type,
-                  docs[a.in_document_id].document_type) }}）
+             .get(docs[a.blue_document_id].document_type,
+                  docs[a.blue_document_id].document_type) }}）
       </span>
     {% else %}
       <span style="color:#999;">-</span>
