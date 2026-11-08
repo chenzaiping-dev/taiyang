@@ -103,8 +103,8 @@ class ProcessOrderService:
 
         if db.session.get(Factory, factory_id) is None:
             raise ProcessOrderError(f"加工厂不存在: {factory_id}")
-        if db.session.get(SalesPerformance, performance_id) is None:
-            raise ProcessOrderError(f"业绩单不存在: {performance_id}")
+        #if db.session.get(SalesPerformance, performance_id) is None:
+        #    raise ProcessOrderError(f"业绩单不存在: {performance_id}")
         if db.session.get(Employee, followup_employee_id) is None:
             raise ProcessOrderError(f"跟单员不存在: {followup_employee_id}")
         if db.session.get(Employee, created_by) is None:

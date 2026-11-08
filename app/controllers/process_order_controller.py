@@ -408,15 +408,12 @@ def receive(order_id: int):
             f"单价 {result['unit_cost']}",
             "success",
         )
+        return redirect(url_for("finished_goods.document_detail_page",
+            direction="in", document_id=result["finished_goods"]["document_id"]))
     except ProcessOrderError as e:
         flash(str(e), "error")
 
-    #return redirect(request.referrer or url_for("process_order.list_page"))
-    return redirect(url_for(
-        "finished_goods.transactions_page",
-        document_no=result["finished_goods"]["document_no"],
-    ))    
-
+    return redirect(request.referrer or url_for("process_order.list_page"))
 
 @bp.post("/<int:order_id>/cancel")
 def cancel(order_id: int):
@@ -541,7 +538,7 @@ def adjust_materials(order_id):
     except (ProcessOrderAdjustmentError, InventoryError) as e:
         flash(str(e), "error")
 
-    print("提交的 new_materials:", new_materials, request.referrer)
+    print("提交的 new_materials:", new_materials)
     return redirect(url_for("process_order.detail_page", order_id=order_id))
 
 @bp.get("/<int:order_id>/adjust-materials")

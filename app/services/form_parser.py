@@ -157,8 +157,8 @@ def parse_process_order_form(form) -> dict:
 
     if not factory_id:
         raise FormParseError("请选择加工厂")
-    if not performance_id:
-        raise FormParseError("请选择业绩单")
+    #if not performance_id:
+    #    raise FormParseError("请选择业绩单")
     if not followup_employee_id:
         raise FormParseError("请选择跟单员")
     if not created_by:

@@ -312,7 +312,7 @@ CREATE TABLE process_orders (
     product_specification VARCHAR(500) NULL COMMENT '产品规格',
     unit VARCHAR(20) DEFAULT 'KG' COMMENT '成品计量单位',
 
-    performance_id BIGINT UNSIGNED NOT NULL COMMENT '关联业绩表ID快照',
+    performance_id BIGINT UNSIGNED NULL COMMENT '关联业绩表ID快照',
     order_time DATETIME NOT NULL COMMENT '下单时间',
 
     followup_employee_id BIGINT UNSIGNED NOT NULL COMMENT '跟单员ID',

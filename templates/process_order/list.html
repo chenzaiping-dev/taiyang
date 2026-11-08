@@ -67,7 +67,15 @@
           {{ it.planned_quantity }}
           {% if it.unit %}<span style="color:#999;font-size:11px;">{{ it.unit }}</span>{% endif %}
         </td>
-        <td>{{ it.performance_no or "-" }}</td>
+        <td>
+          {% if it.performance_id %}
+          <a href="{{ url_for('sales_performance.detail_page', perf_id=it.performance_id) }}">
+            {{ it.performance_no }}
+          </a>
+          {% else %}
+            {{ "-" }}
+          {% endif %}
+        </td>
         <td>{{ it.order_time.strftime("%Y-%m-%d %H:%M") if it.order_time else "-" }}</td>
         <td>{{ it.followup_employee_name or "-" }}</td>
         <td>{{ it.created_by_name or "-" }}</td>
