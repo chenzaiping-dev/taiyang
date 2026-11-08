@@ -82,8 +82,8 @@
       <th style="width:140px;text-align:right;">
         {{ '入库数量合计' if direction == 'in' else '出库数量合计' }}
       </th>
-      <th style="width:90px;">状态</th>
-      <th style="width:150px;">创建时间</th>
+      <th style="width:120px;">状态</th>
+      <th style="width:120px;">创建时间</th>
       <th style="width:100px;">操作</th>
     </tr>
   </thead>
@@ -107,15 +107,42 @@
           <span class="status-badge status-{{ r.status|lower }}">
             {{ status_labels.get(r.status, r.status) }}
           </span>
+          {% if r.is_reversed %}
+            <span class="status-badge status-reversed" title="该单已被撤销">已撤销</span>
+          {% endif %}
         </td>
         <td>{{ r.created_at.strftime("%Y-%m-%d %H:%M")
                if r.created_at else "-" }}</td>
         <td style="text-align:center;white-space:nowrap;">
           <a class="btn btn-sm"
-             href="{{ url_for('finished_goods.document_detail_page',
+            href="{{ url_for('finished_goods.document_detail_page',
                       direction=direction, document_id=r.id) }}">
             查看
           </a>
+          {% if r.status == 'DRAFT' %}
+            <a class="btn btn-sm"
+              href="{{ url_for('finished_goods.document_edit_page',
+                        direction=direction, document_id=r.id) }}">
+              编辑
+            </a>
+            <form method="post" style="display:inline;"
+                  action="{{ url_for('finished_goods.document_confirm',
+                          direction=direction, document_id=r.id) }}"
+                  onsubmit="return confirm('确认{{ '入库' if direction == 'in' else '出库' }}？');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-primary">确认</button>
+            </form>
+          {% elif r.status == 'CONFIRMED' %}
+            {% if r.document_type not in ('ADJUSTMENT_RED', 'ADJUSTMENT_BLUE') and  r.is_reversed == false  %}
+            <form method="post" style="display:inline;"
+                  action="{{ url_for('finished_goods.document_reverse',
+                          direction=direction, document_id=r.id) }}"
+                  onsubmit="return confirm('撤销该单据？');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-danger">撤销</button>
+            </form>
+            {% endif %}   
+          {% endif %}
         </td>
       </tr>
       {% endfor %}

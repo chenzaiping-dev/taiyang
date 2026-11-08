@@ -634,9 +634,11 @@ CREATE TABLE finished_goods_documents (
         'STOCKTAKE',
         'RETURN',
         'TRANSFER',
-        'ADJUSTMENT'
+        'ADJUSTMENT_RED',
+        'ADJUSTMENT_BLUE'
     ) NOT NULL COMMENT '单据类型: PRODUCTION_IN生产入库, OUTBOUND销售出库,
-        STOCKTAKE盘点, RETURN客户退货, TRANSFER仓库调拨, ADJUSTMENT库存调整',
+        STOCKTAKE盘点, RETURN客户退货, TRANSFER仓库调拨, 
+        ADJUSTMENT_RED单据红冲, ADJUSTMENT_BLUE单据补充',
 
     document_time DATETIME NOT NULL COMMENT '业务发生时间',
     status ENUM(
@@ -758,11 +760,14 @@ CREATE TABLE finished_goods_transactions (
         'RETURN_IN',
         'RETURN_OUT',
         'TRANSFER_IN',
-        'TRANSFER_OUT'
+        'TRANSFER_OUT',
+        'ADJUSTMENT_RED',
+        'ADJUSTMENT_BLUE'
     ) NOT NULL DEFAULT 'PRODUCTION_IN'
         COMMENT '流水类型: PRODUCTION_IN生产入库, OUTBOUND出库,
-        STOCKTAKE_GAIN:库存盘点-入库, STOCKTAKE_LOSS:库存盘点-出库, RETURN_IN:退货入库, RETURN_OUT:退货出库
-        TRANSFER_IN调拨入库, TRANSFER_OUT调拨出库',
+        STOCKTAKE_GAIN:库存盘点-入库, STOCKTAKE_LOSS:库存盘点-出库, RETURN_IN:退货入库, RETURN_OUT:退货出库,
+        TRANSFER_IN调拨入库, TRANSFER_OUT调拨出库,
+        ADJUSTMENT_RED红冲(delta正, cost负), ADJUSTMENT_BLUE蓝补(delta负, cost正)',
 
     quantity_delta DECIMAL(16, 4) NOT NULL COMMENT '库存变化数量：入库正数，出库负数',
 

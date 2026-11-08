@@ -12,7 +12,42 @@
   <h2>
     {{ '入库单详情' if direction == 'in' else '出库单详情' }}
     <span style="color:#888;font-size:14px;">#{{ doc.document_no }}</span>
-    <a class="btn" style="float:right;" href="{{ list_url }}">返回列表</a>
+
+    {% if doc.status == 'DRAFT' %}
+      <!-- 草稿：确认 + 编辑 -->
+      <form method="post" style="float:right;margin-right:8px;"
+            action="{{ url_for('finished_goods.document_confirm',
+                    direction=direction, document_id=doc.id) }}"
+            onsubmit="return confirm('确认后将{{ '增加' if direction == 'in' else '扣减' }}库存，是否继续？');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-primary">确认{{ '入库' if direction == 'in' else '出库' }}</button>
+      </form>
+      <a class="btn" style="float:right;margin-right:8px;"
+        href="{{ url_for('finished_goods.document_edit_page',
+                  direction=direction, document_id=doc.id) }}">
+        编辑草稿
+      </a>
+
+    {% elif doc.status == 'CONFIRMED' %}
+      {# ⭐ 三种情况：调整单 / 已撤销 / 可撤销 #}
+      {% if doc.document_type in ('ADJUSTMENT_RED', 'ADJUSTMENT_BLUE') %}
+        <span style="color:#888;font-size:12px;">调整单不可再次撤销</span>
+      {% elif detail.is_reversed %}
+        <span style="color:#888;font-size:12px;">该单已撤销</span>
+      {% else %}
+        <form method="post" style="float:right;margin-right:8px;"
+              action="{{ url_for('finished_goods.document_reverse',
+                      direction=direction, document_id=doc.id) }}"
+              onsubmit="return confirm('撤销将生成一张反向单据，原单保留。是否继续？');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="text" name="reason" placeholder="撤销原因（可选）"
+                style="width:150px;margin-right:4px;">
+          <button type="submit" class="btn btn-danger">撤销</button>
+        </form>
+      {% endif %}
+    {% endif %}
+
+    <a class="btn" style="float:right;margin-right:8px;" href="{{ list_url }}">返回列表</a>
   </h2>
 
   <fieldset>
@@ -30,7 +65,29 @@
       <span class="status-badge status-{{ doc.status|lower }}">
         {{ status_labels.get(doc.status, doc.status) }}
       </span>
+      {% if detail.is_reversed %}
+        <span class="status-badge status-reversed" style="margin-left:4px;">已撤销</span>
+      {% endif %}
     </div>
+    {% if detail.is_reversed %}
+    <div class="form-row">
+      <label style="color:#c62828;">撤销单：</label>
+      <a href="{{ url_for('finished_goods.document_detail_page',
+                    direction=related_direction or direction,
+                    document_id=detail.reverse_document_id) }}">
+        {{ detail.reverse_document_no }}
+      </a>
+    </div>
+    {% endif %}    
+    {% if doc.related_document_id %}
+    <div class="form-row"><label>关联原单：</label>
+      <a href="{{ url_for('finished_goods.document_detail_page',
+                    direction=related_direction or direction,
+                    document_id=doc.related_document_id) }}">
+        {{ related_document_no }}
+      </a>
+    </div>
+    {% endif %}    
     <div class="form-row"><label>创建时间：</label>
       {{ doc.created_at.strftime("%Y-%m-%d %H:%M:%S")
          if doc.created_at else "-" }}
@@ -77,26 +134,49 @@
           <td>{{ {'PENDING':'待检','QUALIFIED':'合格','REJECTED':'不合格'}
                  .get(l.quality_status, l.quality_status) }}</td>
           <td>
-            {% if l.quantity_delta > 0 %}
+            {% if l.quantity_delta is not none and l.quantity_delta > 0 %}
               {# 入库：调入仓库 #}
-              {{ l.tx_warehouse_code }} - {{ l.tx_warehouse_name }}
-            {% else %}
+              {{ l.tx_warehouse_code or l.to_warehouse_code or '-' }} -
+              {{ l.tx_warehouse_name or l.to_warehouse_name or '-' }}
+            {% elif l.quantity_delta is not none %}
               {# 出库：调出仓库 #}
-              {{ l.tx_warehouse_code }} - {{ l.tx_warehouse_name }}
+              {{ l.tx_warehouse_code or l.from_warehouse_code or '-' }} -
+              {{ l.tx_warehouse_name or l.from_warehouse_name or '-' }}
+            {% else %}
+              {# DRAFT：按方向取仓库 #}
+              {% if direction == 'in' %}
+                {{ l.to_warehouse_code or '-' }} - {{ l.to_warehouse_name or '-' }}
+              {% else %}
+                {{ l.from_warehouse_code or '-' }} - {{ l.from_warehouse_name or '-' }}
+              {% endif %}
             {% endif %}
           </td>
           <td style="text-align:right;font-weight:600;
-                     color:{{ '#2e7d32' if l.quantity_delta > 0 else '#c62828' }};">
-            {{ '+' if l.quantity_delta > 0 }}{{ l.quantity_delta }}
+                    color:{{ '#999' if l.quantity_delta is none
+                            else ('#2e7d32' if l.quantity_delta > 0 else '#c62828') }};">
+            {% if l.quantity_delta is none %}
+              <span style="color:#999;">—</span>
+            {% else %}
+              {{ '+' if l.quantity_delta > 0 }}{{ l.quantity_delta }}
+            {% endif %}
           </td>
           <td style="text-align:right;">{{ l.unit_cost or "-" }}</td>
           <td>
-            <span class="tx-badge tx-{{ l.transaction_type|lower }}">
-              {{ tx_types.get(l.transaction_type, l.transaction_type) }}
-            </span>
+            {% if l.transaction_type %}
+              <span class="tx-badge tx-{{ l.transaction_type|lower }}">
+                {{ tx_types.get(l.transaction_type, l.transaction_type) }}
+              </span>
+            {% else %}
+              <span class="tx-badge tx-draft">待确认</span>
+            {% endif %}
           </td>
-          <td>{{ l.transaction_time.strftime("%Y-%m-%d %H:%M:%S")
-                 if l.transaction_time else "-" }}</td>
+          <td>
+            {% if l.transaction_time %}
+              {{ l.transaction_time.strftime("%Y-%m-%d %H:%M:%S") }}
+            {% else %}
+              <span style="color:#999;">待确认</span>
+            {% endif %}
+          </td>
           <td>{{ l.remark or "-" }}</td>
         </tr>
         {% endfor %}
@@ -115,6 +195,9 @@
     .tx-transfer_in    { background:#f3e5f5;color:#6a1b9a; }
     .tx-transfer_out   { background:#fce4ec;color:#ad1457; }
     .tx-adjustment     { background:#eee;color:#555; }
+    .tx-adjustment_red  { background:#fdecea; color:#c62828; }
+    .tx-adjustment_blue { background:#e3f2fd; color:#1565c0; }
+    .tx-draft { background:#eee; color:#666; }
   </style>
 {% endif %}
 {% endblock %}

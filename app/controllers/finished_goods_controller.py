@@ -1,5 +1,5 @@
 from datetime import datetime
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, abort
 
 from app.extensions import db
 from app.generated.models.warehouses import Warehouse
@@ -39,6 +39,8 @@ FG_DOC_TYPE_LABELS = {
     "RETURN": "退货单",
     "TRANSFER": "调拨单",
     "ADJUSTMENT": "调整单",
+    "ADJUSTMENT_RED": "红冲入库单",
+    "ADJUSTMENT_BLUE": "蓝补出库单",
 }
 
 @bp.get("/api/process-orders/search")
@@ -117,7 +119,6 @@ def inbound_submit():
     doc_time_str = request.form.get("document_time", "").strip()
     remark = request.form.get("remark", "").strip() or None
 
-    # 汇总明细（行号按 batch_no 或 batch_id 的索引顺序）
     lines = []
     line_idx = 0
     while True:
@@ -148,8 +149,7 @@ def inbound_submit():
                 prefix + "[product_specification]", "").strip() or None,
             "unit": request.form.get(prefix + "[unit]", "KG").strip() or "KG",
             "quality_status": request.form.get(prefix + "[quality_status]", "QUALIFIED"),
-            "process_order_id": process_order_id,       # ⭐ 透传
-            "process_order_id": None,
+            "process_order_id": process_order_id,
             "quantity": request.form.get(prefix + "[quantity]").strip(),
             "unit_cost": request.form.get(prefix + "[unit_cost]", "").strip() or None,
             "remark": request.form.get(prefix + "[remark]", "").strip() or None,
@@ -166,12 +166,13 @@ def inbound_submit():
             document_time=doc_time,
             created_by=1,
             remark=remark,
+            auto_confirm=False,      # ⭐ 草稿落地
         )
-        flash(f"入库成功，单号 {result['document_no']}", "success")
-        return redirect(url_for("finished_goods.transactions_page",
-                                document_no=result["document_no"]))
+        flash(f"入库单已保存为草稿，单号 {result['document_no']}，请前往列表确认", "success")
+        return redirect(url_for(
+            "finished_goods.document_detail_page",
+            direction="in", document_id=result["document_id"]))
     except FinishedGoodsError as e:
-        # ⭐ 失败回显时补上 process_order_no，供 po-suggest 展示
         for ln in lines:
             pid = ln.get("process_order_id")
             if pid and not ln.get("process_order_no"):
@@ -231,7 +232,6 @@ def outbound_page():
         errors=[],
     )
 
-
 @bp.post("/outbound")
 def outbound_submit():
     doc_time_str = request.form.get("document_time", "").strip()
@@ -272,10 +272,12 @@ def outbound_submit():
             document_time=doc_time,
             created_by=1,
             remark=remark,
+            auto_confirm=False,       # ⭐ 草稿落地
         )
-        flash(f"出库成功，单号 {result['document_no']}", "success")
-        return redirect(url_for("finished_goods.transactions_page",
-                                document_no=result["document_no"]))
+        flash(f"出库单已保存为草稿，单号 {result['document_no']}，请前往列表确认", "success")
+        return redirect(url_for(
+            "finished_goods.document_detail_page",
+            direction="out", document_id=result["document_id"]))
     except FinishedGoodsError as e:
         return _render_outbound_error(str(e))
 
@@ -440,6 +442,7 @@ def document_list_page(direction):
     date_to_raw = request.args.get("date_to", "").strip() or None
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 50
+    print(status, inbound_type, outbound_type)
 
     def _parse_date(s):
         if not s:
@@ -505,25 +508,327 @@ def document_detail_page(direction, document_id):
                              direction=direction),
         ), 404
 
-    # 方向校验：判断单据所有行是否同向
-    deltas = [l["quantity_delta"] for l in detail["lines"]]
-    has_in = any(d > 0 for d in deltas)
-    has_out = any(d < 0 for d in deltas)
-    if direction == "in" and not has_in:
-        abort(404)
-    if direction == "out" and not has_out:
-        abort(404)
-    # 混向单据：两个方向都能打开，但需要注意
-    if has_in and has_out and direction not in ("in", "out"):
-        abort(404)
+    # ============ 统一从 ORM doc 取 related_document_id，绕开 dict 结构 ============
+    doc_orm = db.session.get(FinishedGoodsDocument, document_id)
+    rd_id = doc_orm.related_document_id if doc_orm else None
+
+    related_direction = None
+    related_document_no = None
+    if rd_id:
+        related = db.session.get(FinishedGoodsDocument, rd_id)
+        if related:
+            related_document_no = related.document_no
+            is_in = related.document_type in (
+                "PRODUCTION_IN", "STOCKTAKE", "RETURN", "TRANSFER", "ADJUSTMENT_RED",
+            )
+            related_direction = "in" if is_in else "out"
+
+    # ============ 反查：是否被撤销 ============
+    reverse_of_this = (
+        FinishedGoodsDocument.query
+        .filter_by(related_document_id=document_id, status="CONFIRMED")
+        .first()
+    )
+    detail["is_reversed"] = bool(reverse_of_this)
+    detail["reverse_document_id"] = reverse_of_this.id if reverse_of_this else None
+    detail["reverse_document_no"] = (
+        reverse_of_this.document_no if reverse_of_this else None
+    )
+
+    detail["can_confirm"] = (detail["document"]["status"] == "DRAFT")
+    detail["can_edit"] = (detail["document"]["status"] == "DRAFT")
+    detail["can_reverse"] = (detail["document"]["status"] == "CONFIRMED")
 
     return render_template(
         "finished_goods/document_detail.html",
         direction=direction,
         detail=detail,
+        related_direction=related_direction,
+        related_document_no=related_document_no,
         status_labels=FG_STATUS_LABELS,
         doc_type_labels=FG_DOC_TYPE_LABELS,
         tx_types=TX_TYPE_LABELS,
         list_url=url_for("finished_goods.document_list_page",
                          direction=direction),
     )
+
+@bp.post("/documents/<direction>/<int:document_id>/confirm")
+def document_confirm(direction, document_id):
+    if direction not in ("in", "out"):
+        abort(404)
+    try:
+        if direction == "in":
+            FinishedGoodsService.confirm_inbound_document(document_id, confirmed_by=1)
+            flash("入库单已确认，库存已增加", "success")
+        else:
+            FinishedGoodsService.confirm_outbound_document(document_id, confirmed_by=1)
+            flash("出库单已确认，库存已扣减", "success")
+    except FinishedGoodsError as e:
+        flash(str(e), "error")
+    return redirect(url_for(
+        "finished_goods.document_detail_page",
+        direction=direction, document_id=document_id))
+
+@bp.get("/documents/<direction>/<int:document_id>/edit")
+def document_edit_page(direction, document_id):
+    print(direction, document_id)
+    if direction not in ("in", "out"):
+        abort(404)
+    doc = db.session.get(FinishedGoodsDocument, document_id)
+    if not doc:
+        abort(404)
+    if doc.status != "DRAFT":
+        flash("只有草稿状态可编辑", "error")
+        return redirect(url_for(
+            "finished_goods.document_detail_page",
+            direction=direction, document_id=document_id))
+
+    lines = FinishedGoodsDocumentLine.query.filter_by(
+        document_id=doc.id
+    ).order_by(FinishedGoodsDocumentLine.line_no.asc()).all()
+
+    # 组装 form_data（复用 inbound/outbound 模板的字段名）
+    if direction == "in":
+        # ⭐ 批量取批次信息
+        batch_ids = [l.batch_id for l in lines if l.batch_id]
+        batch_map = {}
+        if batch_ids:
+            for b in FinishedGoodsBatch.query.filter(
+                    FinishedGoodsBatch.id.in_(batch_ids)).all():
+                batch_map[b.id] = b
+
+        # 在批量取批次后，再批量取工艺单号
+        po_ids = list({b.process_order_id for b in batch_map.values() if b.process_order_id})
+        po_map = {}
+        if po_ids:
+            for po in ProcessOrder.query.filter(ProcessOrder.id.in_(po_ids)).all():
+                po_map[po.id] = po
+
+        form_lines = []
+        for l in lines:
+            b = batch_map.get(l.batch_id)
+            form_lines.append({
+                "batch_id": l.batch_id,
+                "batch_no": b.batch_no if b else "",
+                "product_name": b.product_name if b else "",
+                "product_specification": b.product_specification if b else "",
+                "unit": b.unit if b else "KG",
+                "quality_status": b.quality_status if b else "QUALIFIED",
+                "process_order_id": b.process_order_id if b else None,
+                "process_order_id": b.process_order_id if b else None,
+                "process_order_no": po_map[b.process_order_id].process_order_no
+                                    if (b and b.process_order_id in po_map) else "",
+                "quantity": str(l.quantity),
+                "unit_cost": str(l.unit_cost) if l.unit_cost is not None else "",
+                "remark": l.remark or "",
+            })
+        if not form_lines:
+            form_lines = [{}]
+
+        return render_template(
+            "finished_goods/inbound.html",
+            edit_mode=True,
+            document_id=doc.id,
+            warehouses=_fg_warehouses(),
+            inbound_types=INBOUND_TYPE_LABELS,
+            process_orders=(
+                ProcessOrder.query
+                .filter(ProcessOrder.status.in_(["ORDERED", "COMPLETED"]))
+                .order_by(ProcessOrder.id.desc()).limit(500).all()
+            ),
+            form_data={
+                "warehouse_id": lines[0].to_warehouse_id if lines else "",
+                "inbound_type": "PRODUCTION_IN",
+                "document_time": doc.document_time.strftime("%Y-%m-%dT%H:%M") if doc.document_time else "",
+                "remark": doc.remark or "",
+                "lines": form_lines,
+            },
+            errors=[],
+        )
+    else:
+        # 批量取仓库
+        wh_ids = list({l.from_warehouse_id for l in lines if l.from_warehouse_id})
+        wh_map = {}
+        if wh_ids:
+            for w in Warehouse.query.filter(Warehouse.id.in_(wh_ids)).all():
+                wh_map[w.id] = w
+
+        # 批量取批次
+        batch_ids = [l.batch_id for l in lines if l.batch_id]
+        batch_map = {}
+        if batch_ids:
+            for b in FinishedGoodsBatch.query.filter(
+                    FinishedGoodsBatch.id.in_(batch_ids)).all():
+                batch_map[b.id] = b
+
+        rows = []
+        for l in lines:
+            w = wh_map.get(l.from_warehouse_id)
+            b = batch_map.get(l.batch_id)
+            total_qty, locked_qty, available_qty = (
+                FinishedGoodsQueryService.get_batch_available_qty(
+                    l.from_warehouse_id, l.batch_id
+                )
+            )
+
+            rows.append({
+                "id": l.id,
+                "warehouse_id": l.from_warehouse_id,
+                "warehouse_code": w.warehouse_code if w else "",
+                "warehouse_name": w.warehouse_name if w else "",
+                "batch_id": l.batch_id,
+                "batch_no": b.batch_no if b else "",
+                "product_name": b.product_name if b else "",
+                "product_specification": b.product_specification if b else "",
+                "unit": b.unit if b else "",
+                "quality_status": b.quality_status if b else "",
+                "total_qty": total_qty,
+                "locked_qty": locked_qty,
+                "available_qty": available_qty,
+                "edit_quantity": str(l.quantity),
+                "edit_remark": l.remark or "",
+            })
+        if not rows:
+            rows = []
+
+        return render_template(
+            "finished_goods/outbound.html",
+            edit_mode=True,
+            document_id=doc.id,
+            rows=rows,
+            total=len(lines), page=1, page_size=200, total_pages=1,
+            warehouse_id=lines[0].from_warehouse_id if lines else "",
+            outbound_types=OUTBOUND_TYPE_LABELS,
+            batch_keyword="",
+            warehouses=_fg_warehouses(),
+            form_data={
+                "outbound_type": "OUTBOUND",
+                "document_time": doc.document_time.strftime("%Y-%m-%dT%H:%M") if doc.document_time else "",
+                "remark": doc.remark or "",
+            },
+            errors=[],
+        )
+
+@bp.post("/documents/<direction>/<int:document_id>/edit")
+def document_edit_submit(direction, document_id):
+    if direction not in ("in", "out"):
+        abort(404)
+    doc = db.session.get(FinishedGoodsDocument, document_id)
+    if not doc or doc.status != "DRAFT":
+        flash("只有草稿状态可编辑", "error")
+        return redirect(url_for(
+            "finished_goods.document_list_page", direction=direction))
+
+    if direction == "in":
+        wh_raw = request.form.get("warehouse_id", "").strip()
+        warehouse_id = int(wh_raw) if wh_raw.isdigit() else None
+        lines = []
+        idx = 0
+        while True:
+            prefix = f"lines[{idx}]"
+            if prefix + "[quantity]" not in request.form:
+                break
+            qty = _parse_qty(request.form.get(prefix + "[quantity]"))
+            if qty is None or qty <= 0:
+                idx += 1
+                continue
+            batch_id_raw = request.form.get(prefix + "[batch_id]", "").strip()
+            po_raw = (request.form.get(prefix + "[process_order_id]", "") or "").strip()
+            process_order_id = int(po_raw) if po_raw.isdigit() else None
+            lines.append({
+                "batch_id": int(batch_id_raw) if batch_id_raw else None,
+                "batch_no": request.form.get(prefix + "[batch_no]", "").strip(),
+                "product_name": request.form.get(prefix + "[product_name]", "").strip(),
+                "product_specification": request.form.get(prefix + "[product_specification]", "").strip() or None,
+                "unit": request.form.get(prefix + "[unit]", "KG").strip() or "KG",
+                "quality_status": request.form.get(prefix + "[quality_status]", "QUALIFIED"),
+                "process_order_id": process_order_id,
+                "quantity": request.form.get(prefix + "[quantity]").strip(),
+                "unit_cost": request.form.get(prefix + "[unit_cost]", "").strip() or None,
+                "remark": request.form.get(prefix + "[remark]", "").strip() or None,
+            })
+            idx += 1
+
+        try:
+            doc_time = datetime.fromisoformat(
+                request.form.get("document_time", "").strip() or ""
+            ) if request.form.get("document_time", "").strip() else None
+            FinishedGoodsService.update_inbound_draft(
+                document_id=document_id,
+                warehouse_id=warehouse_id,
+                lines=lines,
+                document_time=doc_time,
+                remark=request.form.get("remark", "").strip() or None,
+            )
+            flash("入库草稿已更新", "success")
+            return redirect(url_for(
+                "finished_goods.document_detail_page",
+                direction="in", document_id=document_id))
+        except FinishedGoodsError as e:
+            flash(str(e), "error")
+            return redirect(url_for(
+                "finished_goods.document_edit_page",
+                direction="in", document_id=document_id))
+    else:
+        lines = []
+        idx = 0
+        while True:
+            prefix = f"lines[{idx}]"
+            if prefix + "[batch_id]" not in request.form:
+                break
+            batch_raw = request.form.get(prefix + "[batch_id]", "").strip()
+            wh_raw = request.form.get(prefix + "[warehouse_id]", "").strip()
+            qty_raw = request.form.get(prefix + "[quantity]", "").strip()
+            if batch_raw.isdigit() and wh_raw.isdigit() and qty_raw:
+                try:
+                    if float(qty_raw) > 0:
+                        lines.append({
+                            "warehouse_id": int(wh_raw),
+                            "batch_id": int(batch_raw),
+                            "quantity": qty_raw,
+                            "remark": request.form.get(prefix + "[remark]", "").strip() or None,
+                        })
+                except ValueError:
+                    pass
+            idx += 1
+
+        try:
+            doc_time = datetime.fromisoformat(
+                request.form.get("document_time", "").strip() or ""
+            ) if request.form.get("document_time", "").strip() else None
+            FinishedGoodsService.update_outbound_draft(
+                document_id=document_id,
+                lines=lines,
+                document_time=doc_time,
+                remark=request.form.get("remark", "").strip() or None,
+            )
+            flash("出库草稿已更新", "success")
+            return redirect(url_for(
+                "finished_goods.document_detail_page",
+                direction="out", document_id=document_id))
+        except FinishedGoodsError as e:
+            flash(str(e), "error")
+            return redirect(url_for(
+                "finished_goods.document_edit_page",
+                direction="out", document_id=document_id))
+
+@bp.post("/documents/<direction>/<int:document_id>/reverse")
+def document_reverse(direction, document_id):
+    if direction not in ("in", "out"):
+        abort(404)
+    try:
+        result = FinishedGoodsService.reverse_document(
+            document_id=document_id,
+            reason=request.form.get("reason", "").strip() or None,
+            created_by=1,
+        )
+        flash(
+            f"已撤销，生成新单号 {result['reverse_document_no']}，"
+            f"关联原单 {result['original_document_no']}",
+            "success",
+        )
+    except FinishedGoodsError as e:
+        flash(str(e), "error")
+    return redirect(url_for(
+        "finished_goods.document_detail_page",
+        direction=direction, document_id=document_id))

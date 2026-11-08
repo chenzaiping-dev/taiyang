@@ -35,6 +35,10 @@ def _infer_source_entry(row: dict) -> str:
         return "成品出库页"
     if doc_type == "TRANSFER":
         return "成品调拨"
+    if doc_type == "ADJUSTMENT_RED":
+        return "红冲入库"
+    if doc_type == "ADJUSTMENT_BLUE":
+        return "蓝补出库"
     return "未知入口"
 
 class FinishedGoodsQueryService:
@@ -278,6 +282,11 @@ class FinishedGoodsQueryService:
              FinishedGoodsTransaction.quantity_delta),
             else_=0,
         )
+        in_adjust = case(
+            (FinishedGoodsTransaction.transaction_type == "ADJUSTMENT_RED",
+             FinishedGoodsTransaction.quantity_delta),
+            else_=0,
+        )
         out_sale = case(
             (FinishedGoodsTransaction.transaction_type == "OUTBOUND",
              -FinishedGoodsTransaction.quantity_delta),
@@ -295,6 +304,11 @@ class FinishedGoodsQueryService:
         )
         out_transfer = case(
             (FinishedGoodsTransaction.transaction_type == "TRANSFER_OUT",
+             FinishedGoodsTransaction.quantity_delta),
+            else_=0,
+        )
+        out_adjust = case(
+            (FinishedGoodsTransaction.transaction_type == "ADJUSTMENT_BLUE",
              FinishedGoodsTransaction.quantity_delta),
             else_=0,
         )
@@ -349,10 +363,12 @@ class FinishedGoodsQueryService:
             func.sum(in_return).label("in_return"),
             func.sum(in_stocktake).label("in_stocktake"),
             func.sum(in_transfer).label("in_transfer"),
+            func.sum(in_adjust).label("in_adjust"),
             func.sum(out_sale).label("out_outbound"),
             func.sum(out_return).label("out_return"),
             func.sum(out_stocktake).label("out_stocktake"),
             func.sum(out_transfer).label("out_transfer"),
+            func.sum(out_adjust).label("out_adjust"),
             func.sum(in_qty).label("total_in"),
             func.sum(out_qty).label("total_out"),
             func.sum(FinishedGoodsTransaction.quantity_delta).label("net_qty"),
@@ -512,34 +528,50 @@ class FinishedGoodsQueryService:
     def list_fg_documents(
         direction: str,           # 'IN' | 'OUT'
         keyword=None, status=None,
-        inbound_type=None,        # 仅 IN 方向过滤
-        outbound_type=None,       # 仅 OUT 方向过滤
-        warehouse_id=None,        # 可选：按仓库过滤（有行的仓库）
+        inbound_type=None,        # 仅 IN 方向过滤（仅对 CONFIRMED 有效）
+        outbound_type=None,       # 仅 OUT 方向过滤（仅对 CONFIRMED 有效）
+        warehouse_id=None,
         date_from=None, date_to=None,
         page=1, page_size=50,
     ):
         """
         成品库入库/出库单列表（方向维度）。
+        - 主表：finished_goods_documents
+        - 明细：finished_goods_document_lines（用于 line_count / total_qty / 方向判定）
+        - 流水：仅在 CONFIRMED 时用于精确的方向/仓库/类型过滤；DRAFT 单走行级判断
         """
+        from sqlalchemy.orm import aliased
+        from sqlalchemy import exists
+
+        reverse_doc = aliased(FinishedGoodsDocument)
+        reversed_exists = (
+            exists()
+            .where(
+                reverse_doc.related_document_id == FinishedGoodsDocument.id,
+                reverse_doc.status == "CONFIRMED",
+            )
+        )
+
+        # ============================================================
+        # 方向判定：基于 finished_goods_document_lines
+        #   IN  = 该单据存在 to_warehouse_id 不为空的行
+        #   OUT = 该单据存在 from_warehouse_id 不为空的行
+        # ============================================================
         if direction == "IN":
-            tx_types = INBOUND_TYPE_LABELS.keys()
+            dir_condition = FinishedGoodsDocumentLine.to_warehouse_id.isnot(None)
             qty_expr = func.coalesce(
-                func.sum(FinishedGoodsTransaction.quantity_delta), 0
+                func.sum(FinishedGoodsDocumentLine.quantity), 0
             ).label("total_qty")
         else:
-            tx_types = OUTBOUND_TYPE_LABELS.keys()
-
+            dir_condition = FinishedGoodsDocumentLine.from_warehouse_id.isnot(None)
             qty_expr = func.coalesce(
-                func.sum(-FinishedGoodsTransaction.quantity_delta), 0
+                func.sum(FinishedGoodsDocumentLine.quantity), 0
             ).label("total_qty")
 
-        # 方向过滤：单据内所有行必须同向（避免混向单据出现在错误列表）
-        mixed_dir_subq = (
-            select(FinishedGoodsTransaction.document_id)
-            .where(
-                (FinishedGoodsTransaction.quantity_delta > 0
-                if direction == "OUT" else FinishedGoodsTransaction.quantity_delta < 0)
-            )
+        # 方向子查询：符合方向的 document_id（DRAFT + CONFIRMED 都覆盖）
+        dir_doc_subq = (
+            select(FinishedGoodsDocumentLine.document_id)
+            .where(dir_condition)
             .subquery()
         )
 
@@ -553,19 +585,18 @@ class FinishedGoodsQueryService:
                 FinishedGoodsDocument.remark,
                 FinishedGoodsDocument.created_at,
                 FinishedGoodsDocument.confirmed_at,
-                func.count(FinishedGoodsTransaction.id).label("line_count"),
+                reversed_exists.label("is_reversed"),      # ⭐
+                func.count(FinishedGoodsDocumentLine.id).label("line_count"),
                 qty_expr,
                 func.coalesce(
                     func.sum(FinishedGoodsDocumentLine.unit_cost), 0
-                ).label("total_cost"),  # 若成品单据头无 total_cost，用明细行 sum
+                ).label("total_cost"),
             )
-            .join(FinishedGoodsTransaction,
-                FinishedGoodsTransaction.document_id == FinishedGoodsDocument.id)
             .join(FinishedGoodsDocumentLine,
-                FinishedGoodsDocumentLine.id == FinishedGoodsTransaction.document_line_id)
+                FinishedGoodsDocumentLine.document_id == FinishedGoodsDocument.id)
             .where(
-                FinishedGoodsTransaction.transaction_type.in_(tx_types),
-                ~FinishedGoodsDocument.id.in_(select(mixed_dir_subq.c.document_id)),
+                FinishedGoodsDocument.id.in_(select(dir_doc_subq.c.document_id)),
+                dir_condition,   # 只统计符合方向的行（避免混合单据合计错误）
             )
             .group_by(
                 FinishedGoodsDocument.id,
@@ -579,6 +610,8 @@ class FinishedGoodsQueryService:
             )
             .order_by(FinishedGoodsDocument.id.desc())
         )
+
+        # ---------------- 基本过滤 ----------------
         if keyword:
             stmt = stmt.where(
                 FinishedGoodsDocument.document_no.like(f"%{keyword}%")
@@ -589,27 +622,35 @@ class FinishedGoodsQueryService:
             stmt = stmt.where(FinishedGoodsDocument.document_time >= date_from)
         if date_to:
             stmt = stmt.where(FinishedGoodsDocument.document_time < date_to)
-        if direction == "IN" and inbound_type:
-            subq = (
-                select(FinishedGoodsTransaction.document_id)
-                .where(FinishedGoodsTransaction.transaction_type == inbound_type)
-                .subquery()
-            )
-            stmt = stmt.where(FinishedGoodsDocument.id.in_(select(subq.c.document_id)))
-        if direction == "OUT" and outbound_type:
-            subq = (
-                select(FinishedGoodsTransaction.document_id)
-                .where(FinishedGoodsTransaction.transaction_type == outbound_type)
-                .subquery()
-            )
-            stmt = stmt.where(FinishedGoodsDocument.id.in_(select(subq.c.document_id)))
+
+        # ---------------- 仓库过滤 ----------------
+        # 用行级字段过滤：IN 看 to_warehouse_id，OUT 看 from_warehouse_id
         if warehouse_id:
-            subq = (
+            if direction == "IN":
+                stmt = stmt.where(
+                    FinishedGoodsDocumentLine.to_warehouse_id == warehouse_id
+                )
+            else:
+                stmt = stmt.where(
+                    FinishedGoodsDocumentLine.from_warehouse_id == warehouse_id
+                )
+
+        # ---------------- 业务类型过滤 ----------------
+        # 仅对 CONFIRMED 生效（DRAFT 无流水，不参与此过滤）
+        biz_type = inbound_type if direction == "IN" else outbound_type
+        if biz_type:
+            tx_subq = (
                 select(FinishedGoodsTransaction.document_id)
-                .where(FinishedGoodsTransaction.warehouse_id == warehouse_id)
+                .where(FinishedGoodsTransaction.transaction_type == biz_type)
                 .subquery()
             )
-            stmt = stmt.where(FinishedGoodsDocument.id.in_(select(subq.c.document_id)))
+            # DRAFT 单不受 biz_type 过滤；CONFIRMED 单必须命中
+            stmt = stmt.where(
+                db.or_(
+                    FinishedGoodsDocument.status == "DRAFT",
+                    FinishedGoodsDocument.id.in_(select(tx_subq.c.document_id)),
+                )
+            )
 
         total = db.session.execute(
             select(func.count()).select_from(stmt.subquery())
@@ -642,12 +683,21 @@ class FinishedGoodsQueryService:
             return None
         if doc.document_type not in (
             "PRODUCTION_IN", "OUTBOUND", "STOCKTAKE",
-            "RETURN", "TRANSFER", "ADJUSTMENT",
+            "RETURN", "TRANSFER", "ADJUSTMENT_RED", "ADJUSTMENT_BLUE",
         ):
             return None
 
         from_wh = db.aliased(Warehouse)
         to_wh = db.aliased(Warehouse)
+
+        # 方向：入库行 to_warehouse_id 非空 → 正；出库行 from_warehouse_id 非空 → 负
+        direction_delta = case(
+            (FinishedGoodsDocumentLine.to_warehouse_id.isnot(None),
+            FinishedGoodsDocumentLine.quantity),
+            (FinishedGoodsDocumentLine.from_warehouse_id.isnot(None),
+            -FinishedGoodsDocumentLine.quantity),
+            else_=None,
+        )
 
         line_stmt = (
             select(
@@ -675,18 +725,25 @@ class FinishedGoodsQueryService:
                 FinishedGoodsTransaction.id.label("transaction_id"),
                 FinishedGoodsTransaction.transaction_type,
                 FinishedGoodsTransaction.transaction_time,
-                FinishedGoodsTransaction.quantity_delta,
+                func.coalesce(
+                    FinishedGoodsTransaction.quantity_delta,
+                    direction_delta,
+                ).label("quantity_delta"),
                 FinishedGoodsTransaction.warehouse_id.label("tx_warehouse_id"),
                 Warehouse.warehouse_code.label("tx_warehouse_code"),
                 Warehouse.warehouse_name.label("tx_warehouse_name"),
             )
             .join(FinishedGoodsBatch,
                 FinishedGoodsBatch.id == FinishedGoodsDocumentLine.batch_id)
-            .join(FinishedGoodsTransaction,
+            .outerjoin(                                       # ⭐ 改为 outerjoin
+                FinishedGoodsTransaction,
                 FinishedGoodsTransaction.document_line_id
-                == FinishedGoodsDocumentLine.id)
-            .join(Warehouse,
-                Warehouse.id == FinishedGoodsTransaction.warehouse_id)
+                == FinishedGoodsDocumentLine.id,
+            )
+            .outerjoin(                                       # ⭐ 这里也要 outerjoin
+                Warehouse,
+                Warehouse.id == FinishedGoodsTransaction.warehouse_id,
+            )
             .outerjoin(from_wh, from_wh.id == FinishedGoodsDocumentLine.from_warehouse_id)
             .outerjoin(to_wh, to_wh.id == FinishedGoodsDocumentLine.to_warehouse_id)
             .where(FinishedGoodsDocumentLine.document_id == document_id)
@@ -695,11 +752,13 @@ class FinishedGoodsQueryService:
         lines = [dict(r) for r in db.session.execute(line_stmt).mappings().all()]
 
         total_in_qty = sum(
-            (l["quantity_delta"] for l in lines if l["quantity_delta"] > 0),
+            (l["quantity_delta"] for l in lines
+            if l["quantity_delta"] is not None and l["quantity_delta"] > 0),
             Decimal("0"),
         )
         total_out_qty = sum(
-            (-l["quantity_delta"] for l in lines if l["quantity_delta"] < 0),
+            (-l["quantity_delta"] for l in lines
+            if l["quantity_delta"] is not None and l["quantity_delta"] < 0),
             Decimal("0"),
         )
 

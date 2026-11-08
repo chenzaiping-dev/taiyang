@@ -1,7 +1,7 @@
 {% extends "inventory/base.html" %}
 {% block title %}成品出库{% endblock %}
 {% block content %}
-<h2>成品出库</h2>
+<h2>{{ '编辑出库草稿' if edit_mode else '成品出库' }}</h2>
 
 {% if errors %}
   <div class="error-box">
@@ -11,6 +11,8 @@
   </div>
 {% endif %}
 
+{# 过滤区只在正常模式显示 #}
+{% if not edit_mode %}
 <form method="get" action="{{ url_for('finished_goods.outbound_page') }}"
       style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
   <input type="text" name="batch_keyword" value="{{ batch_keyword }}"
@@ -28,10 +30,16 @@
   <button type="submit" class="btn btn-primary">查询</button>
   <a class="btn" href="{{ url_for('finished_goods.outbound_page') }}">重置</a>
 </form>
+{% endif %}
 
-<form method="post" action="{{ url_for('finished_goods.outbound_submit') }}">
+<form method="post"
+      action="{% if edit_mode %}
+                {{ url_for('finished_goods.document_edit_submit',
+                           direction='out', document_id=document_id) }}
+              {% else %}
+                {{ url_for('finished_goods.outbound_submit') }}
+              {% endif %}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
   <div class="form-row">
   <label>出库类型 *</label>
   <select id="outbound_type" name="outbound_type" required>
@@ -48,7 +56,7 @@
            value="{{ form_data.remark }}">
   </div>
 
-  <h3>全部可用库存（{{ total }} 条）</h3>
+  <h3>{{ '出库明细（草稿）' if edit_mode else '全部可用库存（' ~ total ~ ' 条）' }}</h3>
   {% if rows %}
   <table style="width:100%;border-collapse:collapse;font-size:13px;">
     <thead>
@@ -91,14 +99,15 @@
                  name="lines[{{ loop.index0 }}][batch_id]"
                  value="{{ r.batch_id }}">
           <input type="number" step="0.0001" min="0"
-                 name="lines[{{ loop.index0 }}][quantity]"
-                 max="{{ r.available_qty }}"
-                 placeholder="0" style="width:120px;">
+               name="lines[{{ loop.index0 }}][quantity]"
+               {% if not edit_mode %}max="{{ r.available_qty }}"{% endif %}
+               value="{{ r.edit_quantity if edit_mode else '' }}">
         </td>
         <td>
           <input type="text"
-                 name="lines[{{ loop.index0 }}][remark]"
-                 maxlength="255" style="width:100%;">
+                name="lines[{{ loop.index0 }}][remark]"
+                maxlength="255" style="width:100%;"
+                value="{{ r.edit_remark if edit_mode else '' }}">
         </td>
       </tr>
       {% endfor %}
@@ -106,7 +115,7 @@
   </table>
 
   <div style="margin-top:16px;">
-    <button type="submit" class="btn btn-primary">保存出库</button>
+    <button type="submit" class="btn btn-primary">{{ '保存草稿' if edit_mode else '保存出库' }}</button>
     <a class="btn" href="{{ url_for('finished_goods.document_list_page', direction='out') }}">查看出库历史</a>
   </div>
   {% else %}

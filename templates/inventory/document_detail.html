@@ -43,7 +43,22 @@
       <span class="status-badge status-{{ doc.status|lower }}">
         {{ status_labels.get(doc.status, doc.status) }}
       </span>
+      {% if detail.is_reversed %}
+        <span class="status-badge status-reversed" style="margin-left:4px;">已撤销</span>
+      {% endif %}
     </div>
+
+    {% if detail.is_reversed %}
+    <div class="form-row">
+      <label style="color:#c62828;">撤销单：</label>
+      <a href="{{ url_for('finished_goods.document_detail_page',
+                    direction=related_direction or direction,
+                    document_id=detail.reverse_document_id) }}">
+        {{ detail.reverse_document_no }}
+      </a>
+    </div>
+    {% endif %}    
+
     <div class="form-row"><label>创建时间：</label>
       {{ doc.created_at.strftime("%Y-%m-%d %H:%M:%S")
          if doc.created_at else "-" }}
