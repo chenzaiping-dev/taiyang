@@ -177,10 +177,10 @@
           {% endif %}
 
           <!-- ===== 取消：DRAFT / ORDERED ===== -->
-          {% if it.status in ['DRAFT', 'ORDERED'] %}
+          {% if it.status in ['DRAFT', 'ORDERED', 'PRODUCING', 'RECEIVED'] %}
             <form method="post"
                   action="{{ url_for('process_order.cancel', order_id=it.id) }}"
-                  onsubmit="return confirm('确认取消该工艺单？取消后不可恢复。');"
+                  onsubmit="return confirm('确认取消该工艺单？{% if it.status == 'RECEIVED' %}将冲销成品入库与原料出库{% elif it.status in ['ORDERED','PRODUCING'] %}将冲销原料出库{% endif %}，取消后不可恢复。');"
                   style="display:inline;">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn btn-small btn-danger">取消</button>

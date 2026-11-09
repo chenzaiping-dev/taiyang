@@ -748,6 +748,7 @@ class FinishedGoodsService:
         document_id: int,
         reason: str = None,
         created_by: int = None,
+        commit: bool = True,          # ⭐ 新增
     ) -> dict:
         """
         撤销一张已确认（CONFIRMED）的入库/出库单：
@@ -843,11 +844,17 @@ class FinishedGoodsService:
 
         # 关联原单
         new_doc.related_document_id = doc.id
-        try:
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            raise FinishedGoodsError(f"撤销提交失败: {e}")
+        if commit:
+            try:
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                raise FinishedGoodsError(f"撤销提交失败: {e}")
+        else:
+            try:
+                db.session.flush()
+            except Exception as e:
+                raise FinishedGoodsError(f"撤销 flush 失败: {e}")
 
         return {
             "reverse_document_id": new_doc.id,
@@ -934,3 +941,23 @@ class FinishedGoodsService:
             plan.status = "PARTIALLY_SHIPPED"
 
         # 注意：这里不提交，由外层 reverse_document 统一 commit
+
+    @staticmethod
+    def reverse_inbound_by_process_order(
+        order,
+        reason: str = None,
+        created_by: int = None,
+        commit=True,
+    ):
+        """
+        撤销工艺单对应的成品入库单（FG-IN-{process_order_no}）。
+        返回 reverse_document 的结果；若无入库单返回 None。
+        """
+        doc_no = f"FG-IN-{order.process_order_no}"
+        doc = FinishedGoodsDocument.query.filter_by(document_no=doc_no).first()
+        if not doc:
+            return None
+        return FinishedGoodsService.reverse_document(
+            document_id=doc.id, reason=reason, 
+            created_by=created_by, commit=commit,
+        )

@@ -20,6 +20,7 @@ from app.generated.models.production_plan_process_orders import ProductionPlanPr
 
 from app.services.finished_goods_service import FinishedGoodsError, FinishedGoodsService
 from app.generated.models.finished_goods_batches import FinishedGoodsBatch
+from app.services.inventory_service import StockOutService, InventoryError, OUTBOUND_TYPE_LABELS, _rm_warehouses
 
 from app.utils.decimal_utils import _q3, _q6, RATIO_TOLERANCE
 
@@ -42,7 +43,7 @@ STATUS_ACTIONS = {
         "label": "完工入库",
     },
     "cancel": {       # 取消
-        "from": {"DRAFT", "ORDERED"},
+        "from": {"DRAFT", "ORDERED", "PRODUCING", "RECEIVED"},
         "to": "CANCELLED",
         "label": "取消",
     },
@@ -764,3 +765,81 @@ class ProcessOrderService:
                 locked_quantity=qty,
                 created_at=now_beijing_naive(),
             ))
+
+    @staticmethod
+    def cancel_with_reversal(
+        order_id: int,
+        reason: str = None,
+        operator_id: int = None,
+    ) -> dict:
+        """
+        取消工艺单，并按当前状态冲销库存：
+        - DRAFT                      → 只改状态
+        - ORDERED / PRODUCING        → 冲销原料出库
+        - RECEIVED                   → 冲销成品入库 + 冲销原料出库
+        - COMPLETED / CANCELLED      → 拒绝
+        整体单事务：任一冲销失败全部回滚。
+        """
+        order = db.session.get(ProcessOrder, order_id)
+        if not order:
+            raise ProcessOrderError("工艺单不存在")
+        if order.status in ("COMPLETED", "CANCELLED"):
+            raise ProcessOrderError(
+                f"当前状态【{STATUS_LABELS.get(order.status, order.status)}】"
+                f"不允许取消"
+            )
+
+        old_status = order.status
+        fg_reverse_result = None
+        raw_reverse_result = None
+
+        try:
+            # 1. 已入库：先撤销成品入库（可能因成品已被占用而失败，整体回滚）
+            if old_status == "RECEIVED":
+                fg_reverse_result = FinishedGoodsService.reverse_inbound_by_process_order(
+                    order=order,
+                    reason=reason or f"取消工艺单 {order.process_order_no}",
+                    created_by=operator_id,
+                    commit=False,        # ⭐ 合并事务
+                )
+                if fg_reverse_result is None:
+                    raise ProcessOrderError(
+                        f"未找到工艺单 {order.process_order_no} 的成品入库单，"
+                        f"无法安全取消"
+                    )
+
+            # 2. 已下单及之后：冲销原料出库
+            if old_status in ("ORDERED", "PRODUCING", "RECEIVED"):
+                raw_reverse_result = StockOutService.reverse_by_process_order(
+                    order=order,
+                    reason=reason or f"取消工艺单 {order.process_order_no}",
+                    operator_id=operator_id,
+                    commit=False,
+                )
+                print("I am here")
+                if raw_reverse_result is None and old_status in ("ORDERED", "PRODUCING"):
+                    raise ProcessOrderError(
+                        f"未找到工艺单 {order.process_order_no} 的原料出库流水，"
+                        f"无法安全取消"
+                    )
+
+            order.status = "CANCELLED"
+            db.session.commit()
+        except (FinishedGoodsError, InventoryError) as e:
+            db.session.rollback()
+            raise ProcessOrderError(f"取消失败：{e}")
+        except ProcessOrderError:
+            db.session.rollback()
+            raise
+        except Exception as e:
+            db.session.rollback()
+            raise ProcessOrderError(f"取消失败：{e}")
+
+        return {
+            "process_order_id": order.id,
+            "process_order_no": order.process_order_no,
+            "old_status": old_status,
+            "new_status": order.status,
+            "finished_goods_reverse": fg_reverse_result,
+            "raw_material_reverse": raw_reverse_result,
+        }

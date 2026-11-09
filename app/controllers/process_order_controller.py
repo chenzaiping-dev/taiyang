@@ -419,23 +419,40 @@ def receive(order_id: int):
 
 @bp.post("/<int:order_id>/cancel")
 def cancel(order_id: int):
-    """取消：DRAFT/ORDERED -> CANCELLED"""
+    """取消：DRAFT/ORDERED/PRODUCING/RECEIVED → CANCELLED，并按状态冲销库存"""
     try:
-        ProcessOrderService.change_status(order_id, "cancel")
-        flash("已取消", "success")
+        result = ProcessOrderService.cancel_with_reversal(
+            order_id=order_id,
+            reason=request.form.get("remark") or None,
+            operator_id=1,
+        )
+        msgs = ["已取消"]
+        if result.get("finished_goods_reverse"):
+            msgs.append(
+                f"成品入库已冲销（反向单 {result['finished_goods_reverse']['reverse_document_no']}）"
+            )
+        if result.get("raw_material_reverse"):
+            msgs.append(
+                f"原料出库已冲销（红冲单 {result['raw_material_reverse']['document_no']}）"
+            )
+        flash("，".join(msgs), "success")
     except ProcessOrderError as e:
         flash(str(e), "error")
     return redirect(request.referrer or url_for("process_order.list_page"))
-
 
 # ---------------- JSON API（可选） ----------------
 @bp.post("/api/<int:order_id>/<action>")
 def api_change_status(order_id: int, action: str):
     if action not in ("place-order", "ship-out", "cancel"):
         return jsonify({"code": 400, "msg": "不支持的操作"}), 400
-    action_key = action.replace("-", "_")
     try:
-        result = ProcessOrderService.change_status(order_id, action_key)
+        if action == "cancel":
+            result = ProcessOrderService.cancel_with_reversal(
+                order_id=order_id, reason=None, operator_id=1,
+            )
+        else:
+            action_key = action.replace("-", "_")
+            result = ProcessOrderService.change_status(order_id, action_key)
     except ProcessOrderError as e:
         return jsonify({"code": 400, "msg": str(e)}), 400
     return jsonify({"code": 0, "msg": "操作成功", "data": result})
