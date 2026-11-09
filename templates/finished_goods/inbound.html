@@ -119,7 +119,7 @@
     <button type="button" id="add-line-btn" class="btn">+ 添加行</button>
   </div>
 
-  <button type="submit" class="btn btn-primary">{{ '保存草稿' if edit_mode else '保存入库' }}</button>
+  <button type="submit" class="btn btn-primary">保存草稿</button>
   <a class="btn" href="{{ url_for('finished_goods.document_list_page', direction='in') }}">查看入库历史</a>
 </form>
 

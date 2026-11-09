@@ -32,18 +32,19 @@
 <table style="width:100%;border-collapse:collapse;font-size:13px;">
   <thead>
     <tr style="background:#f5f5f5;">
-      <th style="width:50px;">ID</th>
+      <th style="width:20px;">ID</th>
       <th>工艺单编号</th>
       <th>加工厂</th>
       <th>生产批号</th>
       <th>产品名称</th>
-      <th style="width:110px;">计划数量</th>
+      <th style="width:40px;">计划数量</th>
       <th>业绩单号</th>
-      <th style="width:140px;">下单时间</th>
+      <th>生产计划</th>
+      <th style="width:70px;">下单时间</th>
       <th>跟单人</th>
       <th>创建人</th>
-      <th style="width:100px;">实际单位成本</th>
-      <th style="width:90px;">状态</th>
+      <th style="width:40px;">实际单位成本</th>
+      <th style="width:40px;">状态</th>
       <th style="width:220px;">操作</th>
     </tr>
   </thead>
@@ -74,6 +75,18 @@
           </a>
           {% else %}
             {{ "-" }}
+          {% endif %}
+        </td>
+        <td>
+          {% if it.plan_id %}
+            <a href="{{ url_for('production_plan.detail_page', plan_id=it.plan_id) }}">
+              {{ it.plan_no }}
+            </a>
+            <span class="status-badge" style="margin-left:2px;">
+              {{ plan_status_labels.get(it.plan_status, it.plan_status) }}
+            </span>
+          {% else %}
+            <span style="color:#999;">-</span>
           {% endif %}
         </td>
         <td>{{ it.order_time.strftime("%Y-%m-%d %H:%M") if it.order_time else "-" }}</td>

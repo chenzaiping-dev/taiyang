@@ -1,6 +1,7 @@
 from decimal import Decimal
 from sqlalchemy import select
 from datetime import datetime
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, abort
 
 from app.extensions import db
 from app.utils.datetime_utils import now_beijing_naive
@@ -14,6 +15,8 @@ from app.generated.models.employees import Employee
 from app.generated.models.warehouses import Warehouse
 from app.generated.models.inventory_documents import InventoryDocument
 from app.generated.models.inventory_transactions import InventoryTransaction
+from app.generated.models.production_plans import ProductionPlan
+from app.generated.models.production_plan_process_orders import ProductionPlanProcessOrder
 
 from app.services.finished_goods_service import FinishedGoodsError, FinishedGoodsService
 from app.generated.models.finished_goods_batches import FinishedGoodsBatch
@@ -207,6 +210,24 @@ class ProcessOrderService:
             db.session.add(row)
             rows.append(row)
 
+        # 若业绩单已有生产计划，自动挂到该计划下
+        if performance_id:
+            plan = ProductionPlan.query.filter_by(
+                performance_id=int(performance_id)
+            ).first()
+            if plan and plan.status not in ("COMPLETED", "CANCELLED"):
+                exists = ProductionPlanProcessOrder.query.filter_by(
+                    production_plan_id=plan.id,
+                    process_order_id=order.id,
+                ).first()
+                if not exists:
+                    db.session.add(ProductionPlanProcessOrder(
+                        production_plan_id=plan.id,
+                        process_order_id=order.id,
+                        locked_quantity=_q6(order.planned_quantity),
+                        created_at=now_beijing_naive(),
+                    ))
+
         try:
             db.session.commit()
         except Exception as e:
@@ -259,6 +280,7 @@ class ProcessOrderService:
             order.created_by,            # 用原创建人，防止被篡改
             batch_no, product_name, planned_quantity, materials,
         )
+        old_performance_id = order.performance_id
 
         # ---- 主表字段 ----
         order.factory_id = factory_id
@@ -292,6 +314,17 @@ class ProcessOrderService:
             )
             db.session.add(row)
             rows.append(row)
+
+        if performance_id is None and old_performance_id is not None:
+            flash(f"新业绩表为空，为安全起见，原有生产计划关联暂不撤销，如要解除关联，请找到对应生产计划手动解除")
+
+        # ---- 业绩单变更 → 同步生产计划关联（仅 DRAFT 工艺单） ----
+        if performance_id is not None and int(performance_id) != int(old_performance_id or 0):
+            ProcessOrderService._sync_plan_link_on_performance_change(
+                order=order,
+                old_performance_id=old_performance_id,
+                new_performance_id=int(performance_id),
+            )
 
         try:
             db.session.commit()
@@ -350,12 +383,22 @@ class ProcessOrderService:
                 ProcessOrder.actual_total_cost,
                 ProcessOrder.completed_quantity,
                 ProcessOrder.status,
+                # ⭐ 生产计划信息（一个工艺单最多挂一个计划）
+                ProductionPlan.id.label("plan_id"),
+                ProductionPlan.plan_no.label("plan_no"),
+                ProductionPlan.status.label("plan_status"),
             )
             .join(Factory, Factory.id == ProcessOrder.factory_id, isouter=True)
             .join(SalesPerformance,
                   SalesPerformance.id == ProcessOrder.performance_id, isouter=True)
             .join(follow, follow.id == ProcessOrder.followup_employee_id, isouter=True)
             .join(creator, creator.id == ProcessOrder.created_by, isouter=True)
+            .join(ProductionPlanProcessOrder,
+                  ProductionPlanProcessOrder.process_order_id == ProcessOrder.id,
+                  isouter=True)
+            .join(ProductionPlan,
+                  ProductionPlan.id == ProductionPlanProcessOrder.production_plan_id,
+                  isouter=True)
             .order_by(ProcessOrder.id.desc())
         )
 
@@ -366,6 +409,7 @@ class ProcessOrderService:
                     ProcessOrder.process_order_no.like(like),
                     ProcessOrder.product_name.like(like),
                     ProcessOrder.batch_no.like(like),
+                    ProductionPlan.plan_no.like(like),   # ⭐
                 )
             )
         if status:
@@ -656,3 +700,67 @@ class ProcessOrderService:
                 "batch_no": result["lines"][0]["batch_no"],
             },
         }
+
+    @staticmethod
+    def _sync_plan_link_on_performance_change(
+        order: ProcessOrder,
+        old_performance_id,
+        new_performance_id: int,
+        locked_quantity=None,
+    ):
+        """
+        工艺单切换业绩单时，同步 production_plan_process_orders：
+        - 仅允许 DRAFT 工艺单（已下单后原料已出库，换计划会破坏一致性）
+        - 删除"原业绩单对应生产计划"下本工艺单的关联
+        - 在"新业绩单对应生产计划"下新增关联（若计划存在且未 COMPLETED/CANCELLED）
+        - 计划不存在则跳过（工艺单可以先于生产计划存在）
+        """
+        if order.status != "DRAFT":
+            raise ProcessOrderError(
+                f"工艺单状态为【{STATUS_LABELS.get(order.status, order.status)}】，"
+                f"已下单后不允许切换业绩单/生产计划"
+            )
+
+        # 0. 找新计划，先检查
+        new_plan = ProductionPlan.query.filter_by(
+            performance_id=new_performance_id
+        ).first()
+        if not new_plan:
+            raise ProcessOrderError(
+                f"新业绩表为{new_performance_id},"
+                f"还没有生产计划，先不建关联"
+            )
+
+        if new_plan.status in ("COMPLETED", "CANCELLED"):
+            raise ProcessOrderError(
+                f"目标生产计划【{new_plan.plan_no}】状态为"
+                f"【{PLAN_STATUS_LABELS.get(new_plan.status, new_plan.status)}】，"
+                f"不允许加入工艺单"
+            )
+
+        # 1. 删除本工艺单在所有计划下的关联（一个工艺单只能挂一个计划）
+        ProductionPlanProcessOrder.query.filter_by(
+            process_order_id=order.id
+        ).delete(synchronize_session=False)
+
+        # 2. 新计划加关联
+        # 已存在则更新锁定量，不重复插入
+        rel = ProductionPlanProcessOrder.query.filter_by(
+            production_plan_id=new_plan.id,
+            process_order_id=order.id,
+        ).first()
+        qty = (
+            _q6(locked_quantity)
+            if locked_quantity is not None
+            else _q6(order.planned_quantity)
+        )
+        if rel:
+            #rel.locked_quantity = qty
+            pass
+        else:
+            db.session.add(ProductionPlanProcessOrder(
+                production_plan_id=new_plan.id,
+                process_order_id=order.id,
+                locked_quantity=qty,
+                created_at=now_beijing_naive(),
+            ))

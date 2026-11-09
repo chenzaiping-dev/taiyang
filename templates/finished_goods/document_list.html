@@ -114,11 +114,6 @@
         <td>{{ r.created_at.strftime("%Y-%m-%d %H:%M")
                if r.created_at else "-" }}</td>
         <td style="text-align:center;white-space:nowrap;">
-          <a class="btn btn-sm"
-            href="{{ url_for('finished_goods.document_detail_page',
-                      direction=direction, document_id=r.id) }}">
-            查看
-          </a>
           {% if r.status == 'DRAFT' %}
             <a class="btn btn-sm"
               href="{{ url_for('finished_goods.document_edit_page',
@@ -133,6 +128,7 @@
               <button type="submit" class="btn btn-sm btn-primary">确认</button>
             </form>
           {% elif r.status == 'CONFIRMED' %}
+            <span class="btn btn-sm disabled">确认</span>
             {% if r.document_type not in ('ADJUSTMENT_RED', 'ADJUSTMENT_BLUE') and  r.is_reversed == false  %}
             <form method="post" style="display:inline;"
                   action="{{ url_for('finished_goods.document_reverse',

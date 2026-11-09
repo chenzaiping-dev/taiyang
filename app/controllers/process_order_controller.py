@@ -16,6 +16,7 @@ from app.schemas.process_order_schema import ProcessOrderRequestSchema
 from app.services.process_order_service import (
     ProcessOrderService, ProcessOrderError, STATUS_LABELS, _fg_warehouses
 )
+from app.services.production_plan_service import PLAN_STATUS_LABELS
 from app.services.process_order_adjustment_service import (
     ProcessOrderAdjustmentService, ProcessOrderAdjustmentError
 )
@@ -83,6 +84,7 @@ def list_page():
         factory_id=factory_id or "",
         factories=Factory.query.filter_by(status=1).order_by(Factory.id).all(),
         status_labels=STATUS_LABELS,
+        plan_status_labels=PLAN_STATUS_LABELS,   # ⭐
         warehouses=_rm_warehouses(),
         # ⭐ 新增：成品仓列表
         fg_warehouses=_fg_warehouses()

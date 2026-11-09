@@ -115,7 +115,7 @@
   </table>
 
   <div style="margin-top:16px;">
-    <button type="submit" class="btn btn-primary">{{ '保存草稿' if edit_mode else '保存出库' }}</button>
+    <button type="submit" class="btn btn-primary">保存草稿</button>
     <a class="btn" href="{{ url_for('finished_goods.document_list_page', direction='out') }}">查看出库历史</a>
   </div>
   {% else %}

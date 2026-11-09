@@ -859,8 +859,7 @@ CREATE TABLE production_plan_process_orders (
 
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
-    UNIQUE KEY uk_plan_process_order
-        (production_plan_id, process_order_id),
+    UNIQUE KEY uk_process_order_single_plan (process_order_id),
     KEY idx_process_order_id (process_order_id),
 
     CONSTRAINT fk_pppo_plan
