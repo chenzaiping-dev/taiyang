@@ -118,7 +118,7 @@ class FinishedGoodsQueryService:
         return rows, total
 
     @staticmethod
-    def list_transactions(warehouse_id=None, batch_id=None, tx_type=None,
+    def list_transactions(warehouse_id=None, batch_keyword=None, tx_type=None,
                           document_no=None, date_from=None, date_to=None,
                           page=1, page_size=50):
         creator = db.aliased(Employee)   # ⭐ 单据制单人
@@ -166,8 +166,12 @@ class FinishedGoodsQueryService:
 
         if warehouse_id:
             stmt = stmt.where(FinishedGoodsTransaction.warehouse_id == warehouse_id)
-        if batch_id:
-            stmt = stmt.where(FinishedGoodsTransaction.batch_id == batch_id)
+        if batch_keyword:
+            like = f"%{batch_keyword}%"
+            stmt = stmt.where(or_(
+                FinishedGoodsBatch.batch_no.like(like),
+                FinishedGoodsBatch.product_name.like(like),
+            ))
         if tx_type:
             stmt = stmt.where(FinishedGoodsTransaction.transaction_type == tx_type)
         if document_no:
@@ -284,7 +288,7 @@ class FinishedGoodsQueryService:
         )
         in_adjust = case(
             (FinishedGoodsTransaction.transaction_type == "ADJUSTMENT_RED",
-             FinishedGoodsTransaction.quantity_delta),
+             -FinishedGoodsTransaction.quantity_delta),
             else_=0,
         )
         out_sale = case(
@@ -294,17 +298,17 @@ class FinishedGoodsQueryService:
         )
         out_return = case(
             (FinishedGoodsTransaction.transaction_type == "RETURN_OUT",
-             FinishedGoodsTransaction.quantity_delta),
+             -FinishedGoodsTransaction.quantity_delta),
             else_=0,
         )
         out_stocktake = case(
             (FinishedGoodsTransaction.transaction_type == "STOCKTAKE_LOSS",
-             FinishedGoodsTransaction.quantity_delta),
+             -FinishedGoodsTransaction.quantity_delta),
             else_=0,
         )
         out_transfer = case(
             (FinishedGoodsTransaction.transaction_type == "TRANSFER_OUT",
-             FinishedGoodsTransaction.quantity_delta),
+             -FinishedGoodsTransaction.quantity_delta),
             else_=0,
         )
         out_adjust = case(
@@ -369,8 +373,25 @@ class FinishedGoodsQueryService:
             func.sum(out_stocktake).label("out_stocktake"),
             func.sum(out_transfer).label("out_transfer"),
             func.sum(out_adjust).label("out_adjust"),
-            func.sum(in_qty).label("total_in"),
-            func.sum(out_qty).label("total_out"),
+            # total_in = 生产 + 退货回 + 盘盈 + 调拨入 - 撤销入
+            (
+                func.sum(in_prod)
+                + func.sum(in_return)
+                + func.sum(in_stocktake)
+                + func.sum(in_transfer)
+                + func.sum(out_adjust)
+            ).label("total_in"),
+
+            # total_out = 销售 + 退货出 + 盘亏 + 调拨出 - 撤销出
+            (
+                func.sum(out_sale)
+                + func.sum(out_return)
+                + func.sum(out_stocktake)
+                + func.sum(out_transfer)
+                + func.sum(in_adjust)
+            ).label("total_out"),
+            #func.sum(in_qty).label("total_in"),
+            #func.sum(out_qty).label("total_out"),
             func.sum(FinishedGoodsTransaction.quantity_delta).label("net_qty"),
         ]
 

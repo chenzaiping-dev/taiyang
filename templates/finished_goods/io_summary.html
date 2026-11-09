@@ -58,12 +58,12 @@
       <th style="width:100px;text-align:right;">退货入</th>
       <th style="width:100px;text-align:right;">盘盈入</th>
       <th style="width:100px;text-align:right;">调拨入</th>
-      <th style="width:100px;text-align:right;">撤销出库-回补入</th>
+      <th style="width:100px;text-align:right;">撤销入库-退回出</th>
       <th style="width:110px;text-align:right;">销售出</th>
       <th style="width:100px;text-align:right;">退货出</th>
       <th style="width:100px;text-align:right;">盘亏出</th>
       <th style="width:100px;text-align:right;">调拨出</th>
-      <th style="width:100px;text-align:right;">撤销入库-退回出</th>
+      <th style="width:100px;text-align:right;">撤销出库-回补入</th>
     </tr>
   </thead>
   <tbody>
@@ -98,12 +98,12 @@
         <td style="text-align:right;color:#666;">{{ r.in_return }}</td>
         <td style="text-align:right;color:#666;">{{ r.in_stocktake }}</td>
         <td style="text-align:right;color:#666;">{{ r.in_transfer }}</td>
-        <td style="text-align:right;color:#666;">{{ r.in_adjust }}</td>
+        <td style="text-align:right;color:#666;">{{ r.out_adjust }}</td>
         <td style="text-align:right;color:#666;">{{ r.out_outbound }}</td>
         <td style="text-align:right;color:#666;">{{ r.out_return }}</td>
         <td style="text-align:right;color:#666;">{{ r.out_stocktake }}</td>
         <td style="text-align:right;color:#666;">{{ r.out_transfer }}</td>
-        <td style="text-align:right;color:#666;">{{ r.out_adjust }}</td>
+        <td style="text-align:right;color:#666;">{{ r.in_adjust }}</td>
       </tr>
       {% endfor %}
     {% else %}
@@ -123,12 +123,12 @@
       <td style="text-align:right;">{{ rows|sum(attribute='in_return') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='in_stocktake') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='in_transfer') }}</td>
-      <td style="text-align:right;">{{ rows|sum(attribute='in_adjust') }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='out_adjust') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='out_outbound') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='out_return') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='out_stocktake') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='out_transfer') }}</td>
-      <td style="text-align:right;">{{ rows|sum(attribute='out_adjust') }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='in_adjust') }}</td>
     </tr>
   </tfoot>
 </table>

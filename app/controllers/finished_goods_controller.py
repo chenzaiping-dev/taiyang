@@ -339,8 +339,7 @@ def warehouses_page():
 def transactions_page():
     wh_raw = request.args.get("warehouse_id", "").strip()
     warehouse_id = int(wh_raw) if wh_raw.isdigit() else None
-    batch_raw = request.args.get("batch_id", "").strip()
-    batch_id = int(batch_raw) if batch_raw.isdigit() else None
+    keyword = request.args.get("batch_keyword", "").strip() or None
     tx_type = request.args.get("transaction_type", "").strip() or None
     document_no = request.args.get("document_no", "").strip() or None
     date_from_raw = request.args.get("date_from", "").strip() or None
@@ -358,7 +357,7 @@ def transactions_page():
     page_size = 50
 
     rows, total = FinishedGoodsQueryService.list_transactions(
-        warehouse_id=warehouse_id, batch_id=batch_id,
+        warehouse_id=warehouse_id, batch_keyword=keyword,
         tx_type=tx_type, document_no=document_no,
         date_from=_parse_date(date_from_raw),
         date_to=_parse_date(date_to_raw),
@@ -371,7 +370,7 @@ def transactions_page():
         rows=rows, total=total, page=page,
         page_size=page_size, total_pages=total_pages,
         warehouse_id=warehouse_id or "",
-        batch_id=batch_id or "",
+        batch_keyword=keyword or "",
         transaction_type=tx_type or "",
         document_no=document_no or "",
         date_from=date_from_raw or "",

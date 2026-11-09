@@ -5,6 +5,8 @@
 
 <form method="get" action="{{ url_for('finished_goods.transactions_page') }}"
       style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+  <input type="text" name="batch_keyword" value="{{ batch_keyword }}"
+         placeholder="批次号/产品名称" maxlength="50">
   <input type="text" name="document_no" value="{{ document_no }}"
          placeholder="单据号" maxlength="50">
   <select name="warehouse_id">
@@ -106,10 +108,10 @@
   <span>共 {{ total }} 条，第 {{ page }}/{{ total_pages }} 页</span>
   {% if page > 1 %}<a class="btn" href="{{ url_for('finished_goods.transactions_page',
     document_no=document_no, warehouse_id=warehouse_id, transaction_type=transaction_type,
-    date_from=date_from, date_to=date_to, page=page-1) }}">上一页</a>{% endif %}
+    batch_keyword=batch_keyword, date_from=date_from, date_to=date_to, page=page-1) }}">上一页</a>{% endif %}
   {% if page < total_pages %}<a class="btn" href="{{ url_for('finished_goods.transactions_page',
     document_no=document_no, warehouse_id=warehouse_id, transaction_type=transaction_type,
-    date_from=date_from, date_to=date_to, page=page+1) }}">下一页</a>{% endif %}
+    batch_keyword=batch_keyword, date_from=date_from, date_to=date_to, page=page+1) }}">下一页</a>{% endif %}
 </div>
 
 <style>
