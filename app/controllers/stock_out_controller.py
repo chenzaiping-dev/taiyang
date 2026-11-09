@@ -1,15 +1,20 @@
 from datetime import datetime
-from flask import Blueprint, request, jsonify, render_template
+from flask import (
+    Blueprint, request, jsonify, render_template, redirect, url_for, flash
+)
 from marshmallow import ValidationError
 
 from app.extensions import db
 from app.generated.models.materials import Material
 from app.generated.models.warehouses import Warehouse
 
+from app.generated.models.inventory_documents import InventoryDocument
+from app.generated.models.inventory_transactions import InventoryTransaction
+
 from app.schemas.stock_out_schema import StockOutRequestSchema
 from app.services.form_parser import parse_stock_out_form, FormParseError
 from app.services.inventory_service import (
-    StockOutService, InventoryError, OUTBOUND_TYPE_LABELS, _rm_warehouses
+    StockOutService, InventoryError, OUTBOUND_TYPE_LABELS, _rm_warehouses, tx_type_map
 )
 
 bp = Blueprint("stock_out", __name__, url_prefix="/inventory")
@@ -69,7 +74,7 @@ def stock_out_page():
             "process_order_id": "",
             "document_time": datetime.now().strftime("%Y-%m-%dT%H:%M"),
             "remark": "",
-            "auto_confirm": True,
+            "auto_confirm": False,
             "allow_partial": False,
             "lines": [{"material_id": "", "quantity": ""}],
         },
@@ -100,8 +105,11 @@ def stock_out_submit():
     return render_template("inventory/stock_out_success.html", result=result)
 
 
-def _render_stock_out_error(error_msg: str):
-    materials = Material.query.filter_by(status=1).order_by(Material.material_code).all()
+def _render_stock_out_error(error_msg: str, edit_mode=False, document_id=None):
+    materials = (
+        Material.query.filter_by(status=1)
+        .order_by(Material.material_code).all()
+    )
 
     lines = []
     idx = 0
@@ -131,11 +139,107 @@ def _render_stock_out_error(error_msg: str):
     return (
         render_template(
             "inventory/stock_out_form.html",
+            edit_mode=edit_mode,
+            document_id=document_id,
             warehouses=_rm_warehouses(),
             materials=materials,
-            outbound_types=OUTBOUND_TYPE_LABELS,   # ⭐
+            outbound_types=OUTBOUND_TYPE_LABELS,
             form_data=form_data,
             errors=[error_msg],
         ),
         400,
     )
+
+@bp.get("/stock-out/<int:document_id>/edit")
+def stock_out_edit_page(document_id):
+    doc = db.session.get(InventoryDocument, document_id)
+    if not doc or doc.status != "DRAFT":
+        flash("只有草稿可编辑", "error")
+        return redirect(url_for(
+            "inventory_query.document_detail_page",
+            direction="out", document_id=document_id,
+        ))
+
+    txs = (
+        InventoryTransaction.query
+        .filter_by(document_id=doc.id)
+        .order_by(InventoryTransaction.line_no.asc())
+        .all()
+    )
+    if not txs:
+        flash("单据无明细，无法编辑", "error")
+        return redirect(url_for(
+            "inventory_query.document_detail_page",
+            direction="out", document_id=document_id,
+        ))
+
+    # 反推 outbound_type：document_type 是多对一映射，用 tx.transaction_type 更精确
+    tx_to_outbound = {
+        v: k for k, v in tx_type_map.items() if k in OUTBOUND_TYPE_LABELS
+    }
+    outbound_type = tx_to_outbound.get(
+        txs[0].transaction_type, "PRODUCTION_OUT"
+    )
+
+    materials = (
+        Material.query.filter_by(status=1)
+        .order_by(Material.material_code).all()
+    )
+
+    form_lines = [
+        {
+            "material_id": t.material_id,
+            "quantity": str(-t.quantity_delta),   # 出库流水是负数，回显取正
+        }
+        for t in txs
+    ]
+
+    return render_template(
+        "inventory/stock_out_form.html",
+        edit_mode=True,
+        document_id=doc.id,
+        warehouses=_rm_warehouses(),
+        materials=materials,
+        outbound_types=OUTBOUND_TYPE_LABELS,
+        form_data={
+            "warehouse_id": txs[0].warehouse_id,
+            "outbound_type": outbound_type,
+            "process_order_id": txs[0].process_order_id or "",
+            "document_time": (
+                doc.document_time.strftime("%Y-%m-%dT%H:%M")
+                if doc.document_time else ""
+            ),
+            "remark": doc.remark or "",
+            "auto_confirm": False,
+            "allow_partial": False,
+            "lines": form_lines,
+        },
+        errors=[],
+    )
+
+
+@bp.post("/stock-out/<int:document_id>/edit")
+def stock_out_edit_submit(document_id):
+    try:
+        data = parse_stock_out_form(request.form)
+        StockOutService.update_draft(
+            document_id=document_id,
+            warehouse_id=data["warehouse_id"],
+            lines=data["lines"],
+            outbound_type=data.get("outbound_type", "PRODUCTION_OUT"),
+            process_order_id=data.get("process_order_id"),
+            document_time=(
+                datetime.fromisoformat(data["document_time"])
+                if data["document_time"] else None
+            ),
+            remark=data["remark"],
+        )
+        flash("出库草稿已更新", "success")
+        return redirect(url_for(
+            "inventory_query.document_detail_page",
+            direction="out", document_id=document_id,
+        ))
+    except (FormParseError, InventoryError) as e:
+        return _render_stock_out_error(
+            str(e), edit_mode=True, document_id=document_id
+        )

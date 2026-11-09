@@ -2,7 +2,7 @@
 {% block title %}原料出库{% endblock %}
 
 {% block content %}
-<h2>原料出库（FIFO）</h2>
+<h2>{{ '编辑出库草稿' if edit_mode else '原料出库（FIFO）' }}</h2>
 
 {% if errors %}
   <div class="error-box">
@@ -13,9 +13,21 @@
 {% endif %}
 <form id="stock-out-form"
       method="post"
-      action="{{ url_for('stock_out.stock_out_submit') }}"
+      action="{% if edit_mode %}
+                {{ url_for('stock_out.stock_out_edit_submit', document_id=document_id) }}
+              {% else %}
+                {{ url_for('stock_out.stock_out_submit') }}
+              {% endif %}"
       data-next-index="{{ form_data.lines|length }}">
-  <h3>盘点时，实物数量 < 账面数量，才盘亏出库</h3>
+  <h3 id="hint-production" {% if form_data.outbound_type != 'PRODUCTION_OUT' %}style="display:none"{% endif %}>
+    生产出库：生产领料出库
+  </h3>
+  <h3 id="hint-loss" {% if form_data.outbound_type != 'STOCKTAKE_LOSS' %}style="display:none"{% endif %}>
+    盘点盘亏：实物数量 < 账面数量时使用
+  </h3>
+  <h3 id="hint-return" {% if form_data.outbound_type != 'RETURN_OUT' %}style="display:none"{% endif %}>
+    退货出库：退回原料出库
+  </h3>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
   <div class="form-row">
@@ -59,6 +71,7 @@
            style="flex:1;" value="{{ form_data.remark }}">
   </div>
 
+  {% if not edit_mode %}
   <div class="form-row">
     <label style="width:auto;">
       <input type="checkbox" name="auto_confirm"
@@ -71,6 +84,7 @@
       允许部分出库（库存不足时不报错）
     </label>
   </div>
+  {% endif %}
 
   <h3>出库明细</h3>
   <table id="line-table">
@@ -113,7 +127,17 @@
   <button type="button" id="add-row-btn" class="btn">+ 添加明细行</button>
 
   <div style="margin-top:24px;">
-    <button type="submit" class="btn btn-primary">提交出库</button>
+    <button type="submit" id="submit-btn" class="btn btn-primary">
+      {% if edit_mode %}
+        保存草稿
+      {% else %}
+        {{ '提交出库' if form_data.auto_confirm else '保存草稿' }}
+      {% endif %}
+    </button>
+    {% if edit_mode %}
+      <a class="btn" href="{{ url_for('inventory_query.document_detail_page',
+                       direction='out', document_id=document_id) }}">返回详情</a>
+    {% endif %}
   </div>
 </form>
 
@@ -134,4 +158,33 @@
 </template>
 
 <script src="{{ url_for('static', filename='js/stock_out.js') }}"></script>
+<script>
+  (function () {
+    // 出库类型提示
+    const sel = document.getElementById("outbound_type");
+    if (sel) {
+      const hints = {
+        PRODUCTION_OUT: document.getElementById("hint-production"),
+        STOCKTAKE_LOSS: document.getElementById("hint-loss"),
+        RETURN_OUT: document.getElementById("hint-return"),
+      };
+      sel.addEventListener("change", () => {
+        Object.values(hints).forEach(el => el && (el.style.display = "none"));
+        const hint = hints[sel.value];
+        if (hint) hint.style.display = "";
+      });
+    }
+
+    // auto_confirm 切换提交按钮文案（编辑模式无此复选框）
+    const autoCb = document.querySelector('input[name="auto_confirm"]');
+    const submitBtn = document.getElementById("submit-btn");
+    if (autoCb && submitBtn) {
+      const sync = () => {
+        submitBtn.textContent = autoCb.checked ? "提交出库" : "保存草稿";
+      };
+      autoCb.addEventListener("change", sync);
+      sync();
+    }
+  })();
+</script>
 {% endblock %}

@@ -389,6 +389,13 @@ def document_detail_page(direction, document_id):
         if direction == "in"
         else "inventory_query.stock_out_confirm"
     )
+    edit_url = None
+    if detail["document"]["status"] == "DRAFT":
+        edit_url = (
+            url_for("purchase_in.purchase_in_edit_page", document_id=document_id)
+            if direction == "in"
+            else url_for("stock_out.stock_out_edit_page", document_id=document_id)
+        )
 
     return render_template(
         "inventory/document_detail.html",
@@ -398,6 +405,7 @@ def document_detail_page(direction, document_id):
         status_labels=DOC_STATUS_LABELS,
         transaction_types=TRANSACTION_TYPE_LABELS,
         confirm_endpoint=confirm_endpoint,
+        edit_url=edit_url,
         list_url=url_for("inventory_query.document_list_page",
                          direction=direction),
     )

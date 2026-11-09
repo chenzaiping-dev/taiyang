@@ -24,6 +24,9 @@
         </button>
       </form>
     {% endif %}
+    {% if doc.status == 'DRAFT' and edit_url %}
+      <a class="btn" style="float:right;margin-right:8px;" href="{{ edit_url }}">编辑草稿</a>
+    {% endif %}
     <a class="btn" style="float:right;margin-right:8px;"
        href="{{ list_url }}">返回列表</a>
   </h2>

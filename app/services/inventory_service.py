@@ -264,7 +264,9 @@ class PurchaseInService:
             raise InventoryError(f"单据状态不为草稿，当前: {doc.status}")
 
         doc.status = "CONFIRMED"
-        doc.confirmed_at = now_beijing_naive()
+        doc_time = now_beijing_naive()
+        doc.confirmed_at = doc_time
+        doc.document_time = doc_time
 
         txs = InventoryTransaction.query.filter_by(document_id=doc.id).all()
         for tx in txs:
@@ -279,12 +281,13 @@ class PurchaseInService:
                 material_id=tx.material_id,
                 source_transaction_id=tx.id,
                 layer_type=layer_type_map[tx.transaction_type],
-                effective_time=tx.transaction_time,
+                effective_time=doc_time,
                 original_qty=tx.quantity_delta,
                 remaining_qty=tx.quantity_delta,
                 unit_cost=tx.unit_cost or Decimal("0"),
                 original_cost=tx.total_cost or Decimal("0"),
                 warehouse_id=tx.warehouse_id,
+                created_at=doc_time,
             )
             db.session.add(layer)
 
@@ -295,6 +298,100 @@ class PurchaseInService:
             raise InventoryError(f"确认失败: {e}")
 
         return {"document_id": doc.id, "status": doc.status}
+
+    @staticmethod
+    def update_draft(
+        document_id: int,
+        warehouse_id: int,
+        supplier_id: int,
+        lines: list,
+        inbound_type: str = "PURCHASE_IN",
+        document_time: datetime = None,
+        remark: str = None,
+    ) -> dict:
+        doc = db.session.get(InventoryDocument, document_id)
+        if not doc:
+            raise InventoryError("单据不存在")
+        if doc.status != "DRAFT":
+            raise InventoryError(f"只有草稿可编辑，当前: {doc.status}")
+        if doc.document_type not in ("PURCHASE_IN", "STOCKTAKE", "RETURN"):
+            raise InventoryError("非入库类单据不可编辑")
+        if inbound_type not in INBOUND_TYPE_LABELS:
+            raise InventoryError(f"不支持的入库类型: {inbound_type}")
+
+        tx_ids = [t.id for t in InventoryTransaction.query.filter_by(document_id=doc.id).all()]
+        if tx_ids and db.session.query(InventoryCostLayer.id).filter(
+                InventoryCostLayer.source_transaction_id.in_(tx_ids)).first():
+            raise InventoryError("该草稿已存在成本层，拒绝编辑")
+
+        # 复用创建时的仓库/供应商/明细校验
+        wh = db.session.get(Warehouse, warehouse_id)
+        if not wh or wh.status != 1:
+            raise InventoryError(f"仓库不存在或已停用: {warehouse_id}")
+        if wh.warehouse_type not in ("raw_material", "general"):
+            raise InventoryError("原料入库必须使用原料仓或普通仓")
+
+        sup = db.session.get(Supplier, supplier_id)
+        if not sup or sup.status != 1:
+            raise InventoryError(f"供应商不存在或已停用: {supplier_id}")
+
+        if not lines:
+            raise InventoryError("采购明细不能为空")
+
+        material_ids = [int(l["material_id"]) for l in lines]
+        materials = {
+            m.id: m for m in Material.query.filter(Material.id.in_(material_ids)).all()
+        }
+        for l in lines:
+            mid = int(l["material_id"])
+            if mid not in materials:
+                raise InventoryError(f"原料不存在: {mid}")
+            if materials[mid].status != 1:
+                raise InventoryError(f"原料已禁用: {materials[mid].material_code}")
+            if _q6(l["quantity"]) <= 0:
+                raise InventoryError(f"原料 {materials[mid].material_code} 数量必须 > 0")
+            if l.get("unit_cost") is None:
+                raise InventoryError(f"原料 {materials[mid].material_code} 缺少 unit_cost")
+            if _q6_amount(l["unit_cost"]) < 0:
+                raise InventoryError("单价不能为负数")
+
+        # 更新单据头
+        doc.document_type = doc_type_map[inbound_type]
+        doc.document_time = document_time or doc.document_time
+        doc.remark = remark
+
+        # 重写明细：草稿未确认，直接删旧 tx 重建
+        InventoryTransaction.query.filter_by(document_id=doc.id).delete(
+            synchronize_session=False
+        )
+        db.session.flush()
+
+        for idx, l in enumerate(lines, start=1):
+            mid = int(l["material_id"])
+            qty = _q6(l["quantity"])
+            unit_cost = _q6_amount(l["unit_cost"])
+            db.session.add(InventoryTransaction(
+                document_id=doc.id,
+                line_no=int(l.get("line_no", idx)),
+                material_id=mid,
+                transaction_type=tx_type_map[inbound_type],
+                transaction_time=doc.document_time,
+                quantity_delta=qty,
+                unit_cost=unit_cost,
+                total_cost=_q6_amount(qty * unit_cost),
+                supplier_id=supplier_id,
+                warehouse_id=warehouse_id,
+                created_at=now_beijing_naive(),
+            ))
+
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            raise InventoryError(f"编辑入库草稿失败: {e}")
+
+        return {"document_id": doc.id, "document_no": doc.document_no,
+                "status": doc.status}
 
 
 class StockOutService:
@@ -336,6 +433,7 @@ class StockOutService:
         need = quantity
         allocations = []
         total_cost = Decimal("0")
+        doc_time = now_beijing_naive()
 
         for layer in layers:
             if need <= 0:
@@ -352,7 +450,8 @@ class StockOutService:
                 quantity=take,
                 unit_cost=layer.unit_cost,
                 cost_amount=cost_amount,
-                created_at=now_beijing_naive(),
+                effective_time=doc_time,
+                created_at=doc_time,
             )
             db.session.add(alloc)
 
@@ -558,3 +657,84 @@ class StockOutService:
             raise InventoryError(f"确认失败: {e}")
 
         return {"document_id": doc.id, "status": doc.status}
+
+
+    @staticmethod
+    def update_draft(
+        document_id: int,
+        warehouse_id: int,
+        lines: list,
+        outbound_type: str = "PRODUCTION_OUT",
+        process_order_id: int = None,
+        document_time: datetime = None,
+        remark: str = None,
+    ) -> dict:
+        doc = db.session.get(InventoryDocument, document_id)
+        if not doc:
+            raise InventoryError("单据不存在")
+        if doc.status != "DRAFT":
+            raise InventoryError(f"只有草稿可编辑，当前: {doc.status}")
+        if doc.document_type not in (
+            "PRODUCTION_OUT", "STOCKTAKE", "RETURN",
+            "ADJUSTMENT_RED", "ADJUSTMENT_BLUE",
+        ):
+            raise InventoryError("非出库类单据不可编辑")
+        if outbound_type not in OUTBOUND_TYPE_LABELS:
+            raise InventoryError(f"不支持的出库类型: {outbound_type}")
+
+        wh = db.session.get(Warehouse, warehouse_id)
+        if not wh or wh.status != 1:
+            raise InventoryError(f"仓库不存在或已停用: {warehouse_id}")
+        if wh.warehouse_type not in ("raw_material", "general"):
+            raise InventoryError("原料出库必须使用原料仓或普通仓")
+
+        if not lines:
+            raise InventoryError("出库明细不能为空")
+
+        material_ids = [int(l["material_id"]) for l in lines]
+        materials = {
+            m.id: m for m in Material.query.filter(Material.id.in_(material_ids)).all()
+        }
+        for l in lines:
+            mid = int(l["material_id"])
+            if mid not in materials:
+                raise InventoryError(f"原料不存在: {mid}")
+            if materials[mid].status != 1:
+                raise InventoryError(f"原料已禁用: {materials[mid].material_code}")
+            if _q6(l["quantity"]) <= 0:
+                raise InventoryError(f"原料 {materials[mid].material_code} 数量必须 > 0")
+
+        doc.document_type = doc_type_map[outbound_type]
+        doc.document_time = document_time or doc.document_time
+        doc.remark = remark
+
+        InventoryTransaction.query.filter_by(document_id=doc.id).delete(
+            synchronize_session=False
+        )
+        db.session.flush()
+
+        for idx, l in enumerate(lines, start=1):
+            mid = int(l["material_id"])
+            qty = _q6(l["quantity"])
+            db.session.add(InventoryTransaction(
+                document_id=doc.id,
+                line_no=int(l.get("line_no", idx)),
+                material_id=mid,
+                transaction_type=tx_type_map[outbound_type],
+                transaction_time=doc.document_time,
+                quantity_delta=-qty,
+                unit_cost=None,
+                total_cost=None,
+                process_order_id=process_order_id,
+                warehouse_id=warehouse_id,
+                created_at=now_beijing_naive(),
+            ))
+
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            raise InventoryError(f"编辑出库草稿失败: {e}")
+
+        return {"document_id": doc.id, "document_no": doc.document_no,
+                "status": doc.status}

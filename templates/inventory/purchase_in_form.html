@@ -1,8 +1,8 @@
 {% extends "inventory/base.html" %}
-{% block title %}采购入库{% endblock %}
+{% block title %}原料入库{% endblock %}
 
 {% block content %}
-<h2>原料采购入库</h2>
+<h2>{{ '编辑入库草稿' if edit_mode else '原料入库' }}</h2>
 
 {% if errors %}
   <div class="error-box">
@@ -15,7 +15,11 @@
 <!-- ↓ 补 id + data-next-index -->
 <form id="purchase-in-form"
       method="post"
-      action="{{ url_for('purchase_in.purchase_in_submit') }}"
+      action="{% if edit_mode %}
+                {{ url_for('purchase_in.purchase_in_edit_submit', document_id=document_id) }}
+              {% else %}
+                {{ url_for('purchase_in.purchase_in_submit') }}
+              {% endif %}"
       data-next-index="{{ form_data.lines|length }}">
   <h3 id="hint-purchase" {% if form_data.inbound_type != 'PURCHASE_IN' %}style="display:none"{% endif %}>
     采购入库：按供应商实际采购数量入库
@@ -69,12 +73,13 @@
     <label for="document_time">入库时间</label>
     <input type="datetime-local" id="document_time"
            name="document_time" value="{{ form_data.document_time }}">
-
+    {% if not edit_mode %}
     <label style="width:auto;">
       <input type="checkbox" name="auto_confirm"
              {% if form_data.auto_confirm %}checked{% endif %}>
       直接确认入库（生成成本层）
     </label>
+    {% endif %}
   </div>
 
   <div class="form-row">
@@ -142,7 +147,17 @@
   <button type="button" id="add-row-btn" class="btn">+ 添加明细行</button>
 
   <div style="margin-top:24px;">
-    <button type="submit" class="btn btn-primary">提交入库</button>
+    <button type="submit" id="submit-btn" class="btn btn-primary">
+      {% if edit_mode %}
+        保存草稿
+      {% else %}
+        {{ '提交入库' if form_data.auto_confirm else '保存草稿' }}
+      {% endif %}
+    </button>
+    {% if edit_mode %}
+      <a class="btn" href="{{ url_for('inventory_query.document_detail_page',
+                       direction='in', document_id=document_id) }}">返回详情</a>
+    {% endif %}
   </div>
 </form>
 
@@ -169,18 +184,31 @@
 <script src="{{ url_for('static', filename='js/purchase_in.js') }}"></script>
 <script>
   (function () {
+    // 入库类型提示
     const sel = document.getElementById("inbound_type");
-    if (!sel) return;
-    const hints = {
-      PURCHASE_IN: document.getElementById("hint-purchase"),
-      STOCKTAKE_GAIN: document.getElementById("hint-gain"),
-      RETURN_IN: document.getElementById("hint-return"),
-    };
-    sel.addEventListener("change", () => {
-      Object.values(hints).forEach(el => el && (el.style.display = "none"));
-      const hint = hints[sel.value];
-      if (hint) hint.style.display = "";
-    });
+    if (sel) {
+      const hints = {
+        PURCHASE_IN: document.getElementById("hint-purchase"),
+        STOCKTAKE_GAIN: document.getElementById("hint-gain"),
+        RETURN_IN: document.getElementById("hint-return"),
+      };
+      sel.addEventListener("change", () => {
+        Object.values(hints).forEach(el => el && (el.style.display = "none"));
+        const hint = hints[sel.value];
+        if (hint) hint.style.display = "";
+      });
+    }
+
+    // auto_confirm 切换提交按钮文案（编辑模式无此复选框）
+    const autoCb = document.querySelector('input[name="auto_confirm"]');
+    const submitBtn = document.getElementById("submit-btn");
+    if (autoCb && submitBtn) {
+      const sync = () => {
+        submitBtn.textContent = autoCb.checked ? "提交入库" : "保存草稿";
+      };
+      autoCb.addEventListener("change", sync);
+      sync();   // 初始化，覆盖错误回填时已勾选的情况
+    }
   })();
 </script>
 {% endblock %}

@@ -94,6 +94,14 @@
                if r.created_at else "-" }}</td>
         <td style="text-align:center;white-space:nowrap;">
           {% if r.status == 'DRAFT' %}
+            <a class="btn btn-sm"
+               href="{% if direction == 'in' %}
+                       {{ url_for('purchase_in.purchase_in_edit_page', document_id=r.id) }}
+                     {% else %}
+                       {{ url_for('stock_out.stock_out_edit_page', document_id=r.id) }}
+                     {% endif %}">
+              编辑
+            </a>
             <form method="post"
                   action="{{ url_for(confirm_endpoint, document_id=r.id) }}"
                   onsubmit="return confirm('确认该单据？将扣减/生成 FIFO 成本层。');"

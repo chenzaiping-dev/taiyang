@@ -19,7 +19,7 @@ class PurchaseInRequestSchema(Schema):
     supplier_id = fields.Int(required=True)
     document_time = fields.DateTime(required=False, allow_none=True)
     remark = fields.Str(required=False, allow_none=True, validate=validate.Length(max=500))
-    auto_confirm = fields.Bool(required=False, load_default=True)
+    auto_confirm = fields.Bool(required=False, load_default=False)
     lines = fields.List(
         fields.Nested(PurchaseInLineSchema),
         required=True,
