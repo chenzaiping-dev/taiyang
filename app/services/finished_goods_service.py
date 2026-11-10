@@ -841,13 +841,13 @@ class FinishedGoodsService:
             )
             new_doc = db.session.get(FinishedGoodsDocument, result["document_id"])
             # ⭐ 若是发货计划出库，同步回滚发货计划
-            if doc.remark and "[SHIP_PLAN_OUTBOUND]" in doc.remark:
-                try:
-                    FinishedGoodsService._rollback_shipment_plan_on_reverse(doc)
-                except Exception as e:
-                    # 回滚发货计划失败 → 整体回滚
-                    db.session.rollback()
-                    raise FinishedGoodsError(f"撤销发货计划联动失败: {e}")            
+            #if doc.remark and "[SHIP_PLAN_OUTBOUND]" in doc.remark:
+            #    try:
+            #        FinishedGoodsService._rollback_shipment_plan_on_reverse(doc)
+            #    except Exception as e:
+            #        # 回滚发货计划失败 → 整体回滚
+            #        db.session.rollback()
+            #        raise FinishedGoodsError(f"撤销发货计划联动失败: {e}")
 
         # 关联原单
         new_doc.related_document_id = doc.id

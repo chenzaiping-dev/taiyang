@@ -415,7 +415,7 @@ def mark_planned(plan_id):
 @bp.post("/<int:plan_id>/cancel")
 def cancel_plan(plan_id):
     try:
-        ShipmentPlanService.cancel_plan(plan_id)
+        ShipmentPlanService.cancel_plan(plan_id, operator_id=1)
         flash("发货计划已取消", "success")
     except ShipmentPlanError as e:
         flash(str(e), "error")

@@ -75,7 +75,7 @@
           {% if r.status == 'DRAFT' %}
             <form method="post" style="display:inline;"
                   action="{{ url_for('shipment_plan.mark_planned', plan_id=r.id) }}"
-                  onsubmit="return confirm('确认标记为【已确认】？');">
+                  onsubmit="return confirm('确认？此操作后页面不可编辑修改。');">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn btn-sm btn-primary">确认</button>
             </form>
@@ -87,19 +87,18 @@
           {% if r.status == 'CONFIRMED' %}
             <form method="post" style="display:inline;"
                   action="{{ url_for('shipment_plan.ship_plan', plan_id=r.id) }}"
-                  onsubmit="return confirm('确认发货并出库？此操作将扣减库存且不可撤销。');">
+                  onsubmit="return confirm('确认发货并出库？此操作将扣减成品库存。');">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn btn-sm btn-success">发货</button>
             </form>
           {% else %}
             <span class="btn btn-sm disabled" title="仅已确认可发货">发货</span>
           {% endif %}
-
           {# 取消：非已发货、非已取消 #}
-          {% if r.status not in ('SHIPPED', 'CANCELLED') %}
+          {% if r.status != 'CANCELLED' %}
             <form method="post" style="display:inline;"
                   action="{{ url_for('shipment_plan.cancel_plan', plan_id=r.id) }}"
-                  onsubmit="return confirm('确认取消该发货计划？');">
+                  onsubmit="return confirm('确认取消该发货计划？{% if r.status in ('PARTIALLY_SHIPPED','SHIPPED') %}将撤销已发生的成品出库并还原生产计划预留{% endif %}');">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn btn-sm btn-danger">取消</button>
             </form>

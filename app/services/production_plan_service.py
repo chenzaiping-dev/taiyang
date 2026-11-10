@@ -842,6 +842,7 @@ class ProductionPlanService:
                 remaining_quantity=_q6(take),
                 status="ACTIVE",
                 goods_type="FRESH",
+                created_at=now_beijing_naive(),
                 remark=(
                     f"生产计划 {plan.plan_no} 完成时锁定 "
                     f"(工艺单 {po.process_order_no}, 计划量 {target}, "

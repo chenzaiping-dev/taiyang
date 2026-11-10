@@ -10,6 +10,14 @@
     <a class="btn btn-primary" style="float:right;"
        href="{{ url_for('shipment_plan.edit_page', plan_id=plan.id) }}">编辑</a>
   {% endif %}
+  {% if plan.status != 'CANCELLED' %}
+    <form method="post" action="{{ url_for('shipment_plan.cancel_plan', plan_id=plan.id) }}"
+          onsubmit="return confirm('确认取消该发货计划？{% if plan.status in ('PARTIALLY_SHIPPED','SHIPPED') %}将撤销已发生的成品出库并还原生产计划预留{% endif %}');"
+          style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-danger">取消</button>
+    </form>
+  {% endif %}
 </h2>
 
 <fieldset>
