@@ -103,6 +103,10 @@ def detail_page(order_id: int):
         .order_by(ProcessOrderMaterial.id.asc())
         .all()
     )
+    material_warehouse = (
+        db.session.get(Warehouse, order.material_warehouse_id)
+        if order.material_warehouse_id else None
+    )
 
     # ⭐ 一次性批量取原料编码 + 名称，避免 N+1
     material_map = {}
@@ -120,6 +124,7 @@ def detail_page(order_id: int):
         "process_order/detail.html",
         order=order,
         materials=materials,
+        material_warehouse=material_warehouse,
         material_map=material_map,   # ⭐ 传给模板
         status_labels=STATUS_LABELS,
         factory=factory,

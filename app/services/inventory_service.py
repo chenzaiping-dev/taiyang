@@ -450,7 +450,6 @@ class StockOutService:
                 quantity=take,
                 unit_cost=layer.unit_cost,
                 cost_amount=cost_amount,
-                effective_time=doc_time,
                 created_at=doc_time,
             )
             db.session.add(alloc)
@@ -754,6 +753,14 @@ class StockOutService:
           再按 FIFO 反向归还成本层，红冲 allocation 挂在新流水上（避免 uk_out_layer 冲突）
         返回：{document_id, document_no, reversed_qty}；无消耗流水返回 None。
         """
+        # ⭐ 若工艺单已记录领料仓库，则只冲销该仓库的消耗；
+        #    为空（历史跨仓数据）时不过滤，按 (material, warehouse) 逐仓冲销
+        wh_filter = []
+        if getattr(order, "material_warehouse_id", None):
+            wh_filter.append(
+                InventoryTransaction.warehouse_id == order.material_warehouse_id
+            )
+        print("wh_filter:", wh_filter)
         consume_txs = (
             InventoryTransaction.query
             .filter(
@@ -762,6 +769,7 @@ class StockOutService:
                 InventoryTransaction.transaction_type.in_(
                     ["PRODUCTION_OUT", "ADJUSTMENT_BLUE"]
                 ),
+                *wh_filter,          # ⭐ 新增
             )
             .order_by(
                 InventoryTransaction.transaction_time.desc(),
@@ -837,6 +845,7 @@ class StockOutService:
                     InventoryTransaction.transaction_type.in_(
                         ["PRODUCTION_OUT", "ADJUSTMENT_BLUE"]
                     ),
+                    *wh_filter,          # ⭐ 新增
                 )
                 .order_by(
                     InventoryTransaction.transaction_time.desc(),

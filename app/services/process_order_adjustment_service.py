@@ -272,7 +272,7 @@ class ProcessOrderAdjustmentService:
                 continue
 
             # 找该工艺单该原料所有"正向消耗"流水
-            orig_txs = (
+            orig_txs_q = (
                 InventoryTransaction.query
                 .filter(
                     InventoryTransaction.process_order_id == order.id,
@@ -282,6 +282,14 @@ class ProcessOrderAdjustmentService:
                         ["PRODUCTION_OUT", "ADJUSTMENT_BLUE"]
                     ),
                 )
+            )
+            if order.material_warehouse_id:
+                orig_txs_q = orig_txs_q.filter(
+                    InventoryTransaction.warehouse_id
+                    == order.material_warehouse_id
+                )
+            orig_txs = (
+                orig_txs_q
                 .order_by(
                     InventoryTransaction.transaction_time.desc(),
                     InventoryTransaction.id.desc(),
@@ -402,10 +410,14 @@ class ProcessOrderAdjustmentService:
             {"material_id": mid, "quantity": str(qty), "line_no": idx + 1}
             for idx, (mid, qty, _) in enumerate(consume_items)
         ]
+        warehouse_id = (
+            order.material_warehouse_id
+            or ProcessOrderAdjustmentService._default_rm_warehouse_id()
+        )
         result = StockOutService.create_stock_out(
-            warehouse_id=ProcessOrderAdjustmentService._default_rm_warehouse_id(),
+            warehouse_id=warehouse_id,
             lines=lines,
-            outbound_type=adjust_type,   # 新类型
+            outbound_type=adjust_type,
             document_no=doc_no,
             document_time=now_beijing_naive(),
             process_order_id=order.id,

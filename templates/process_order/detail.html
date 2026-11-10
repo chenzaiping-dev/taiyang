@@ -41,6 +41,12 @@
   <div class="form-row"><label>加工厂：</label>
     {% if factory %}{{ factory.factory_code }} - {{ factory.factory_name }}{% else %}-{% endif %}
   </div>
+  <div class="form-row"><label>领料仓库：</label>
+  {% if order.material_warehouse_id %}
+    {% set mw = material_warehouse %}
+    {{ mw.warehouse_code }} - {{ mw.warehouse_name }}
+  {% else %}-{% endif %}
+  </div>
   <div class="form-row"><label>产品名称：</label>{{ order.product_name }}</div>
   <div class="form-row"><label>产品规格：</label>{{ order.product_specification or "-" }}</div>
   <div class="form-row"><label>计划数量：</label>

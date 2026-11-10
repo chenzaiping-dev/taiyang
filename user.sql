@@ -306,6 +306,7 @@ CREATE TABLE process_orders (
 
     process_order_no VARCHAR(50) NOT NULL COMMENT '工艺单编号',
     factory_id BIGINT UNSIGNED NOT NULL COMMENT '加工厂ID',
+    material_warehouse_id BIGINT UNSIGNED DEFAULT NULL COMMENT '原料领料仓库ID（下单时指定，配比调整/冲销沿用）',
 
     batch_no VARCHAR(100) NOT NULL COMMENT '生产批号',
     product_name VARCHAR(200) NOT NULL COMMENT '产品名称',
@@ -348,6 +349,7 @@ CREATE TABLE process_orders (
     KEY idx_performance_id (performance_id),
     KEY idx_followup_status (followup_employee_id, status),
     KEY idx_order_time (order_time),
+    KEY idx_material_warehouse (material_warehouse_id),
 
     CONSTRAINT fk_process_order_performance
         FOREIGN KEY (performance_id)
@@ -356,6 +358,8 @@ CREATE TABLE process_orders (
         FOREIGN KEY (created_by) REFERENCES employees(id),
     CONSTRAINT fk_process_order_followup_employee
         FOREIGN KEY (followup_employee_id) REFERENCES employees(id),
+    CONSTRAINT fk_process_order_material_warehouse
+        FOREIGN KEY (material_warehouse_id) REFERENCES warehouses(id),
     CONSTRAINT fk_process_order_factory
         FOREIGN KEY (factory_id) REFERENCES factories(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4

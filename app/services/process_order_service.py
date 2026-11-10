@@ -519,6 +519,7 @@ class ProcessOrderService:
         old_status = order.status
         order.status = "ORDERED"
         order.completed_quantity = order.planned_quantity
+        order.material_warehouse_id = out_warehouse_id   # ⭐ 新增
         db.session.flush()   # 让 order.status 变更先写到 session
 
         # ---- 出库（不提交，交给外层事务） ----
