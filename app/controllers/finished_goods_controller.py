@@ -14,8 +14,8 @@ from app.generated.models.process_orders import ProcessOrder
 from app.services.process_order_service import _fg_warehouses
 from app.services.finished_goods_query_service import FinishedGoodsQueryService
 from app.services.finished_goods_service import (
-    FinishedGoodsError, FinishedGoodsService, INBOUND_TYPE_LABELS, OUTBOUND_TYPE_LABELS,
-    TX_TYPE_LABELS, TRANSACTION_TYPE_DIRECTION
+    FinishedGoodsError, FinishedGoodsService, FG_INBOUND_TYPE_LABELS, FG_OUTBOUND_TYPE_LABELS,
+    FG_TX_TYPE_LABELS, FG_TRANSACTION_TYPE_DIRECTION
 )
 
 bp = Blueprint("finished_goods", __name__, url_prefix="/finished-goods")
@@ -38,9 +38,7 @@ FG_DOC_TYPE_LABELS = {
     "STOCKTAKE": "盘点单",
     "RETURN": "退货单",
     "TRANSFER": "调拨单",
-    "ADJUSTMENT": "调整单",
-    "ADJUSTMENT_RED": "红冲入库单",
-    "ADJUSTMENT_BLUE": "蓝补出库单",
+    "REVERSE": "撤销单",
 }
 
 @bp.get("/api/process-orders/search")
@@ -100,7 +98,7 @@ def inbound_page():
     return render_template(
         "finished_goods/inbound.html",
         warehouses=_fg_warehouses(),
-        inbound_types=INBOUND_TYPE_LABELS,
+        inbound_types=FG_INBOUND_TYPE_LABELS,
         process_orders=process_orders,          # ⭐
         form_data={
             "warehouse_id": "", "inbound_type": "PRODUCTION_IN",
@@ -183,7 +181,7 @@ def inbound_submit():
         return render_template(
             "finished_goods/inbound.html",
             warehouses=_fg_warehouses(),
-            inbound_types=INBOUND_TYPE_LABELS,
+            inbound_types=FG_INBOUND_TYPE_LABELS,
             process_orders=(
                 ProcessOrder.query
                 .filter(ProcessOrder.status.in_(["ORDERED", "COMPLETED"]))
@@ -222,7 +220,7 @@ def outbound_page():
         page_size=page_size,
         total_pages=total_pages,
         warehouse_id=warehouse_id or "",
-        outbound_types=OUTBOUND_TYPE_LABELS,
+        outbound_types=FG_OUTBOUND_TYPE_LABELS,
         batch_keyword=keyword or "",
         warehouses=_fg_warehouses(),
         form_data={
@@ -295,7 +293,7 @@ def _render_outbound_error(msg):
             rows=rows, total=total, page=1, page_size=200,
             total_pages=max((total + 199) // 200, 1),
             warehouse_id=request.form.get("warehouse_id", ""),
-            outbound_types=OUTBOUND_TYPE_LABELS,
+            outbound_types=FG_OUTBOUND_TYPE_LABELS,
             batch_keyword=request.form.get("batch_keyword", ""),
             warehouses=_fg_warehouses(),
             form_data={
@@ -376,8 +374,8 @@ def transactions_page():
         date_from=date_from_raw or "",
         date_to=date_to_raw or "",
         warehouses=_fg_warehouses(),
-        tx_types=TX_TYPE_LABELS,
-        transaction_directions=TRANSACTION_TYPE_DIRECTION
+        tx_types=FG_TX_TYPE_LABELS,
+        transaction_directions=FG_TRANSACTION_TYPE_DIRECTION
     )
 
 @bp.get("/io-summary")
@@ -478,8 +476,8 @@ def document_list_page(direction):
         date_to=date_to_raw or "",
         status_labels=FG_STATUS_LABELS,
         doc_type_labels=FG_DOC_TYPE_LABELS,
-        inbound_types=INBOUND_TYPE_LABELS,
-        outbound_types=OUTBOUND_TYPE_LABELS,
+        inbound_types=FG_INBOUND_TYPE_LABELS,
+        outbound_types=FG_OUTBOUND_TYPE_LABELS,
         warehouses=_fg_warehouses(),
         new_doc_url=(
             url_for("finished_goods.inbound_page")
@@ -502,7 +500,7 @@ def document_detail_page(direction, document_id):
             error="单据不存在",
             status_labels=FG_STATUS_LABELS,
             doc_type_labels=FG_DOC_TYPE_LABELS,
-            tx_types=TX_TYPE_LABELS,
+            tx_types=FG_TX_TYPE_LABELS,
             list_url=url_for("finished_goods.document_list_page",
                              direction=direction),
         ), 404
@@ -518,8 +516,9 @@ def document_detail_page(direction, document_id):
         if related:
             related_document_no = related.document_no
             is_in = related.document_type in (
-                "PRODUCTION_IN", "STOCKTAKE", "RETURN", "TRANSFER", "ADJUSTMENT_RED",
+                "PRODUCTION_IN", "STOCKTAKE", "RETURN", "TRANSFER", "REVERSE",
             )
+            # to be continued
             related_direction = "in" if is_in else "out"
 
     # ============ 反查：是否被撤销 ============
@@ -546,7 +545,7 @@ def document_detail_page(direction, document_id):
         related_document_no=related_document_no,
         status_labels=FG_STATUS_LABELS,
         doc_type_labels=FG_DOC_TYPE_LABELS,
-        tx_types=TX_TYPE_LABELS,
+        tx_types=FG_TX_TYPE_LABELS,
         list_url=url_for("finished_goods.document_list_page",
                          direction=direction),
     )
@@ -629,7 +628,7 @@ def document_edit_page(direction, document_id):
             edit_mode=True,
             document_id=doc.id,
             warehouses=_fg_warehouses(),
-            inbound_types=INBOUND_TYPE_LABELS,
+            inbound_types=FG_INBOUND_TYPE_LABELS,
             process_orders=(
                 ProcessOrder.query
                 .filter(ProcessOrder.status.in_(["ORDERED", "COMPLETED"]))
@@ -697,7 +696,7 @@ def document_edit_page(direction, document_id):
             rows=rows,
             total=len(lines), page=1, page_size=200, total_pages=1,
             warehouse_id=lines[0].from_warehouse_id if lines else "",
-            outbound_types=OUTBOUND_TYPE_LABELS,
+            outbound_types=FG_OUTBOUND_TYPE_LABELS,
             batch_keyword="",
             warehouses=_fg_warehouses(),
             form_data={
@@ -718,6 +717,8 @@ def document_edit_submit(direction, document_id):
         return redirect(url_for(
             "finished_goods.document_list_page", direction=direction))
 
+    inbound_type = request.args.get("inbound_type", "").strip() or None
+    outbound_type = request.args.get("outbound_type", "").strip() or None
     if direction == "in":
         wh_raw = request.form.get("warehouse_id", "").strip()
         warehouse_id = int(wh_raw) if wh_raw.isdigit() else None
@@ -757,6 +758,7 @@ def document_edit_submit(direction, document_id):
                 warehouse_id=warehouse_id,
                 lines=lines,
                 document_time=doc_time,
+                business_type=inbound_type,
                 remark=request.form.get("remark", "").strip() or None,
             )
             flash("入库草稿已更新", "success")
@@ -799,6 +801,7 @@ def document_edit_submit(direction, document_id):
                 document_id=document_id,
                 lines=lines,
                 document_time=doc_time,
+                business_type=outbound_type,
                 remark=request.form.get("remark", "").strip() or None,
             )
             flash("出库草稿已更新", "success")

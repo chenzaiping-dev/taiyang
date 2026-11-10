@@ -29,9 +29,9 @@
       </a>
 
     {% elif doc.status == 'CONFIRMED' %}
-      {# ⭐ 三种情况：调整单 / 已撤销 / 可撤销 #}
-      {% if doc.document_type in ('ADJUSTMENT_RED', 'ADJUSTMENT_BLUE') %}
-        <span style="color:#888;font-size:12px;">调整单不可再次撤销</span>
+      {# ⭐ 三种情况：撤销单 / 已撤销 / 可撤销 #}
+      {% if doc.document_type in ('REVERSE') %}
+        <span style="color:#888;font-size:12px;">撤销单不可再次撤销</span>
       {% elif detail.is_reversed %}
         <span style="color:#888;font-size:12px;">该单已撤销</span>
       {% else %}
@@ -195,8 +195,8 @@
     .tx-transfer_in    { background:#f3e5f5;color:#6a1b9a; }
     .tx-transfer_out   { background:#fce4ec;color:#ad1457; }
     .tx-adjustment     { background:#eee;color:#555; }
-    .tx-adjustment_red  { background:#fdecea; color:#c62828; }
-    .tx-adjustment_blue { background:#e3f2fd; color:#1565c0; }
+    .tx-out_reverse  { background:#fdecea; color:#c62828; }
+    .tx-in_reverse { background:#e3f2fd; color:#1565c0; }
     .tx-draft { background:#eee; color:#666; }
   </style>
 {% endif %}

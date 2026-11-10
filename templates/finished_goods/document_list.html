@@ -68,7 +68,7 @@
     + 新建{{ '入库单' if direction == 'in' else '出库单' }}
   </a>
 </form>
-
+{% set ns = namespace(total_signed=0) %}
 <table style="width:100%;border-collapse:collapse;font-size:13px;">
   <thead>
     <tr style="background:#f5f5f5;">
@@ -102,7 +102,9 @@
         <td>{{ r.document_time.strftime("%Y-%m-%d %H:%M")
                if r.document_time else "-" }}</td>
         <td style="text-align:right;">{{ r.line_count }}</td>
-        <td style="text-align:right;">{{ r.total_qty }}</td>
+        {% set signed_qty = (r.total_qty if r.document_type != 'REVERSE' else -r.total_qty) %}
+        {% set ns.total_signed = ns.total_signed + (signed_qty or 0) %}
+        <td style="text-align:right;">{{ signed_qty }}</td>
         <td>
           <span class="status-badge status-{{ r.status|lower }}">
             {{ status_labels.get(r.status, r.status) }}
@@ -129,7 +131,7 @@
             </form>
           {% elif r.status == 'CONFIRMED' %}
             <span class="btn btn-sm disabled">确认</span>
-            {% if r.document_type not in ('ADJUSTMENT_RED', 'ADJUSTMENT_BLUE') and  r.is_reversed == false  %}
+            {% if r.document_type != 'REVERSE' and  r.is_reversed == false  %}
             <form method="post" style="display:inline;"
                   action="{{ url_for('finished_goods.document_reverse',
                           direction=direction, document_id=r.id) }}"
@@ -148,6 +150,15 @@
       </td></tr>
     {% endif %}
   </tbody>
+  <tfoot>
+    <tr style="background:#fafafa;font-weight:600;">
+      <td colspan="5" style="text-align:right;">本页合计：</td>
+      <td style="text-align:right;color:#2440b3;">{{ ns.total_signed }}</td>
+      <td></td>
+      <td></td>
+      <td></td>
+    </tr>
+  </tfoot>
 </table>
 
 <div style="margin-top:16px;display:flex;gap:8px;align-items:center;">

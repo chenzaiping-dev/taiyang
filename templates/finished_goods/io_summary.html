@@ -98,12 +98,12 @@
         <td style="text-align:right;color:#666;">{{ r.in_return }}</td>
         <td style="text-align:right;color:#666;">{{ r.in_stocktake }}</td>
         <td style="text-align:right;color:#666;">{{ r.in_transfer }}</td>
-        <td style="text-align:right;color:#666;">{{ r.out_adjust }}</td>
+        <td style="text-align:right;color:#666;">{{ r.in_reverse }}</td>
         <td style="text-align:right;color:#666;">{{ r.out_outbound }}</td>
         <td style="text-align:right;color:#666;">{{ r.out_return }}</td>
         <td style="text-align:right;color:#666;">{{ r.out_stocktake }}</td>
         <td style="text-align:right;color:#666;">{{ r.out_transfer }}</td>
-        <td style="text-align:right;color:#666;">{{ r.in_adjust }}</td>
+        <td style="text-align:right;color:#666;">{{ r.out_reverse }}</td>
       </tr>
       {% endfor %}
     {% else %}
@@ -123,12 +123,12 @@
       <td style="text-align:right;">{{ rows|sum(attribute='in_return') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='in_stocktake') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='in_transfer') }}</td>
-      <td style="text-align:right;">{{ rows|sum(attribute='out_adjust') }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='in_reverse') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='out_outbound') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='out_return') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='out_stocktake') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='out_transfer') }}</td>
-      <td style="text-align:right;">{{ rows|sum(attribute='in_adjust') }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='out_reverse') }}</td>
     </tr>
   </tfoot>
 </table>

@@ -1,4 +1,3 @@
-import re   # 文件顶部加
 from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, case, func, or_
@@ -22,7 +21,7 @@ def gen_doc_no(prefix: str) -> str:
     import random
     return f"{prefix}{ts}{random.randint(0, 9999):04d}"
 
-doc_type_map = {
+fg_doc_type_map = {
     "PRODUCTION_IN": "PRODUCTION_IN",
     "OUTBOUND": "OUTBOUND",
     "STOCKTAKE_GAIN": "STOCKTAKE",
@@ -31,8 +30,8 @@ doc_type_map = {
     "RETURN_OUT": "RETURN",
     "TRANSFER_IN": "TRANSFER",
     "TRANSFER_OUT": "TRANSFER",
-    "ADJUSTMENT_RED": "ADJUSTMENT_RED",     # ⭐ 新增
-    "ADJUSTMENT_BLUE": "ADJUSTMENT_BLUE",   # ⭐ 新增    
+    "OUT_REVERSE": "REVERSE",     # ⭐ 新增
+    "IN_REVERSE": "REVERSE",   # ⭐ 新增    
 }
 
 batch_source_map = {
@@ -42,7 +41,20 @@ batch_source_map = {
     "TRANSFER_IN": "OTHER",
 }
 
-TRANSACTION_TYPE_DIRECTION = {
+fg_prefix_map = {
+    "PRODUCTION_IN": "PI",
+    "OUTBOUND": "OB",
+    "STOCKTAKE_GAIN": "SG",
+    "STOCKTAKE_LOSS": "SL",
+    "RETURN_IN": "RI",
+    "RETURN_OUT": "RO",
+    "TRANSFER_IN": "TI",
+    "TRANSFER_OUT": "TO",
+    "OUT_REVERSE": "OUTREV",
+    "IN_REVERSE": "INREV",
+}
+
+FG_TRANSACTION_TYPE_DIRECTION = {
     "PRODUCTION_IN":    "in",
     "OUTBOUND":         "out",
     "STOCKTAKE_GAIN":   "in",
@@ -51,26 +63,26 @@ TRANSACTION_TYPE_DIRECTION = {
     "RETURN_OUT":       "out",
     "TRANSFER_IN":      "in",
     "TRANSFER_OUT":     "out",
-    "ADJUSTMENT_RED":  "in",        # ⭐ 库存增加
-    "ADJUSTMENT_BLUE": "out",       # ⭐ 库存减少    
+    "OUT_REVERSE":      "out",        # ⭐ 库存增加
+    "IN_REVERSE":       "in",       # ⭐ 库存减少    
 }
 
-INBOUND_TYPE_LABELS = {
+FG_INBOUND_TYPE_LABELS = {
     "PRODUCTION_IN": "生产入库",
     "STOCKTAKE_GAIN": "盘盈入库",
     "RETURN_IN": "退货入库",
     "TRANSFER_IN": "调拨入库",
-    "ADJUSTMENT_RED":  "红冲入库",   # ⭐ delta 正
+    "IN_REVERSE": "入库撤销",   # ⭐ delta 负
 }
-OUTBOUND_TYPE_LABELS = {
+FG_OUTBOUND_TYPE_LABELS = {
     "OUTBOUND": "销售出库",
     "STOCKTAKE_LOSS": "盘亏出库",
     "RETURN_OUT": "退货出库",
     "TRANSFER_OUT": "调拨出库",
-    "ADJUSTMENT_BLUE": "蓝补出库",   # ⭐ delta 负
+    "OUT_REVERSE":  "出库撤销",   # ⭐ delta 正
 }
 
-TX_TYPE_LABELS = {
+FG_TX_TYPE_LABELS = {
     "PRODUCTION_IN": "生产入库",
     "OUTBOUND": "销售出库",
     "STOCKTAKE_GAIN": "盘盈入库",
@@ -79,11 +91,10 @@ TX_TYPE_LABELS = {
     "RETURN_OUT": "退货出库",
     "TRANSFER_IN": "调拨入库",
     "TRANSFER_OUT": "调拨出库",
-    "ADJUSTMENT_RED":  "红冲入库",   # ⭐ delta 正
-    "ADJUSTMENT_BLUE": "蓝补出库",   # ⭐ delta 负
+    "OUT_REVERSE":  "出库撤销",   # ⭐ delta 正
+    "IN_REVERSE": "入库撤销",   # ⭐ delta 负
 }
 
-_TYPE_TAG_RE = re.compile(r"\[TYPE:(ADJUSTMENT_RED|ADJUSTMENT_BLUE|OUTBOUND|STOCKTAKE_LOSS|RETURN_OUT|TRANSFER_OUT)\]")
 
 class FinishedGoodsError(Exception):
     pass
@@ -115,8 +126,11 @@ class FinishedGoodsService:
             'quantity', 'unit_cost'(可选), 'remark'
         }]
         """
-        if inbound_type not in INBOUND_TYPE_LABELS:
-            raise FinishedGoodsError(f"不支持的入库类型: {inbound_type}")
+        if inbound_type == 'OUT_REVERSE':
+            pass
+        else:
+            if inbound_type not in FG_INBOUND_TYPE_LABELS:
+                raise FinishedGoodsError(f"不支持的入库类型: {inbound_type}")
 
         wh = db.session.get(Warehouse, warehouse_id)
         if not wh or wh.status != 1:
@@ -127,7 +141,7 @@ class FinishedGoodsService:
         if not lines:
             raise FinishedGoodsError("入库明细不能为空")
 
-        doc_no = document_no or gen_doc_no("FG-IN")
+        doc_no = document_no or gen_doc_no("FG-" + fg_prefix_map[inbound_type])
         if FinishedGoodsDocument.query.filter_by(document_no=doc_no).first():
             raise FinishedGoodsError(f"单据号重复: {doc_no}")
 
@@ -135,9 +149,10 @@ class FinishedGoodsService:
 
         document = FinishedGoodsDocument(
             document_no=doc_no,
-            document_type=doc_type_map[inbound_type],
+            document_type=fg_doc_type_map[inbound_type],
             document_time=doc_time,
             status="CONFIRMED" if auto_confirm else "DRAFT",
+            business_type=inbound_type,
             remark=remark,
             created_by=created_by,
             created_at=now_beijing_naive(),
@@ -317,26 +332,26 @@ class FinishedGoodsService:
         # 顶部仓库校验改为"按行取仓库后校验"
         # （删除原来的"必须先传 warehouse_id"的强校验，改到循环里做）
         print(outbound_type, remark)
-        if outbound_type not in OUTBOUND_TYPE_LABELS:
-            raise FinishedGoodsError(f"不支持的出库类型: {outbound_type}")
+        if outbound_type == 'IN_REVERSE':
+            pass
+        else:
+            if outbound_type not in FG_OUTBOUND_TYPE_LABELS:
+                raise FinishedGoodsError(f"不支持的出库类型: {outbound_type}")
         if not lines:
             raise FinishedGoodsError("出库明细不能为空")
 
-        doc_no = document_no or gen_doc_no("FG-OUT")
+        doc_no = document_no or gen_doc_no("FG-" + fg_prefix_map[outbound_type])
         if FinishedGoodsDocument.query.filter_by(document_no=doc_no).first():
             raise FinishedGoodsError(f"单据号重复: {doc_no}")
         doc_time = document_time or now_beijing()
 
-        # ⭐ 把出库类型放入 remark，供 DRAFT 确认时解析
-        biz_tag = f"[TYPE:{outbound_type}]"
-        final_remark = f"{biz_tag} {remark}" if remark else biz_tag
-
         document = FinishedGoodsDocument(
             document_no=doc_no,
-            document_type=doc_type_map[outbound_type],
+            document_type=fg_doc_type_map[outbound_type],
             document_time=doc_time,
             status="CONFIRMED" if auto_confirm else "DRAFT",           # ⭐
-            remark=final_remark,
+            business_type=outbound_type,                               # ⭐
+            remark=remark,
             created_by=created_by,
             confirmed_by=created_by if auto_confirm else None,        # ⭐
             confirmed_at=now_beijing() if auto_confirm else None,     # ⭐
@@ -459,18 +474,14 @@ class FinishedGoodsService:
         if not doc:
             raise FinishedGoodsError("单据不存在")
         if doc.document_type not in (
-            "OUTBOUND", "STOCKTAKE", "RETURN", "TRANSFER", "ADJUSTMENT_BLUE",
+            "OUTBOUND", "STOCKTAKE", "RETURN", "TRANSFER", "REVERSE",
         ):
             raise FinishedGoodsError("非出库类单据不可确认")
         if doc.status != "DRAFT":
             raise FinishedGoodsError(f"单据状态不为草稿，当前: {doc.status}")
 
-        # ⭐ 从 remark 解析业务类型
-        tx_type = "OUTBOUND"   # 兜底
-        if doc.remark:
-            m = _TYPE_TAG_RE.search(doc.remark)
-            if m:
-                tx_type = m.group(1)
+        # ⭐ 从business_type来
+        tx_type = doc.business_type or "OUTBOUND"
 
         lines = FinishedGoodsDocumentLine.query.filter_by(
             document_id=doc.id
@@ -549,7 +560,7 @@ class FinishedGoodsService:
             raise FinishedGoodsError("单据不存在")
         if doc.document_type not in (
             "PRODUCTION_IN", "STOCKTAKE", "RETURN", "TRANSFER",
-            "ADJUSTMENT_RED",              # ⭐ 新增
+            "REVERSE",              # ⭐ 新增
         ):
             raise FinishedGoodsError("非入库类单据不可确认")
         if doc.status != "DRAFT":
@@ -567,9 +578,9 @@ class FinishedGoodsService:
             "STOCKTAKE": "STOCKTAKE_GAIN",
             "RETURN": "RETURN_IN",
             "TRANSFER": "TRANSFER_IN",
-            "ADJUSTMENT_RED": "ADJUSTMENT_RED",   # ⭐ 红冲入库
+            "REVERSE": "OUT_REVERSE",   # ⭐ 红冲入库
         }
-        tx_type = type_to_tx.get(doc.document_type, "PRODUCTION_IN")
+        tx_type = doc.business_type or type_to_tx.get(doc.document_type, "PRODUCTION_IN")
 
         doc_time = now_beijing()
 
@@ -607,6 +618,7 @@ class FinishedGoodsService:
         warehouse_id: int,
         lines: list,
         document_time: datetime = None,
+        business_type: str = "PRODUCTION_IN",
         remark: str = None,
     ) -> dict:
         """编辑草稿入库单（DRAFT）。重写明细，不产生库存变动。"""
@@ -625,6 +637,7 @@ class FinishedGoodsService:
 
         doc.document_time = document_time or doc.document_time
         doc.remark = remark
+        doc.business_type = business_type
 
         # 删旧明细（DRAFT 未产生流水，可以整批删）
         FinishedGoodsDocumentLine.query.filter_by(document_id=doc.id).delete(
@@ -692,6 +705,7 @@ class FinishedGoodsService:
         document_id: int,
         lines: list,
         document_time: datetime = None,
+        business_type: str = "OUTBOUND",
         remark: str = None,
     ) -> dict:
         """编辑草稿出库单（DRAFT）。重写明细，不产生库存变动。"""
@@ -701,7 +715,7 @@ class FinishedGoodsService:
         if doc.status != "DRAFT":
             raise FinishedGoodsError(f"单据状态不为草稿，当前: {doc.status}")
         if doc.document_type not in (
-            "OUTBOUND", "STOCKTAKE", "RETURN", "TRANSFER", "ADJUSTMENT_BLUE",
+            "OUTBOUND", "STOCKTAKE", "RETURN", "TRANSFER", "REVERSE",
         ):
             raise FinishedGoodsError("非出库类单据不可编辑")
 
@@ -710,6 +724,7 @@ class FinishedGoodsService:
 
         doc.document_time = document_time or doc.document_time
         doc.remark = remark
+        doc.business_type = business_type
 
         FinishedGoodsDocumentLine.query.filter_by(document_id=doc.id).delete(
             synchronize_session=False
@@ -773,7 +788,7 @@ class FinishedGoodsService:
             raise FinishedGoodsError("单据不存在")
         if doc.status != "CONFIRMED":
             raise FinishedGoodsError(f"只有已确认单据可撤销，当前: {doc.status}")
-        if doc.document_type in ("ADJUSTMENT_RED", "ADJUSTMENT_BLUE"):
+        if doc.document_type == "REVERSE":
             raise FinishedGoodsError("调整类单据（撤销单）不可再次撤销")
 
         # ⭐ 核心防护：反查是否已存在撤销单
@@ -811,7 +826,8 @@ class FinishedGoodsService:
             ]
             result = FinishedGoodsService.create_outbound(
                 lines=out_lines,
-                outbound_type="ADJUSTMENT_BLUE",
+                document_no=f"INREV-{doc.document_no}",
+                outbound_type="IN_REVERSE",
                 document_time=now_beijing(),
                 created_by=created_by,
                 remark=reverse_remark,
@@ -832,7 +848,8 @@ class FinishedGoodsService:
             result = FinishedGoodsService.create_inbound(
                 warehouse_id=first.from_warehouse_id,
                 lines=in_lines,
-                inbound_type="ADJUSTMENT_RED",       # ⭐ 红冲入库
+                document_no=f"OUTREV-{doc.document_no}",
+                inbound_type="OUT_REVERSE",       # ⭐ 出库撤销
                 document_time=now_beijing(),
                 created_by=created_by,
                 remark=reverse_remark,
