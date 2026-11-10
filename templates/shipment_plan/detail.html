@@ -6,7 +6,7 @@
   <span style="color:#888;font-size:14px;">
     {{ plan.shipment_plan_no }}
   </span>
-  {% if plan.status in ("DRAFT", "PLANNED") %}
+  {% if plan.status in ("DRAFT", "CONFIRMED") %}
     <a class="btn btn-primary" style="float:right;"
        href="{{ url_for('shipment_plan.edit_page', plan_id=plan.id) }}">编辑</a>
   {% endif %}

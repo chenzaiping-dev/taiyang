@@ -71,20 +71,20 @@
             <span class="btn btn-sm disabled" title="仅草稿可编辑">编辑</span>
           {% endif %}
 
-          {# 计划：仅草稿 #}
+          {# 确认：仅草稿 #}
           {% if r.status == 'DRAFT' %}
             <form method="post" style="display:inline;"
                   action="{{ url_for('shipment_plan.mark_planned', plan_id=r.id) }}"
-                  onsubmit="return confirm('确认标记为【已计划】？');">
+                  onsubmit="return confirm('确认标记为【已确认】？');">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn btn-sm btn-primary">计划</button>
+              <button type="submit" class="btn btn-sm btn-primary">确认</button>
             </form>
           {% else %}
-            <span class="btn btn-sm disabled" title="仅草稿可计划">计划</span>
+            <span class="btn btn-sm disabled" title="仅草稿可确认">确认</span>
           {% endif %}
 
-          {# 发货：仅已计划 #}
-          {% if r.status == 'PLANNED' %}
+          {# 发货：仅已确认 #}
+          {% if r.status == 'CONFIRMED' %}
             <form method="post" style="display:inline;"
                   action="{{ url_for('shipment_plan.ship_plan', plan_id=r.id) }}"
                   onsubmit="return confirm('确认发货并出库？此操作将扣减库存且不可撤销。');">
@@ -92,7 +92,7 @@
               <button type="submit" class="btn btn-sm btn-success">发货</button>
             </form>
           {% else %}
-            <span class="btn btn-sm disabled" title="仅已计划可发货">发货</span>
+            <span class="btn btn-sm disabled" title="仅已确认可发货">发货</span>
           {% endif %}
 
           {# 取消：非已发货、非已取消 #}

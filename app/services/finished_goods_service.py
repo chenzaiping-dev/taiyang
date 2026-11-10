@@ -940,7 +940,7 @@ class FinishedGoodsService:
         all_done = all(l.shipped_quantity >= l.quantity for l in lines)
 
         if not has_any:
-            plan.status = "PLANNED"
+            plan.status = "CONFIRMED"
             plan.actual_ship_time = None
         elif all_done:
             plan.status = "SHIPPED"

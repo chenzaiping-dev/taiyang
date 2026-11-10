@@ -24,7 +24,7 @@ from app.utils.decimal_utils import _q3, _q6
 # ==================== 状态流转 ====================
 
 STATUS_DRAFT = "DRAFT"
-STATUS_PLANNED = "PLANNED"
+STATUS_CONFIRMED = "CONFIRMED"
 STATUS_PARTIALLY_SHIPPED = "PARTIALLY_SHIPPED"
 STATUS_SHIPPED = "SHIPPED"
 STATUS_CANCELLED = "CANCELLED"
@@ -330,13 +330,13 @@ class ShipmentPlanService:
         plan = _get_plan_or_raise(plan_id)
         if plan.status != STATUS_DRAFT:
             raise ShipmentPlanError(
-                f"只有草稿状态可执行【计划】，当前：{plan.status}")
-        plan.status = STATUS_PLANNED
+                f"只有草稿状态可执行【确认】，当前：{plan.status}")
+        plan.status = STATUS_CONFIRMED
         try:
             db.session.commit()
         except Exception as e:
             db.session.rollback()
-            raise ShipmentPlanError(f"标记计划失败: {e}")
+            raise ShipmentPlanError(f"标记确认失败: {e}")
         return plan
 
     # ---------- 取消 ----------
@@ -369,9 +369,9 @@ class ShipmentPlanService:
         plan = db.session.get(ShipmentPlan, plan_id)
         if not plan:
             raise ShipmentPlanError("发货计划不存在")
-        if plan.status != "PLANNED":
+        if plan.status != "CONFIRMED":
             raise ShipmentPlanError(
-                f"只有【已计划】状态可执行发货，当前：{plan.status}")
+                f"只有【已确认】状态可执行发货，当前：{plan.status}")
 
         # ⭐ 找到该发货计划对应的生产计划（1:1）
         production_plan = ProductionPlan.query.filter_by(

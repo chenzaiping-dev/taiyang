@@ -894,11 +894,11 @@ CREATE TABLE shipment_plans (
 
     status ENUM(
         'DRAFT',
-        'PLANNED',
+        'CONFIRMED',
         'PARTIALLY_SHIPPED',
         'SHIPPED',
         'CANCELLED'
-    ) NOT NULL DEFAULT 'DRAFT' COMMENT '发货状态 DRAFT:草稿, PLANNED:计划中, PARTIALLY_SHIPPED:部分发货, SHIPPED:已发货, CANCELLED:已取消',
+    ) NOT NULL DEFAULT 'DRAFT' COMMENT '发货状态 DRAFT:草稿, CONFIRMED:已确认, PARTIALLY_SHIPPED:部分发货, SHIPPED:已发货, CANCELLED:已取消',
 
     created_by BIGINT UNSIGNED NULL COMMENT '创建人ID',
     remark VARCHAR(1000) NULL COMMENT '备注',

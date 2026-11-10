@@ -24,7 +24,7 @@ bp = Blueprint("shipment_plan", __name__, url_prefix="/shipment-plans")
 
 STATUS_LABELS = {
     "DRAFT": "草稿",
-    "PLANNED": "已计划",
+    "CONFIRMED": "已确认",
     "PARTIALLY_SHIPPED": "部分发货",
     "SHIPPED": "已发货",
     "CANCELLED": "已取消",
@@ -157,7 +157,7 @@ def edit_page(plan_id):
     plan = db.session.get(ShipmentPlan, plan_id)
     if not plan:
         abort(404)
-    #if plan.status not in ("DRAFT", "PLANNED"):
+    #if plan.status not in ("DRAFT", "CONFIRMED"):
     if plan.status != "DRAFT":          # 仅草稿可编辑
         flash("只有草稿状态的发货计划可编辑", "error")
         return redirect(url_for("shipment_plan.detail_page", plan_id=plan_id))
