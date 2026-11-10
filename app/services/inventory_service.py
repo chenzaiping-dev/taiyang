@@ -747,20 +747,18 @@ class StockOutService:
     ) -> dict | None:
         """
         冲销某工艺单的全部原料出库消耗（用于取消工艺单）。
-        - 找出该工艺单下所有已确认的消耗流水（PRODUCTION_OUT / ADJUSTMENT_BLUE）
-        - 汇总每个 (material, warehouse) 需归还量并校验可冲销量
-        - 为每个 (material, warehouse) 建一条 ADJUSTMENT_RED 流水，
-          再按 FIFO 反向归还成本层，红冲 allocation 挂在新流水上（避免 uk_out_layer 冲突）
-        返回：{document_id, document_no, reversed_qty}；无消耗流水返回 None。
+        口径：按正向消耗流水上【现存】的 InventoryCostAllocation 汇总需归还量，
+        而不是按流水 quantity_delta 累计——已红冲的部分已被 ADJUSTMENT_RED 抵消，
+        其 allocation 也已在 _reverse_allocation 中删除/减少，不应再次计入。
+        返回：{document_id, document_no, reversed_qty}；无可冲销量返回 None。
         """
-        # ⭐ 若工艺单已记录领料仓库，则只冲销该仓库的消耗；
-        #    为空（历史跨仓数据）时不过滤，按 (material, warehouse) 逐仓冲销
         wh_filter = []
         if getattr(order, "material_warehouse_id", None):
             wh_filter.append(
                 InventoryTransaction.warehouse_id == order.material_warehouse_id
             )
-        print("wh_filter:", wh_filter)
+
+        # 该工艺单全部正向消耗流水（含调增补出），仅用于定位 allocation
         consume_txs = (
             InventoryTransaction.query
             .filter(
@@ -769,7 +767,7 @@ class StockOutService:
                 InventoryTransaction.transaction_type.in_(
                     ["PRODUCTION_OUT", "ADJUSTMENT_BLUE"]
                 ),
-                *wh_filter,          # ⭐ 新增
+                *wh_filter,
             )
             .order_by(
                 InventoryTransaction.transaction_time.desc(),
@@ -781,36 +779,40 @@ class StockOutService:
         if not consume_txs:
             return None
 
-        # 汇总每个 (material, warehouse) 需要归还的数量
-        need_map = {}   # (material_id, warehouse_id) -> Decimal
-        for tx in consume_txs:
-            key = (tx.material_id, tx.warehouse_id)
-            need_map[key] = need_map.get(key, Decimal("0")) + (-tx.quantity_delta)
+        tx_ids = [tx.id for tx in consume_txs]
 
-        # 校验可红冲量
-        for (mid, wh_id), need in need_map.items():
-            reversible = (
-                db.session.query(func.coalesce(
-                    func.sum(InventoryCostAllocation.quantity), 0))
-                .join(InventoryTransaction,
-                      InventoryTransaction.id
-                      == InventoryCostAllocation.out_transaction_id)
-                .filter(
-                    InventoryTransaction.process_order_id == order.id,
-                    InventoryTransaction.material_id == mid,
-                    InventoryTransaction.warehouse_id == wh_id,
-                    InventoryTransaction.quantity_delta < 0,
-                    InventoryTransaction.transaction_type.in_(
-                        ["PRODUCTION_OUT", "ADJUSTMENT_BLUE"]
-                    ),
-                )
-                .scalar()
-            ) or Decimal("0")
-            if reversible < need:
-                raise InventoryError(
-                    f"工艺单 {order.process_order_no} 原料 {mid} 可冲销量不足："
-                    f"需要 {need}，可冲销 {reversible}"
-                )
+        # ⭐ 按 (material, warehouse) 汇总现存 allocation（quantity > 0）作为需归还量
+        alloc_rows = (
+            db.session.query(
+                InventoryTransaction.material_id.label("mid"),
+                InventoryTransaction.warehouse_id.label("wh_id"),
+                func.coalesce(
+                    func.sum(InventoryCostAllocation.quantity), 0
+                ).label("need_qty"),
+            )
+            .join(
+                InventoryTransaction,
+                InventoryTransaction.id
+                == InventoryCostAllocation.out_transaction_id,
+            )
+            .filter(
+                InventoryCostAllocation.out_transaction_id.in_(tx_ids),
+                InventoryCostAllocation.quantity > 0,
+            )
+            .group_by(
+                InventoryTransaction.material_id,
+                InventoryTransaction.warehouse_id,
+            )
+            .all()
+        )
+
+        need_map = {
+            (int(r.mid), int(r.wh_id)): _q6(r.need_qty or 0)
+            for r in alloc_rows
+            if (r.need_qty or 0) > 0
+        }
+        if not need_map:
+            return None
 
         doc_no = generate_document_no_new("ADJUSTMENT_RED")
         doc_time = now_beijing_naive()
@@ -832,20 +834,18 @@ class StockOutService:
         next_line_no = 1
         reversed_qty = Decimal("0")
 
-        # 按 (material, warehouse) 逐条生成红冲流水
         for (mid, wh_id), need in need_map.items():
-            # 重新取该工艺单该原料该仓库下所有消耗流水，用于 FIFO 逆序归还
+            # 该 (material, warehouse) 下的源流水，从新到旧归还
             src_txs = (
                 InventoryTransaction.query
                 .filter(
-                    InventoryTransaction.process_order_id == order.id,
+                    InventoryTransaction.id.in_(tx_ids),
                     InventoryTransaction.material_id == mid,
                     InventoryTransaction.warehouse_id == wh_id,
                     InventoryTransaction.quantity_delta < 0,
                     InventoryTransaction.transaction_type.in_(
                         ["PRODUCTION_OUT", "ADJUSTMENT_BLUE"]
                     ),
-                    *wh_filter,          # ⭐ 新增
                 )
                 .order_by(
                     InventoryTransaction.transaction_time.desc(),
@@ -855,15 +855,14 @@ class StockOutService:
                 .all()
             )
 
-            # 先建红冲流水，拿到 new_tx.id
             new_tx = InventoryTransaction(
                 document_id=doc.id,
                 line_no=next_line_no,
                 material_id=mid,
                 transaction_type="ADJUSTMENT_RED",
                 transaction_time=doc_time,
-                quantity_delta=need,      # 正数，归还库存
-                unit_cost=None,           # 稍后回填
+                quantity_delta=need,
+                unit_cost=None,
                 total_cost=None,
                 process_order_id=order.id,
                 warehouse_id=wh_id,
@@ -871,7 +870,7 @@ class StockOutService:
             )
             next_line_no += 1
             db.session.add(new_tx)
-            db.session.flush()            # 拿到 new_tx.id
+            db.session.flush()
 
             remain = need
             recovered = Decimal("0")
@@ -889,6 +888,8 @@ class StockOutService:
                 for alloc in allocs:
                     if remain <= 0:
                         break
+                    if alloc.quantity <= 0:
+                        continue
                     layer = db.session.get(InventoryCostLayer, alloc.cost_layer_id)
                     if not layer:
                         continue
@@ -897,24 +898,20 @@ class StockOutService:
                         continue
 
                     cost = _q6_amount(give * alloc.unit_cost)
-
-                    # 归还成本层
                     layer.remaining_qty = layer.remaining_qty + give
 
-                    # ⭐ 红冲 allocation 挂在新流水，且同一 (new_tx, layer) 只允许一条
                     existing = InventoryCostAllocation.query.filter_by(
                         out_transaction_id=new_tx.id,
                         cost_layer_id=layer.id,
                     ).first()
                     if existing:
-                        # 累加（把多次归还合并成一条负记录）
                         existing.quantity = existing.quantity - give
                         existing.cost_amount = _q6_amount(
                             existing.cost_amount - cost
                         )
                     else:
                         db.session.add(InventoryCostAllocation(
-                            out_transaction_id=new_tx.id,   # ⭐ 关键改动
+                            out_transaction_id=new_tx.id,
                             cost_layer_id=layer.id,
                             quantity=-give,
                             unit_cost=alloc.unit_cost,
@@ -922,7 +919,6 @@ class StockOutService:
                             created_at=doc_time,
                         ))
 
-                    # 原 allocation 同步减少/删除
                     alloc.quantity -= give
                     alloc.cost_amount = _q6_amount(alloc.quantity * alloc.unit_cost)
                     if alloc.quantity <= 0:
@@ -932,6 +928,7 @@ class StockOutService:
                     recovered += cost
 
             if remain > 0:
+                # 理论上不会发生：need 由现存 allocation 汇总而来
                 raise InventoryError(
                     f"原料 {mid} 在仓库 {wh_id} 可红冲数量不足，还差 {remain}"
                 )

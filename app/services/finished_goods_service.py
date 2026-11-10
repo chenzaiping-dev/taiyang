@@ -397,7 +397,11 @@ class FinishedGoodsService:
                 from_warehouse_id=wh_id,       # ⭐ 每行的仓库
                 to_warehouse_id=None,
                 quantity=qty,
-                unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else None,
+                unit_cost=(
+                    _q6(l.get("unit_cost"))
+                    if l.get("unit_cost") is not None
+                    else (batch.unit_cost if batch.unit_cost is not None else None)
+                ),
                 remark=l.get("remark"),
                 created_at=now_beijing_naive(),
             )
@@ -488,6 +492,9 @@ class FinishedGoodsService:
 
             batch = db.session.get(FinishedGoodsBatch, batch_id)
             wh = db.session.get(Warehouse, wh_id)
+
+            if line.unit_cost is None and batch and batch.unit_cost is not None:
+                line.unit_cost = batch.unit_cost
 
             inv = FinishedGoodsInventory.query.filter_by(
                 warehouse_id=wh_id, batch_id=batch_id

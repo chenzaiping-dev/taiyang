@@ -148,7 +148,6 @@ class InventoryQueryService:
         """
         # 只统计 remaining_qty > 0 的成本层
         base_filter = [InventoryCostLayer.remaining_qty > 0]
-        print("I am here in query_material_stock_with_cost_layers")
 
         if material_code:
             like = f"%{material_code}%"

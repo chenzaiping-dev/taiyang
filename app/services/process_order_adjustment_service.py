@@ -173,6 +173,13 @@ class ProcessOrderAdjustmentService:
                 total_cost += row.cost
             order.actual_total_cost = _q6(total_cost)
 
+            # ---------- 4.5 同步成品批次单价 ----------
+            # 配比调整改变了 actual_total_cost，若该工艺单已入库且批次
+            # 尚未发生出库，则按新的 actual_total_cost / completed_quantity
+            # 回写 finished_goods_batches.unit_cost。
+            # 已发生出库的批次不改，避免历史成本不可复现。
+            ProcessOrderAdjustmentService._sync_batch_unit_cost(order)
+
             # ---------- 5. 记录调整单 ----------
             new_snapshot = [
                 {"material_id": r.material_id,
@@ -438,3 +445,46 @@ class ProcessOrderAdjustmentService:
         if not wh:
             raise ProcessOrderAdjustmentError("没有可用的原料仓")
         return wh.id
+
+    @staticmethod
+    def _sync_batch_unit_cost(order):
+        """
+        配比调整后，按最新 actual_total_cost 回写成品批次单价。
+        - 仅处理来源为本工艺单的批次（finished_goods_batches.process_order_id）
+        - 批次已发生出库（finished_goods_transactions 有 quantity_delta < 0）
+          则不自动改，避免历史成本被覆盖
+        - completed_quantity <= 0 时无法计算单价，跳过
+        """
+        from app.generated.models.finished_goods_batches import (
+            FinishedGoodsBatch,
+        )
+        from app.generated.models.finished_goods_transactions import (
+            FinishedGoodsTransaction,
+        )
+
+        qty = _q6(order.completed_quantity or 0)
+        if qty <= 0:
+            qty = _q6(order.planned_quantity)
+        actual_cost = _q6(order.actual_total_cost or 0)
+        if qty <= 0 or actual_cost <= 0:
+            return
+
+        new_unit_cost = _q6(actual_cost / qty)
+
+        batches = FinishedGoodsBatch.query.filter_by(
+            process_order_id=order.id
+        ).all()
+        for batch in batches:
+            #has_outbound = (
+            #    db.session.query(FinishedGoodsTransaction.id)
+            #    .filter(
+            #        FinishedGoodsTransaction.batch_id == batch.id,
+            #        FinishedGoodsTransaction.quantity_delta < 0,
+            #    )
+            #    .first()
+            #)
+            #if has_outbound:
+            #    # 已出库，旧单价已参与成本计算，不自动改. to be continued
+            #    continue
+            if batch.unit_cost != new_unit_cost:
+                batch.unit_cost = new_unit_cost

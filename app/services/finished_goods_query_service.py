@@ -609,9 +609,13 @@ class FinishedGoodsQueryService:
                 reversed_exists.label("is_reversed"),      # ⭐
                 func.count(FinishedGoodsDocumentLine.id).label("line_count"),
                 qty_expr,
-                func.coalesce(
-                    func.sum(FinishedGoodsDocumentLine.unit_cost), 0
-                ).label("total_cost"),
+                # 暂时没用
+                #func.coalesce(
+                #    func.sum(
+                #        FinishedGoodsDocumentLine.quantity
+                #        * func.coalesce(FinishedGoodsDocumentLine.unit_cost, 0)
+                #    ), 0
+                #).label("total_cost"),
             )
             .join(FinishedGoodsDocumentLine,
                 FinishedGoodsDocumentLine.document_id == FinishedGoodsDocument.id)
