@@ -88,7 +88,7 @@
             </button>
           {% endif %}
 
-          {# 处理：仅 CONFIRMED #}
+          <!--{# 处理：仅 CONFIRMED #}
           {% if r.status == 'CONFIRMED' %}
             <form method="post" style="display:inline;"
                   action="{{ url_for('production_plan.process_plan', plan_id=r.id) }}"
@@ -102,10 +102,10 @@
                     onclick="alertPlanLocked('{{ status_labels.get(r.status, r.status) }}')">
               处理
             </button>
-          {% endif %}
+          {% endif %}-->
 
-          {# 完成：仅 IN_PROGRESS #}
-          {% if r.status == 'IN_PROGRESS' %}
+          {# 完成：仅 CONFIRMED #}
+          {% if r.status == 'CONFIRMED' %}
             <form method="post" style="display:inline;"
                   action="{{ url_for('production_plan.complete_plan', plan_id=r.id) }}"
                   onsubmit="return confirm('确认完成？将检查所有工艺单是否已入库，并为成品批次创建预留。');">
@@ -114,7 +114,7 @@
             </form>
           {% else %}
             <button class="btn btn-sm" disabled
-                    title="仅处理中可完成"
+                    title="仅已确认可完成"
                     onclick="alertPlanLocked('{{ status_labels.get(r.status, r.status) }}')">
               完成
             </button>

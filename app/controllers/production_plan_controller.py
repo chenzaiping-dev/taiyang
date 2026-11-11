@@ -18,7 +18,7 @@ from app.generated.models.finished_goods_inventory import FinishedGoodsInventory
 from app.generated.models.finished_goods_transactions import FinishedGoodsTransaction
 from app.generated.models.finished_goods_reservations import FinishedGoodsReservation
 
-from app.services.process_order_service import _fg_warehouses
+from app.services.process_order_service import _fg_warehouses, PO_STATUS_LABELS
 from app.services.production_plan_service import (
     ProductionPlanService, ProductionPlanError, PLAN_STATUS_LABELS,
 )
@@ -407,15 +407,6 @@ def _render_error(performance_id, msg, plan_id=None):
         form_data=fd,
         errors=[msg],
     )
-
-PO_STATUS_LABELS = {
-    "DRAFT": "草稿",
-    "ORDERED": "已下单",
-    "PRODUCING": "生产中",
-    "COMPLETED": "已完工",
-    "RECEIVED": "已入库",
-    "CANCELLED": "已取消",
-}
 
 RES_STATUS_LABELS = {
     "ACTIVE": "锁定中",

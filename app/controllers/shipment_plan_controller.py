@@ -22,7 +22,7 @@ from app.services.shipment_plan_service import ShipmentPlanService, ShipmentPlan
 
 bp = Blueprint("shipment_plan", __name__, url_prefix="/shipment-plans")
 
-STATUS_LABELS = {
+SP_STATUS_LABELS = {
     "DRAFT": "草稿",
     "CONFIRMED": "已确认",
     "PARTIALLY_SHIPPED": "部分发货",
@@ -319,7 +319,7 @@ def list_page():
         status=status or "",
         performance_id=performance_id or "",
         performance_id_raw=perf_raw or "",       # ⭐ 原始输入，用于回显
-        status_labels=STATUS_LABELS,
+        status_labels=SP_STATUS_LABELS,
     )
 
 
@@ -366,7 +366,7 @@ def detail_page(plan_id):
         performance=perf,
         lines=lines,
         allocations_map=allocations_map,
-        status_labels=STATUS_LABELS,
+        status_labels=SP_STATUS_LABELS,
     )
 
 # app/controllers/shipment_plan_controller.py 追加

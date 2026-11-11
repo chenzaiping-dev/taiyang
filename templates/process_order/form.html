@@ -119,13 +119,10 @@
 
       <label for="status">状态</label>
       <select id="status" name="status">
-        {% for code, label in [
-          ('DRAFT','草稿'),('ORDERED','已下单'),('PRODUCING','生产中'),
-          ('COMPLETED','已完工'),('RECEIVED','已入库'),('CANCELLED','已取消')
-        ] %}
+        {% for code, label in status_labels.items() %}
           <option value="{{ code }}"
             {% if form_data.status == code %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
+        {% endfor %}    
       </select>
     </div>
 

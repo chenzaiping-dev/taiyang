@@ -14,7 +14,7 @@ from app.generated.models.process_order_materials import ProcessOrderMaterial
 
 from app.schemas.process_order_schema import ProcessOrderRequestSchema
 from app.services.process_order_service import (
-    ProcessOrderService, ProcessOrderError, STATUS_LABELS, _fg_warehouses
+    ProcessOrderService, ProcessOrderError, PO_STATUS_LABELS, _fg_warehouses
 )
 from app.services.production_plan_service import PLAN_STATUS_LABELS
 from app.services.process_order_adjustment_service import (
@@ -83,7 +83,7 @@ def list_page():
         keyword=keyword or "", status=status or "",
         factory_id=factory_id or "",
         factories=Factory.query.filter_by(status=1).order_by(Factory.id).all(),
-        status_labels=STATUS_LABELS,
+        status_labels=PO_STATUS_LABELS,
         plan_status_labels=PLAN_STATUS_LABELS,   # ⭐
         warehouses=_rm_warehouses(),
         # ⭐ 新增：成品仓列表
@@ -126,7 +126,7 @@ def detail_page(order_id: int):
         materials=materials,
         material_warehouse=material_warehouse,
         material_map=material_map,   # ⭐ 传给模板
-        status_labels=STATUS_LABELS,
+        status_labels=PO_STATUS_LABELS,
         factory=factory,
         performance=performance,
         follow=follow,
@@ -224,6 +224,7 @@ def _render_new_form(form_data=None, errors=None):
         errors=errors or [],
         mode="create",     # 关键：模板根据 mode 决定 action/标题/按钮
         order_id=None,
+        status_labels=PO_STATUS_LABELS,
     )
 
 
@@ -242,7 +243,7 @@ def create_submit():
         fd = _build_form_data_from_request(request.form)
         return _render_new_form(form_data=fd, errors=[str(e)]), 400
 
-    return render_template("process_order/success.html", result=result)
+    return render_template("process_order/success.html", result=result, status_labels=PO_STATUS_LABELS)
 
 # ---------- 编辑 ----------
 @bp.get("/<int:order_id>/edit")
@@ -308,6 +309,7 @@ def edit_page(order_id: int):
         mode="edit",
         order_id=order.id,
         order=order,
+        status_labels=PO_STATUS_LABELS,
     )
 
 @bp.post("/<int:order_id>/edit")
@@ -507,6 +509,7 @@ def _render_error(error_msg: str):
             **ctx,
             form_data=form_data,
             errors=[error_msg],
+            status_labels=PO_STATUS_LABELS,
         ),
         400,
     )
@@ -562,7 +565,7 @@ def adjust_materials(order_id):
     except (ProcessOrderAdjustmentError, InventoryError) as e:
         flash(str(e), "error")
 
-    print("提交的 new_materials:", new_materials)
+    #print("提交的 new_materials:", new_materials)
     return redirect(url_for("process_order.detail_page", order_id=order_id))
 
 @bp.get("/<int:order_id>/adjust-materials")
@@ -571,7 +574,7 @@ def adjust_materials_page(order_id):
     if not order:
         abort(404)
     if order.status not in ("ORDERED", "PRODUCING", "COMPLETED", "RECEIVED"):
-        flash(f"当前状态【{STATUS_LABELS.get(order.status, order.status)}】"
+        flash(f"当前状态【{PO_STATUS_LABELS.get(order.status, order.status)}】"
               f"不允许调整配比", "error")
         return redirect(url_for("process_order.detail_page", order_id=order_id))
 
@@ -601,7 +604,7 @@ def adjust_materials_page(order_id):
         materials=materials,
         material_map=material_map,
         all_materials=all_materials,
-        status_labels=STATUS_LABELS,
+        status_labels=PO_STATUS_LABELS,
         errors=[],
     )
 
@@ -649,6 +652,7 @@ def adjustments_list_page(order_id: int):
         adjustments=adjustments,
         docs=docs,
         material_map=material_map,
+        status_labels=PO_STATUS_LABELS,
     )
 
 @bp.get("/api/<int:order_id>/materials")

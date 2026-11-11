@@ -32,13 +32,13 @@ STATUS_ACTIONS = {
         "to": "ORDERED",
         "label": "下单",
     },
-    "produce": {  # 生产
-        "from": {"ORDERED"},
-        "to": "PRODUCING",
-        "label": "生产",
-    },    
+    #"produce": {  # 生产
+    #    "from": {"ORDERED"},
+    #    "to": "PRODUCING",
+    #    "label": "生产",
+    #},
     "receive": {     # 完工入库（映射到 RECEIVED）
-        "from": {"PRODUCING"},
+        "from": {"ORDERED"},
         "to": "RECEIVED",
         "label": "完工入库",
     },
@@ -48,12 +48,11 @@ STATUS_ACTIONS = {
         "label": "取消",
     },
 }
-
-STATUS_LABELS = {
+PO_STATUS_LABELS = {
     "DRAFT": "草稿",
     "ORDERED": "已下单",
-    "PRODUCING": "生产中",
-    "COMPLETED": "已完工",
+    #"PRODUCING": "生产中",
+    #"COMPLETED": "已完工",
     "RECEIVED": "已入库",
     "CANCELLED": "已取消",
 }
@@ -446,7 +445,7 @@ class ProcessOrderService:
 
         if order.status not in rule["from"]:
             raise ProcessOrderError(
-                f"当前状态【{STATUS_LABELS.get(order.status, order.status)}】"
+                f"当前状态【{PO_STATUS_LABELS.get(order.status, order.status)}】"
                 f"不允许执行【{rule['label']}】"
             )
 
@@ -488,7 +487,7 @@ class ProcessOrderService:
             raise ProcessOrderError("工艺单不存在")
         if order.status != "DRAFT":
             raise ProcessOrderError(
-                f"当前状态【{STATUS_LABELS.get(order.status, order.status)}】"
+                f"当前状态【{PO_STATUS_LABELS.get(order.status, order.status)}】"
                 f"不允许下单"
             )
 
@@ -611,7 +610,7 @@ class ProcessOrderService:
     ) -> dict:
         """
         工艺单入库到成品库：
-        - 状态：PRODUCING -> RECEIVED
+        - 状态：ORDERED -> RECEIVED
         - 批次号 = order.batch_no
         - 成本单价 = actual_total_cost / completed_quantity
         - 入库数量 = completed_quantity（若为 0 则用 planned_quantity）
@@ -621,9 +620,9 @@ class ProcessOrderService:
         if not order:
             raise ProcessOrderError("工艺单不存在")
 
-        if order.status != "PRODUCING":
+        if order.status != "ORDERED":
             raise ProcessOrderError(
-                f"当前状态【{STATUS_LABELS.get(order.status, order.status)}】"
+                f"当前状态【{PO_STATUS_LABELS.get(order.status, order.status)}】"
                 f"不允许入库，仅【已下单】状态可入库"
             )
 
@@ -719,7 +718,7 @@ class ProcessOrderService:
         """
         if order.status != "DRAFT":
             raise ProcessOrderError(
-                f"工艺单状态为【{STATUS_LABELS.get(order.status, order.status)}】，"
+                f"工艺单状态为【{PO_STATUS_LABELS.get(order.status, order.status)}】，"
                 f"已下单后不允许切换业绩单/生产计划"
             )
 
@@ -786,7 +785,7 @@ class ProcessOrderService:
             raise ProcessOrderError("工艺单不存在")
         if order.status in ("COMPLETED", "CANCELLED"):
             raise ProcessOrderError(
-                f"当前状态【{STATUS_LABELS.get(order.status, order.status)}】"
+                f"当前状态【{PO_STATUS_LABELS.get(order.status, order.status)}】"
                 f"不允许取消"
             )
 

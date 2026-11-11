@@ -44,8 +44,8 @@
       <th>跟单人</th>
       <th>创建人</th>
       <th style="width:40px;">实际单位成本</th>
-      <th style="width:40px;">状态</th>
-      <th style="width:220px;">操作</th>
+      <th style="width:50px;">状态</th>
+      <th style="width:120px;">操作</th>
     </tr>
   </thead>
   <tbody>
@@ -101,10 +101,7 @@
         </td>
         <td>
           <span class="status-badge status-{{ it.status|lower }}">
-            {{ {
-              'DRAFT':'草稿','ORDERED':'已下单','PRODUCING':'生产中',
-              'COMPLETED':'已完工','RECEIVED':'已入库','CANCELLED':'已取消'
-            }.get(it.status, it.status) }}
+            {{ status_labels.get(it.status, it.status) }}
           </span>
         </td>
         <td style="white-space:nowrap;">
@@ -142,7 +139,7 @@
           {% endif %}
 
           <!-- ===== 出库：仅 ORDERED ===== -->
-          {% if it.status == 'ORDERED' %}
+          <!--{% if it.status == 'ORDERED' %}
             <form method="post"
                   action="{{ url_for('process_order.produce', order_id=it.id) }}"
                   onsubmit="return confirm('确认生产？');"
@@ -152,10 +149,10 @@
             </form>
           {% else %}
             <button class="btn btn-small" disabled title="仅已下单可生产">生产</button>
-          {% endif %}
+          {% endif %}-->
 
           <!-- ===== 入库：仅 PRODUCING ===== -->
-          {% if it.status == 'PRODUCING' %}
+          {% if it.status == 'ORDERED' %}
             <form method="post"
                   action="{{ url_for('process_order.receive', order_id=it.id) }}"
                   onsubmit="return confirm('确认入库到成品库？批次号 {{ it.batch_no or '' }}');"

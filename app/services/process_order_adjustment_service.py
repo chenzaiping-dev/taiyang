@@ -32,7 +32,7 @@ class ProcessOrderAdjustmentService:
         operator_id: int = None,
     ) -> dict:
         """
-        修订原料配比（仅 ORDERED / PRODUCING 状态允许）。
+        修订原料配比
         new_materials: [{'material_id', 'ratio_value', 'quantity', 'remark'}]
         流程：
           1. 校验状态

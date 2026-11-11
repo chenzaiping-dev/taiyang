@@ -31,7 +31,7 @@ def gen_plan_no() -> str:
 PLAN_STATUS_LABELS = {
     "DRAFT": "草稿",
     "CONFIRMED": "已确认",
-    "IN_PROGRESS": "处理中",
+    #"IN_PROGRESS": "处理中",
     "COMPLETED": "已完成",
     "CANCELLED": "已取消",
 }
@@ -659,7 +659,7 @@ class ProductionPlanService:
     @staticmethod
     def complete_plan(plan_id: int, operator_id: int = None) -> ProductionPlan:
         """
-        IN_PROGRESS → COMPLETED
+        CONFIRMED → COMPLETED
         前置：所有关联工艺单状态必须为 RECEIVED
         动作：
           1. 检查工艺单状态
@@ -667,7 +667,7 @@ class ProductionPlanService:
           3. 更新状态
         """
         plan = ProductionPlanService._get_plan_or_raise(plan_id)
-        if plan.status != "IN_PROGRESS":
+        if plan.status != "CONFIRMED":
             raise ProductionPlanError(
                 f"当前状态【{PLAN_STATUS_LABELS.get(plan.status, plan.status)}】"
                 f"不允许完成，仅处理中可完成"
