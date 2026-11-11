@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select, func, or_
+from flask import flash
 # 或用 with db.session.no_autoflush:
 
 from app.extensions import db
@@ -355,11 +356,12 @@ class ProductionPlanService:
         for po_id in removed_po_ids:
             rel = existing_rels[po_id]
             order = db.session.get(ProcessOrder, po_id)
-            if order and order.status != "DRAFT":
-                raise ProductionPlanError(
-                    f"工艺单 {order.process_order_no} 状态为【{order.status}】，"
-                    f"无法从生产计划中移除"
-                )
+            #if order and order.status != "DRAFT":
+            #    raise ProductionPlanError(
+            #        f"工艺单 {order.process_order_no} 状态为【{order.status}】，"
+            #        f"无法从生产计划中移除"
+            #    )
+            flash(f"工艺单 {order.process_order_no} 状态为【{order.status}】，从生产计划中移除")
             db.session.delete(rel)
 
         # ============ 校验总计划量 ============

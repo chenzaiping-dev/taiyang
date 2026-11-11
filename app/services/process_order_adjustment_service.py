@@ -4,6 +4,7 @@ from sqlalchemy import func
 from app.extensions import db
 from app.utils.datetime_utils import now_beijing_naive
 from app.utils.decimal_utils import _q6
+
 from app.generated.models.process_orders import ProcessOrder
 from app.generated.models.process_order_materials import ProcessOrderMaterial
 from app.generated.models.materials import Material

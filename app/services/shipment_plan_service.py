@@ -2,7 +2,6 @@ from sqlalchemy import select, case, func, or_
 from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 
-
 from app.extensions import db
 from app.generated.models.employees import Employee
 from app.generated.models.warehouses import Warehouse
@@ -401,7 +400,7 @@ class ShipmentPlanService:
 
                 FinishedGoodsService.reverse_document(
                     document_id=out_doc.id,
-                    reason=f"取消发货计划 {plan.shipment_plan_no}",
+                    reason=f"[auto_cancel]取消发货计划 {plan.shipment_plan_no}",
                     created_by=operator_id,
                     commit=False,          # 合并事务
                 )

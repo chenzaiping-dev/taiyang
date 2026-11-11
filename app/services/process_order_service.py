@@ -1,7 +1,7 @@
 from decimal import Decimal
 from sqlalchemy import select
 from datetime import datetime
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, abort
+from flask import flash, abort
 
 from app.extensions import db
 from app.utils.datetime_utils import now_beijing_naive
@@ -798,7 +798,7 @@ class ProcessOrderService:
             if old_status == "RECEIVED":
                 fg_reverse_result = FinishedGoodsService.reverse_inbound_by_process_order(
                     order=order,
-                    reason=reason or f"取消工艺单 {order.process_order_no}",
+                    reason=reason or f"[auto_cancel]取消工艺单 {order.process_order_no}",
                     created_by=operator_id,
                     commit=False,        # ⭐ 合并事务
                 )
