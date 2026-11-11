@@ -794,10 +794,11 @@ class FinishedGoodsService:
         if reason and "[CANCEL_" in reason:
             pass
         else:
-            if "[PROCESS_ORDER_RECEIVE]" in doc.remark:
-                raise FinishedGoodsError("工艺单入库, 请走生产计划/工艺单取消")
-            if "[SHIP_PLAN_OUTBOUND]" in doc.remark:
-                raise FinishedGoodsError("发货计划出库, 请走发货计划取消")
+            if doc.remark:
+                if "[PROCESS_ORDER_RECEIVE]" in doc.remark:
+                    raise FinishedGoodsError("工艺单入库, 请走生产计划/工艺单取消")
+                if "[SHIP_PLAN_OUTBOUND]" in doc.remark:
+                    raise FinishedGoodsError("发货计划出库, 请走发货计划取消")
 
         # ⭐ 核心防护：反查是否已存在撤销单
         existing_reverse = FinishedGoodsDocument.query.filter(
