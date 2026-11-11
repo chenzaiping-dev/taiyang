@@ -25,6 +25,10 @@ def _infer_source_entry(row: dict) -> str:
         return "工艺单入库"
     if "[SHIP_PLAN_OUTBOUND]" in remark:
         return "发货计划出库"
+    if "[CANCEL_PROCESS_ORDER]" in remark:
+        return "取消工艺单"
+    if "[CANCEL_SHIP_PLAN]" in remark:
+        return "取消发货计划"
     if doc_type == "PRODUCTION_IN":
         return "成品入库页"
     if doc_type == "RETURN":

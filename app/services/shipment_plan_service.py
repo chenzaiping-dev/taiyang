@@ -400,7 +400,7 @@ class ShipmentPlanService:
 
                 FinishedGoodsService.reverse_document(
                     document_id=out_doc.id,
-                    reason=f"[auto_cancel]取消发货计划 {plan.shipment_plan_no}",
+                    reason=f"[CANCEL_SHIP_PLAN] 取消发货计划 {plan.shipment_plan_no}",
                     created_by=operator_id,
                     commit=False,          # 合并事务
                 )

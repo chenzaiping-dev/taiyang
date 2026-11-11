@@ -491,6 +491,17 @@ class ProcessOrderService:
                 f"不允许下单"
             )
 
+        # 1.5 如果有业绩表, 需要对应生产计划状态为已确认才可以下单
+        if order.performance_id:
+            plan = ProductionPlan.query.filter_by(
+                performance_id=order.performance_id
+            ).first()
+            if plan and plan.status != "CONFIRMED":
+                raise ProcessOrderError(
+                    f"当前生产计划【{plan.plan_no}】 状态【{plan.status}】，"
+                    f"不允许下单"
+                )
+
         # 2. 拿到明细
         materials = (
             ProcessOrderMaterial.query
@@ -734,8 +745,7 @@ class ProcessOrderService:
 
         if new_plan.status in ("COMPLETED", "CANCELLED"):
             raise ProcessOrderError(
-                f"目标生产计划【{new_plan.plan_no}】状态为"
-                f"【{PLAN_STATUS_LABELS.get(new_plan.status, new_plan.status)}】，"
+                f"目标生产计划【{new_plan.plan_no}】状态为【{new_plan.status}】, "
                 f"不允许加入工艺单"
             )
 
@@ -798,7 +808,7 @@ class ProcessOrderService:
             if old_status == "RECEIVED":
                 fg_reverse_result = FinishedGoodsService.reverse_inbound_by_process_order(
                     order=order,
-                    reason=reason or f"[auto_cancel]取消工艺单 {order.process_order_no}",
+                    reason=reason or f"[CANCEL_PROCESS_ORDER] 取消工艺单 {order.process_order_no}",
                     created_by=operator_id,
                     commit=False,        # ⭐ 合并事务
                 )

@@ -465,6 +465,8 @@ def detail_page(plan_id):
         fg_locked_total=detail["fg_locked_total"],
         prod_locked_total=detail["prod_locked_total"],
         prod_planned_total=detail["prod_planned_total"],
+        draft_reservations=detail.get("draft_reservations", []),
+        draft_locked_total=detail.get("draft_locked_total", 0),  
         status_labels=PLAN_STATUS_LABELS,
         po_status_labels=PO_STATUS_LABELS,
         res_status_labels=RES_STATUS_LABELS,
@@ -511,3 +513,13 @@ def cancel_plan(plan_id):
     except ProductionPlanError as e:
         flash(str(e), "error")
     return redirect(url_for("production_plan.list_page"))
+
+@bp.post("/<int:plan_id>/reopen")
+def reopen_plan(plan_id):
+    try:
+        ProductionPlanService.reopen_plan(plan_id)
+        flash("已重新打开为草稿，可继续编辑", "success")
+    except ProductionPlanError as e:
+        flash(str(e), "error")
+    #return redirect(url_for("production_plan.detail_page", plan_id=plan_id))
+    return redirect(url_for("production_plan.edit_page", plan_id=plan_id))

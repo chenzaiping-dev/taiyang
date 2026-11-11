@@ -821,6 +821,8 @@ CREATE TABLE production_plans (
 
     process_quantity DECIMAL(16, 4) NOT NULL DEFAULT 0
         COMMENT '计划新生产数量',
+    draft_reservations JSON NULL
+        COMMENT '草稿阶段的锁定意图（未确认前不落地到 finished_goods_reservations）',
 
     status ENUM(
         'DRAFT',
@@ -1118,3 +1120,29 @@ INSERT INTO factories (factory_code, factory_name, status)
 VALUES
 ('JGC10001', '加工厂1', 1),
 ('JGC10002', '加工厂2', 1);
+
+INSERT INTO inventory_documents
+    (document_no, document_type, document_time, status, remark,
+     created_at, confirmed_at)
+VALUES
+    ('PI-DRAFT-CK1001-1002-001', 'PURCHASE_IN', NOW(), 'DRAFT',
+     '初始草稿：金坛仓库2 原料入库（供应商1）',
+     NOW(), NULL);
+
+SET @doc := LAST_INSERT_ID();
+
+INSERT INTO inventory_transactions
+    (document_id, line_no, material_id, transaction_type,
+     transaction_time, quantity_delta, unit_cost, total_cost,
+     supplier_id, process_order_id, warehouse_id, created_at)
+VALUES
+    (@doc, 1, 1, 'PURCHASE_IN', NOW(), 1000.0000, 10.0000, 10000.0000,
+     1, NULL, 2, NOW()),
+    (@doc, 2, 2, 'PURCHASE_IN', NOW(), 2000.0000,  8.5000, 17000.0000,
+     1, NULL, 2, NOW()),
+    (@doc, 3, 3, 'PURCHASE_IN', NOW(), 1500.0000,  9.0000, 13500.0000,
+     1, NULL, 2, NOW()),
+    (@doc, 4, 4, 'PURCHASE_IN', NOW(), 3000.0000, 11.5000, 34500.0000,
+     1, NULL, 2, NOW()),
+    (@doc, 5, 5, 'PURCHASE_IN', NOW(), 3000.0000, 11.5000, 34500.0000,
+     1, NULL, 2, NOW());

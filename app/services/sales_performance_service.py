@@ -208,13 +208,13 @@ class SalesPerformanceService:
                 performance_no=n["performance_no"]).first():
             raise SalesPerformanceError(
                 f"业绩单编号已存在: {n['performance_no']}")
-
+        doc_time = now_beijing_naive()
         perf = SalesPerformance(
             **n,
             created_by=created_by,
             updated_by=created_by,
-            created_at=now_beijing_naive(),
-            updated_at=now_beijing_naive(),
+            created_at=doc_time,
+            updated_at=doc_time,
         )
         db.session.add(perf)
         try:

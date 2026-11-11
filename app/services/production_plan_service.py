@@ -88,10 +88,19 @@ class ProductionPlanService:
         db.session.add(plan)
         db.session.flush()
 
-        # 库存锁定
-        ProductionPlanService._apply_reservations(
-            plan=plan, reservations=reservations, perf=perf,
+        # 草稿阶段：校验可用量，但不落地预留
+        ProductionPlanService._validate_draft_reservations(
+            perf=perf, reservations=reservations, plan=None,
         )
+        plan.draft_reservations = [
+            {
+                "warehouse_id": int(r["warehouse_id"]),
+                "batch_id": int(r["batch_id"]),
+                "lock_qty": str(_q6(r["lock_qty"])),
+            }
+            for r in reservations
+            if _q6(r["lock_qty"]) > 0
+        ]
 
         # 工艺单（自动创建）
         ProductionPlanService._create_process_orders(
@@ -147,9 +156,23 @@ class ProductionPlanService:
         plan.remark = remark
 
         # ⭐ 重新写预留
-        ProductionPlanService._apply_reservations(
-            plan=plan, reservations=reservations, perf=perf,
-        )
+        if plan.status == "DRAFT":
+            ProductionPlanService._validate_draft_reservations(
+                perf=perf, reservations=reservations, plan=plan,
+            )
+            plan.draft_reservations = [
+                {
+                    "warehouse_id": int(r["warehouse_id"]),
+                    "batch_id": int(r["batch_id"]),
+                    "lock_qty": str(_q6(r["lock_qty"])),
+                }
+                for r in reservations
+                if _q6(r["lock_qty"]) > 0
+            ]
+        else:  # CONFIRMED
+            ProductionPlanService._apply_reservations(
+                plan=plan, reservations=reservations, perf=perf,
+            )
 
         # ⭐ 关联工艺单：已有行更新数量，新行创建，删除的行要处理
         ProductionPlanService._sync_process_orders(
@@ -170,31 +193,42 @@ class ProductionPlanService:
     # ==================== 内部工具 ====================
     @staticmethod
     def _apply_reservations(plan, reservations, perf):
-        """
-        upsert 语义：
-        - 已有同 (warehouse_id, batch_id) 的 ACTIVE 预留 → 直接更新数量
-        - 本次未提交的旧 ACTIVE 预留 → 置为 RELEASED（释放）
-        - 新批次 → 插入
-        """
-        # 1. 取该计划所有 ACTIVE 预留，建立 map
-        existing = FinishedGoodsReservation.query.filter_by(
+        # 1. ACTIVE 预留 map
+        existing_active = FinishedGoodsReservation.query.filter_by(
             production_plan_id=plan.id,
             reservation_type="PRODUCTION_PLAN",
             status="ACTIVE",
         ).all()
-        existing_map = {(r.warehouse_id, r.batch_id): r for r in existing}
+        active_map = {(r.warehouse_id, r.batch_id): r for r in existing_active}
 
-        # 2. 校验库存 + 汇总本次目标
-        #    先按 (wh, batch) 合并前端传的同一批次多行（虽然 UI 不会，但防御）
+        # 1.1 历史可复用行（RELEASED / CONSUMED）map，取每个 (wh, batch) 最新一条
+        reusable_rows = (
+            FinishedGoodsReservation.query
+            .filter(
+                FinishedGoodsReservation.production_plan_id == plan.id,
+                FinishedGoodsReservation.reservation_type == "PRODUCTION_PLAN",
+                FinishedGoodsReservation.status.in_(["RELEASED", "CONSUMED"]),
+                FinishedGoodsReservation.goods_type == "STAPLE",
+            )
+            .order_by(FinishedGoodsReservation.id.desc())
+            .all()
+        )
+        reusable_map = {}
+        for r in reusable_rows:
+            key = (r.warehouse_id, r.batch_id)
+            if key not in reusable_map:
+                reusable_map[key] = r
+
+        # 2. 汇总目标
         target = {}
         for r in reservations:
-            key = (int(r["warehouse_id"]), int(r["batch_id"]))
             qty = _q6(r["lock_qty"])
             if qty <= 0:
                 continue
+            key = (int(r["warehouse_id"]), int(r["batch_id"]))
             target[key] = target.get(key, Decimal("0")) + qty
 
-        # 3. 逐个 upsert
+        # 3. upsert
         for (wh_id, batch_id), qty in target.items():
             inv = FinishedGoodsInventory.query.filter_by(
                 warehouse_id=wh_id, batch_id=batch_id,
@@ -204,19 +238,15 @@ class ProductionPlanService:
                     f"库存记录不存在（仓库 {wh_id} 批次 {batch_id}）"
                 )
 
-            # 其他计划（排除自己）已锁定的数量
-            from sqlalchemy import func, and_
-            other_locked = (
-                db.session.query(func.coalesce(
-                    func.sum(FinishedGoodsReservation.remaining_quantity), 0))
-                .filter(
-                    FinishedGoodsReservation.warehouse_id == wh_id,
-                    FinishedGoodsReservation.batch_id == batch_id,
-                    FinishedGoodsReservation.status == "ACTIVE",
-                    FinishedGoodsReservation.production_plan_id != plan.id,
-                )
-                .scalar()
-            ) or Decimal("0")
+            q = db.session.query(func.coalesce(
+                func.sum(FinishedGoodsReservation.remaining_quantity), 0)
+            ).filter(
+                FinishedGoodsReservation.warehouse_id == wh_id,
+                FinishedGoodsReservation.batch_id == batch_id,
+                FinishedGoodsReservation.status == "ACTIVE",
+                FinishedGoodsReservation.production_plan_id != plan.id,
+            )
+            other_locked = q.scalar() or Decimal("0")
 
             available = (inv.quantity or Decimal("0")) - other_locked
             if qty > available:
@@ -224,20 +254,24 @@ class ProductionPlanService:
                 batch_no = batch.batch_no if batch else f"#{batch_id}"
                 raise ProductionPlanError(
                     f"批次 [{batch_no}] 可锁定数量不足："
-                    f"当前可用 {available}（库存 {inv.quantity}，其他计划已锁 {other_locked}），"
-                    f"本次需要 {qty}"
+                    f"当前可用 {available}，本次需要 {qty}"
                 )
 
-            existing_res = existing_map.pop((wh_id, batch_id), None)
-            if existing_res:
-                # 复用：只更新数量
-                existing_res.reserved_quantity = qty
-                existing_res.remaining_quantity = qty
-                existing_res.status = "ACTIVE"
-                # reservation_no 保持不变，绝不动
+            res = active_map.pop((wh_id, batch_id), None)
+            if not res:
+                # 复用历史行（RELEASED / CONSUMED）
+                res = reusable_map.pop((wh_id, batch_id), None)
+
+            if res:
+                # 复活/更新：数量以本次为准，reservation_no 不变
+                res.reserved_quantity = qty
+                res.remaining_quantity = qty
+                res.status = "ACTIVE"
+                res.remark = f"生产计划 {plan.plan_no} 锁定"
+                res.updated_at = now_beijing_naive()
             else:
-                # 新插入
-                new_res = FinishedGoodsReservation(
+                # 真正的新 (wh, batch)：插入
+                db.session.add(FinishedGoodsReservation(
                     reservation_no=f"RES-PP-{plan.plan_no}-{wh_id}-{batch_id}",
                     reservation_type="PRODUCTION_PLAN",
                     production_plan_id=plan.id,
@@ -250,13 +284,51 @@ class ProductionPlanService:
                     goods_type="STAPLE",
                     created_at=now_beijing_naive(),
                     remark=f"生产计划 {plan.plan_no} 锁定",
-                )
-                db.session.add(new_res)
+                ))
 
-        # 4. 剩下的 existing_map 是"本次未提交"的旧批次 → 释放
-        for (wh_id, batch_id), r in existing_map.items():
+        # 4. 本次未提交的 ACTIVE 行 → 释放
+        for r in active_map.values():
             r.status = "RELEASED"
             r.remaining_quantity = Decimal("0")
+
+    @staticmethod
+    def _validate_draft_reservations(perf, reservations, plan=None):
+        target = {}
+        for r in reservations:
+            qty = _q6(r["lock_qty"])
+            if qty <= 0:
+                continue
+            key = (int(r["warehouse_id"]), int(r["batch_id"]))
+            target[key] = target.get(key, Decimal("0")) + qty
+
+        exclude_plan_id = plan.id if plan else None
+        for (wh_id, batch_id), qty in target.items():
+            inv = FinishedGoodsInventory.query.filter_by(
+                warehouse_id=wh_id, batch_id=batch_id,
+            ).first()
+            if not inv:
+                raise ProductionPlanError(
+                    f"库存记录不存在（仓库 {wh_id} 批次 {batch_id}）"
+                )
+            other_locked = (
+                db.session.query(func.coalesce(
+                    func.sum(FinishedGoodsReservation.remaining_quantity), 0))
+                .filter(
+                    FinishedGoodsReservation.warehouse_id == wh_id,
+                    FinishedGoodsReservation.batch_id == batch_id,
+                    FinishedGoodsReservation.status == "ACTIVE",
+                    FinishedGoodsReservation.production_plan_id != exclude_plan_id
+                    if exclude_plan_id else True,
+                )
+                .scalar()
+            ) or Decimal("0")
+            available = (inv.quantity or Decimal("0")) - other_locked
+            if qty > available:
+                batch = db.session.get(FinishedGoodsBatch, batch_id)
+                raise ProductionPlanError(
+                    f"批次 [{batch.batch_no if batch else batch_id}] 可锁定不足："
+                    f"可用 {available}，本次 {qty}"
+                )
 
     @staticmethod
     def _sync_process_orders(plan, process_orders, perf, created_by):
@@ -403,7 +475,7 @@ class ProductionPlanService:
                 performance_id=perf.id,
                 order_time=now_beijing(),
                 followup_employee_id=(
-                    perf.main_salesperson_id or created_by or 1
+                    created_by or 1
                 ),
                 planned_cost_price=Decimal("0"),
                 planned_total_cost=Decimal("0"),
@@ -461,18 +533,28 @@ class ProductionPlanService:
                 ProductionPlan.process_quantity,
                 ProductionPlan.status,
                 ProductionPlan.created_by,
+                SalesPerformance.performance_no,
+                SalesPerformance.product_name,
                 creator.real_name.label("created_by_name"),
                 ProductionPlan.created_at,
                 func.coalesce(locked_subq.c.locked_qty, 0).label("locked_qty"),
             )
             .join(creator, creator.id == ProductionPlan.created_by, isouter=True)
             .join(locked_subq, locked_subq.c.pid == ProductionPlan.id, isouter=True)
+            .join(SalesPerformance,
+                  SalesPerformance.id == ProductionPlan.performance_id, isouter=True)
             .order_by(ProductionPlan.id.desc())
         )
 
         if keyword:
             like = f"%{keyword}%"
-            base = base.where(ProductionPlan.plan_no.like(like))
+            base = base.where(
+                db.or_(
+                    SalesPerformance.performance_no.like(like),
+                    SalesPerformance.product_name.like(like),
+                    ProductionPlan.plan_no.like(like),   # ⭐
+                )
+            )
         if status:
             base = base.where(ProductionPlan.status == status)
         if performance_id:
@@ -484,6 +566,16 @@ class ProductionPlanService:
 
         base = base.offset((page - 1) * page_size).limit(page_size)
         rows = [dict(r) for r in db.session.execute(base).mappings().all()]
+        for r in rows:
+            # 草稿意向锁定合计
+            r["draft_locked_qty"] = Decimal("0")
+            if r.get("status") == "DRAFT":
+                plan = db.session.get(ProductionPlan, r["id"])
+                if plan and plan.draft_reservations:
+                    r["draft_locked_qty"] = sum(
+                        (_q6(x["lock_qty"]) for x in plan.draft_reservations),
+                        Decimal("0"),
+                    )
         return rows, total
 
     @staticmethod
@@ -586,6 +678,30 @@ class ProductionPlanService:
              if r["po_status"] != "CANCELLED"),
             Decimal("0"),
         )
+        draft_reservations = []
+        if plan.status == "DRAFT" and plan.draft_reservations:
+            # 补齐仓库/批次展示信息
+            wh_ids = {int(r["warehouse_id"]) for r in plan.draft_reservations}
+            bt_ids = {int(r["batch_id"]) for r in plan.draft_reservations}
+            wh_map = {w.id: w for w in Warehouse.query.filter(Warehouse.id.in_(wh_ids)).all()} if wh_ids else {}
+            bt_map = {b.id: b for b in FinishedGoodsBatch.query.filter(FinishedGoodsBatch.id.in_(bt_ids)).all()} if bt_ids else {}
+            for r in plan.draft_reservations:
+                wh = wh_map.get(int(r["warehouse_id"]))
+                bt = bt_map.get(int(r["batch_id"]))
+                draft_reservations.append({
+                    "warehouse_id": int(r["warehouse_id"]),
+                    "warehouse_code": wh.warehouse_code if wh else "",
+                    "warehouse_name": wh.warehouse_name if wh else "",
+                    "batch_id": int(r["batch_id"]),
+                    "batch_no": bt.batch_no if bt else "",
+                    "product_name": bt.product_name if bt else "",
+                    "product_specification": bt.product_specification if bt else "",
+                    "unit": bt.unit if bt else "",
+                    "lock_qty": r["lock_qty"],
+                })
+        draft_locked_total = sum(
+            (_q6(r["lock_qty"]) for r in draft_reservations), Decimal("0")
+        )
 
         return {
             "plan": plan,
@@ -596,6 +712,8 @@ class ProductionPlanService:
             "fg_locked_total": fg_locked_total,
             "prod_locked_total": prod_locked_total,
             "prod_planned_total": prod_planned_total,
+            "draft_reservations": draft_reservations,
+            "draft_locked_total": draft_locked_total,
         }
 
     # ==================== 状态操作 ====================
@@ -616,9 +734,35 @@ class ProductionPlanService:
                 f"当前状态【{PLAN_STATUS_LABELS.get(plan.status, plan.status)}】"
                 f"不允许确认，仅草稿可确认"
             )
-        plan.status = "CONFIRMED"
+
+        perf = db.session.get(SalesPerformance, plan.performance_id)
+        if not perf:
+            raise ProductionPlanError("业绩单不存在")
+
+        # 从 draft_reservations 展开成真实预留
+        draft = plan.draft_reservations or []
+        reservations = [
+            {
+                "warehouse_id": int(r["warehouse_id"]),
+                "batch_id": int(r["batch_id"]),
+                "lock_qty": r["lock_qty"],
+            }
+            for r in draft
+        ]
         try:
+            # 落库前再校验一次（草稿期间库存可能被别人锁走）
+            ProductionPlanService._validate_draft_reservations(
+                perf=perf, reservations=reservations, plan=plan,
+            )
+            ProductionPlanService._apply_reservations(
+                plan=plan, reservations=reservations, perf=perf,
+            )
+            plan.draft_reservations = None
+            plan.status = "CONFIRMED"
             db.session.commit()
+        except ProductionPlanError:
+            db.session.rollback()
+            raise
         except Exception as e:
             db.session.rollback()
             raise ProductionPlanError(f"确认失败: {e}")
@@ -643,19 +787,99 @@ class ProductionPlanService:
 
     @staticmethod
     def cancel_plan(plan_id: int) -> ProductionPlan:
-        """DRAFT / CONFIRMED / IN_PROGRESS → CANCELLED"""
         plan = ProductionPlanService._get_plan_or_raise(plan_id)
-        if plan.status in ("COMPLETED", "CANCELLED"):
-            raise ProductionPlanError(
-                f"当前状态【{PLAN_STATUS_LABELS.get(plan.status, plan.status)}】"
-                f"不允许取消"
+        #if plan.status in ("COMPLETED", "CANCELLED"):
+        #    raise ProductionPlanError(
+        #        f"当前状态【{PLAN_STATUS_LABELS.get(plan.status, plan.status)}】"
+        #        f"不允许取消"
+        #    )
+
+        # ⭐ 前置：已被发货计划消耗/转移的预留，必须先由发货侧归还
+        # ⭐ 前置：存在被部分或全部消耗/转移的预留 → 必须发货侧先归还
+        dirty = (
+            FinishedGoodsReservation.query
+            .filter(
+                FinishedGoodsReservation.production_plan_id == plan.id,
+                FinishedGoodsReservation.reservation_type == "PRODUCTION_PLAN",
+                db.or_(
+                    FinishedGoodsReservation.status.in_(["CONSUMED", "TRANSFERRED"]),
+                    db.and_(
+                        FinishedGoodsReservation.status == "ACTIVE",
+                        FinishedGoodsReservation.remaining_quantity
+                        < FinishedGoodsReservation.reserved_quantity,
+                    ),
+                ),
             )
-        plan.status = "CANCELLED"
+            .count()
+        )
+        if dirty:
+            raise ProductionPlanError(
+                f"该生产计划有 {dirty} 条预留已被部分或全部消耗/转移，"
+                f"请先取消对应发货计划（或撤销其出库单）归还预留后，再取消生产计划"
+            )
+
+        try:
+            # 1. 释放本计划 ACTIVE 预留
+            reservations = FinishedGoodsReservation.query.filter_by(
+                production_plan_id=plan.id,
+                reservation_type="PRODUCTION_PLAN",
+                status="ACTIVE",
+            ).with_for_update().all()
+
+            for r in reservations:
+                # 防御性二次断言（同事务内前置检查已覆盖）
+                if r.remaining_quantity < r.reserved_quantity:
+                    raise ProductionPlanError(
+                        f"预留 {r.reservation_no} 存在部分消耗，请先由发货侧归还"
+                    )
+                r.status = "RELEASED"
+                r.remaining_quantity = Decimal("0")
+
+            # 2. 清空草稿锁定意图
+            plan.draft_reservations = None
+
+            # 3. 解除工艺单关联（工艺单本身保留，字段改动需人工核对）
+            rels = ProductionPlanProcessOrder.query.filter_by(
+                production_plan_id=plan.id
+            ).all()
+            for rel in rels:
+                po = db.session.get(ProcessOrder, rel.process_order_id)
+                #if po and po.status != "DRAFT":
+                #    raise ProductionPlanError(
+                #        f"工艺单 {po.process_order_no} 状态为【{po.status}】，"
+                #        f"已进入生产流程，无法随计划取消"
+                #    )
+                db.session.delete(rel)
+
+            plan.status = "CANCELLED"
+            db.session.commit()
+        except ProductionPlanError:
+            db.session.rollback()
+            raise
+        except Exception as e:
+            db.session.rollback()
+            raise ProductionPlanError(f"取消失败: {e}")
+        return plan
+
+    @staticmethod
+    def reopen_plan(plan_id: int) -> ProductionPlan:
+        plan = ProductionPlanService._get_plan_or_raise(plan_id)
+        if plan.status != "CANCELLED":
+            raise ProductionPlanError("只有已取消的计划可重新打开")
+        # 确认没有残留 ACTIVE 预留
+        active = FinishedGoodsReservation.query.filter_by(
+            production_plan_id=plan.id,
+            reservation_type="PRODUCTION_PLAN",
+            status="ACTIVE",
+        ).count()
+        if active:
+            raise ProductionPlanError("仍有 ACTIVE 预留，不能重新打开")
+        plan.status = "DRAFT"
         try:
             db.session.commit()
         except Exception as e:
             db.session.rollback()
-            raise ProductionPlanError(f"取消失败: {e}")
+            raise ProductionPlanError(f"重新打开失败: {e}")
         return plan
 
     @staticmethod
@@ -679,36 +903,31 @@ class ProductionPlanService:
         rels = ProductionPlanProcessOrder.query.filter_by(
             production_plan_id=plan.id
         ).order_by(ProductionPlanProcessOrder.id.asc()).all()
+
         if not rels:
+            flash(f"!!注意!! 该生产计划未关联任何工艺单.")
+        else:
             #raise ProductionPlanError("该生产计划未关联任何工艺单，无法完成")
-            plan.status = "COMPLETED"
-            try:
-                db.session.commit()
-            except Exception as e:
-                db.session.rollback()
-                raise ProductionPlanError(f"完成失败: {e}")
-            return plan
+            po_ids = [r.process_order_id for r in rels]
+            pos_map = {
+                po.id: po for po in
+                ProcessOrder.query.filter(ProcessOrder.id.in_(po_ids)).all()
+            }
 
-        po_ids = [r.process_order_id for r in rels]
-        pos_map = {
-            po.id: po for po in
-            ProcessOrder.query.filter(ProcessOrder.id.in_(po_ids)).all()
-        }
-
-        # 2. 校验工艺单状态
-        not_received = [
-            pos_map[r.process_order_id]
-            for r in rels
-            if r.process_order_id in pos_map
-            and pos_map[r.process_order_id].status != "RECEIVED"
-        ]
-        if not_received:
-            details = "；".join(
-                f"{po.process_order_no}({po.status})" for po in not_received
-            )
-            raise ProductionPlanError(
-                f"以下工艺单尚未入库，无法完成：{details}"
-            )
+            # 2. 校验工艺单状态
+            not_received = [
+                pos_map[r.process_order_id]
+                for r in rels
+                if r.process_order_id in pos_map
+                and pos_map[r.process_order_id].status != "RECEIVED"
+            ]
+            if not_received:
+                details = "；".join(
+                    f"{po.process_order_no}({po.status})" for po in not_received
+                )
+                raise ProductionPlanError(
+                    f"以下工艺单尚未入库，无法完成：{details}"
+                )
 
         # 3. 逐关联行写预留（按 locked_quantity
         try:

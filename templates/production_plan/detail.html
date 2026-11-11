@@ -5,10 +5,21 @@
 <h2>
   生产计划详情
   <span style="color:#888;font-size:14px;">#{{ plan.plan_no }}</span>
-  <a class="btn" style="float:right;"
-     href="{{ url_for('production_plan.edit_page', plan_id=plan.id) }}">
-    编辑
-  </a>
+
+  {% if plan.status == 'DRAFT' %}
+    <a class="btn" style="float:right;"
+       href="{{ url_for('production_plan.edit_page', plan_id=plan.id) }}">编辑</a>
+  {% endif %}
+
+  {% if plan.status == 'CANCELLED' %}
+    <form method="post" style="float:right;margin-right:8px;"
+          action="{{ url_for('production_plan.reopen_plan', plan_id=plan.id) }}"
+          onsubmit="return confirm('重新打开为草稿后可继续编辑，是否继续？');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-primary">重新编辑</button>
+    </form>
+  {% endif %}
+
   <a class="btn" style="float:right;margin-right:8px;"
      href="{{ url_for('production_plan.list_page') }}">返回列表</a>
 </h2>
@@ -29,9 +40,15 @@
   </div>
   <div class="form-row"><label>覆盖总数量：</label>{{ plan.total_quantity }}</div>
   <div class="form-row"><label>新生产数量：</label>{{ plan.process_quantity }}</div>
-  <div class="form-row"><label>成品锁定总数量：</label>
+  <div class="form-row"><label>成品锁定总数量（已生效）：</label>
     <strong>{{ fg_locked_total }}</strong>
   </div>
+  {% if plan.status == 'DRAFT' %}
+  <div class="form-row"><label>草稿意向锁定：</label>
+    <strong style="color:#ef6c00;">{{ draft_locked_total }}</strong>
+    <span style="color:#999;font-size:12px;">（确认后才生效，当前不占用库存）</span>
+  </div>
+  {% endif %}
   <div class="form-row"><label>生产锁定总数量：</label>
     <strong>{{ prod_locked_total }}</strong>
   </div>
@@ -52,6 +69,41 @@
   <div class="form-row"><label>备注：</label>{{ plan.remark or "-" }}</div>
 </fieldset>
 
+{% if plan.status == 'DRAFT' and draft_reservations %}
+<fieldset>
+  <legend>草稿锁定意向（{{ draft_reservations|length }} 条，未生效）</legend>
+  <table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead>
+      <tr style="background:#fff8e1;">
+        <th style="width:50px;">#</th>
+        <th>仓库</th>
+        <th>批次号</th>
+        <th>产品名称</th>
+        <th>规格</th>
+        <th style="width:60px;">单位</th>
+        <th style="width:120px;text-align:right;">意向锁定量</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in draft_reservations %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ r.warehouse_code }} - {{ r.warehouse_name }}</td>
+        <td>{{ r.batch_no }}</td>
+        <td>{{ r.product_name }}</td>
+        <td>{{ r.product_specification or "-" }}</td>
+        <td>{{ r.unit or "" }}</td>
+        <td style="text-align:right;color:#ef6c00;">{{ r.lock_qty }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p style="color:#999;font-size:12px;margin-top:8px;">
+    草稿阶段的锁定量仅作意图记录，<strong>确认后</strong>才会写入成品预留并占用库存；
+    取消时会一并释放。
+  </p>
+</fieldset>
+{% endif %}
 <fieldset>
   <legend>锁定数量（{{ reservations|length }} 条）</legend>
   <table style="width:100%;border-collapse:collapse;font-size:13px;">
@@ -93,7 +145,13 @@
         {% endfor %}
       {% else %}
         <tr><td colspan="10" style="text-align:center;color:#999;padding:16px;">
-          暂无锁定记录
+          {% if plan.status == 'DRAFT' %}
+            草稿阶段不生成正式预留，请查看上方"草稿锁定意向"
+          {% elif plan.status == 'CANCELLED' %}
+            计划已取消，预留已释放
+          {% else %}
+            暂无锁定记录
+          {% endif %}
         </td></tr>
       {% endif %}
     </tbody>
