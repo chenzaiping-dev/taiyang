@@ -105,9 +105,9 @@ class FinishedGoodsService:
     # ---------- 成品入库 ----------
     @staticmethod
     def create_inbound(
-        warehouse_id: int = None,       # 兼容旧的单仓调用；若 lines 里都带 warehouse_id 可省略
         lines: list,
         inbound_type: str = "PRODUCTION_IN",
+        warehouse_id: int = None,       # 兼容旧的单仓调用；若 lines 里都带 warehouse_id 可省略
         document_no: str = None,
         document_time: datetime = None,
         created_by: int = None,

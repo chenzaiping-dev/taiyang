@@ -337,7 +337,7 @@ def update_submit(order_id: int):
             render_template(
                 "process_order/form.html",
                 **ctx, form_data=fd, errors=[str(e)],
-                mode="edit", order_id=order_id, order=order,
+                mode="edit", order_id=order_id, order=order, status_labels=PO_STATUS_LABELS,
             ),
             400,
         )
