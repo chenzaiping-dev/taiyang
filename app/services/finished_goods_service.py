@@ -105,7 +105,7 @@ class FinishedGoodsService:
     # ---------- 成品入库 ----------
     @staticmethod
     def create_inbound(
-        warehouse_id: int,
+        warehouse_id: int = None,       # 兼容旧的单仓调用；若 lines 里都带 warehouse_id 可省略
         lines: list,
         inbound_type: str = "PRODUCTION_IN",
         document_no: str = None,
@@ -131,12 +131,6 @@ class FinishedGoodsService:
         else:
             if inbound_type not in FG_INBOUND_TYPE_LABELS:
                 raise FinishedGoodsError(f"不支持的入库类型: {inbound_type}")
-
-        wh = db.session.get(Warehouse, warehouse_id)
-        if not wh or wh.status != 1:
-            raise FinishedGoodsError("仓库不存在或停用")
-        if wh.warehouse_type not in ("finished_goods", "general"):
-            raise FinishedGoodsError("成品入库必须选择成品仓或普通仓")
 
         if not lines:
             raise FinishedGoodsError("入库明细不能为空")
@@ -167,6 +161,16 @@ class FinishedGoodsService:
             qty = _q6(l["quantity"])
             if qty <= 0:
                 raise FinishedGoodsError(f"第 {idx} 行数量必须 > 0")
+
+            wh_id = int(l.get("warehouse_id") or warehouse_id or 0)
+            if not wh_id:
+                raise FinishedGoodsError(f"第 {idx} 行缺少仓库ID")
+
+            wh = db.session.get(Warehouse, wh_id)
+            if not wh or wh.status != 1:
+                raise FinishedGoodsError(f"第 {idx} 行仓库不存在或停用")
+            if wh.warehouse_type not in ("finished_goods", "general"):
+                raise FinishedGoodsError(f"第 {idx} 行仓库不是成品仓")
 
             # 找/建批次
             batch = None
@@ -232,8 +236,8 @@ class FinishedGoodsService:
                 document_id=document.id,
                 line_no=idx,
                 batch_id=batch.id,
-                from_warehouse_id=None,
-                to_warehouse_id=warehouse_id,
+                from_warehouse_id=None,       # ⭐ 每行的仓库
+                to_warehouse_id=wh_id,
                 quantity=qty,
                 unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else None,
                 remark=l.get("remark"),
@@ -244,7 +248,7 @@ class FinishedGoodsService:
 
             if auto_confirm:
                 FinishedGoodsService._apply_delta(
-                    warehouse_id=warehouse_id, batch_id=batch.id,
+                    warehouse_id=wh_id, batch_id=batch.id,
                     delta=qty, document=document, line=line,
                     tx_type=inbound_type, tx_time=doc_time,
                 )
@@ -253,6 +257,7 @@ class FinishedGoodsService:
                 "line_id": line.id,
                 "batch_id": batch.id,
                 "batch_no": batch.batch_no,
+                "warehouse_id": wh_id,
                 "quantity": str(qty),
             })
 
@@ -848,6 +853,7 @@ class FinishedGoodsService:
             # 出库单的废弃 → 生成一张入库
             in_lines = [
                 {
+                    "warehouse_id": l.from_warehouse_id,
                     "batch_id": l.batch_id,
                     "quantity": str(l.quantity),
                     "remark": reverse_remark,
@@ -855,7 +861,6 @@ class FinishedGoodsService:
                 for l in lines
             ]
             result = FinishedGoodsService.create_inbound(
-                warehouse_id=first.from_warehouse_id,
                 lines=in_lines,
                 document_no=f"OUTREV-{doc.document_no}",
                 inbound_type="OUT_REVERSE",       # ⭐ 出库撤销
