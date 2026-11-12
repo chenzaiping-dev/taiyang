@@ -140,9 +140,9 @@ def _stock_rows_for_performance(performance_id, current_plan_id=None):
             (self_locked_subq.c.wh_id == FinishedGoodsInventory.warehouse_id)
             & (self_locked_subq.c.bt_id == FinishedGoodsInventory.batch_id),
         )
-    if perf.product_specification:
-        q = q.filter(FinishedGoodsBatch.product_specification
-                     == perf.product_specification)
+    #if perf.product_specification:
+    #    q = q.filter(FinishedGoodsBatch.product_specification
+    #                 == perf.product_specification)
 
     return [dict(r._mapping) for r in q.order_by(
         Warehouse.warehouse_code.asc(), FinishedGoodsBatch.batch_no.asc()
