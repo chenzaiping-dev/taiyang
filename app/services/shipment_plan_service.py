@@ -658,6 +658,6 @@ class ShipmentPlanService:
                 remaining_quantity=qty,
                 status="ACTIVE",
                 goods_type="STAPLE",
-                remark="取消发货计划还原预留",
+                remark="取消发货计划,还原预留",
                 created_at=now_beijing_naive(),
             ))

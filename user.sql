@@ -260,15 +260,13 @@ CREATE TABLE sales_performance (
 
     status ENUM(
         'DRAFT',
-        'SUBMITTED',
-        'PRODUCTION_PLANNED',
-        'FINISHED_GOODS_STOCKED',
-        'SHIPMENT_SCHEDULED',
+        'CONFIRMED',
+        'PRODUCED',
+        'SHIPPED',
         'COMPLETED',
         'CANCELLED'
-    ) NOT NULL DEFAULT 'DRAFT' COMMENT '业绩单状态: DRAFT草稿, SUBMITTED已提交, PRODUCTION_PLANNED生产计划中,
-        FINISHED_GOODS_STOCKED成品已入库, SHIPMENT_SCHEDULED发货已排程,
-        COMPLETED已完成, CANCELLED已取消',
+    ) NOT NULL DEFAULT 'DRAFT' COMMENT '业绩单状态: DRAFT草稿, CONFIRMED已确认, PRODUCED已生产,
+        SHIPPED已发货, COMPLETED已完成, CANCELLED已取消',
 
     remark VARCHAR(1000) NULL COMMENT '备注',
 
@@ -1126,7 +1124,7 @@ INSERT INTO inventory_documents
      created_at, confirmed_at)
 VALUES
     ('PI-DRAFT-CK1001-1002-001', 'PURCHASE_IN', NOW(), 'DRAFT',
-     '初始草稿：金坛仓库2 原料入库（供应商1）',
+     '初始草稿：金坛仓库1 原料入库（供应商1）',
      NOW(), NULL);
 
 SET @doc := LAST_INSERT_ID();
@@ -1137,6 +1135,32 @@ INSERT INTO inventory_transactions
      supplier_id, process_order_id, warehouse_id, created_at)
 VALUES
     (@doc, 1, 1, 'PURCHASE_IN', NOW(), 1000.0000, 10.0000, 10000.0000,
+     1, NULL, 1, NOW()),
+    (@doc, 2, 2, 'PURCHASE_IN', NOW(), 2000.0000,  8.5000, 17000.0000,
+     1, NULL, 1, NOW()),
+    (@doc, 3, 3, 'PURCHASE_IN', NOW(), 1500.0000,  9.0000, 13500.0000,
+     1, NULL, 1, NOW()),
+    (@doc, 4, 4, 'PURCHASE_IN', NOW(), 3000.0000, 11.5000, 34500.0000,
+     1, NULL, 1, NOW()),
+    (@doc, 5, 5, 'PURCHASE_IN', NOW(), 3000.0000, 11.5000, 34500.0000,
+     1, NULL, 1, NOW());
+
+INSERT INTO inventory_documents
+    (document_no, document_type, document_time, status, remark,
+     created_at, confirmed_at)
+VALUES
+    ('PI-DRAFT-CK1002-1002-001', 'PURCHASE_IN', NOW(), 'DRAFT',
+     '初始草稿：金坛仓库2 原料入库（供应商1）',
+     NOW(), NULL);
+
+SET @doc := LAST_INSERT_ID();
+
+INSERT INTO inventory_transactions
+    (document_id, line_no, material_id, transaction_type,
+     transaction_time, quantity_delta, unit_cost, total_cost,
+     supplier_id, process_order_id, warehouse_id, created_at)
+VALUES
+    (@doc, 1, 1, 'PURCHASE_IN', NOW(), 3000.0000, 10.0000, 30000.0000,
      1, NULL, 2, NOW()),
     (@doc, 2, 2, 'PURCHASE_IN', NOW(), 2000.0000,  8.5000, 17000.0000,
      1, NULL, 2, NOW()),

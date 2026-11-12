@@ -4,8 +4,17 @@
 <h2>
   业绩单详情
   <span style="color:#888;font-size:14px;">#{{ perf.performance_no }}</span>
-  <a class="btn" style="float:right;"
-     href="{{ url_for('sales_performance.edit_page', perf_id=perf.id) }}">编辑</a>
+    {% if perf.status == 'CANCELLED' %}
+    <form method="post" style="float:right;margin-right:8px;"
+          action="{{ url_for('sales_performance.reopen', perf_id=perf.id) }}"
+          onsubmit="return confirm('确认重新打开为草稿？将复用已有生产/发货计划。');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-primary">重新编辑</button>
+    </form>
+  {% elif perf.status == 'DRAFT' %}
+    <a class="btn" style="float:right;margin-right:8px;"
+       href="{{ url_for('sales_performance.edit_page', perf_id=perf.id) }}">编辑</a>
+  {% endif %}
   <a class="btn" style="float:right;margin-right:8px;"
      href="{{ url_for('sales_performance.list_page') }}">返回列表</a>
 </h2>

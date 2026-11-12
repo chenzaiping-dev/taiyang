@@ -5,27 +5,11 @@ from flask import (
 from app.extensions import db
 from app.generated.models.employees import Employee
 from app.generated.models.sales_performance import SalesPerformance
-
-
 from app.services.sales_performance_service import (
-    SalesPerformanceService, SalesPerformanceError,
+    SalesPerformanceService, SalesPerformanceError, STATUS_LABELS, PAYMENT_LABELS,
 )
 
-bp = Blueprint("sales_performance", __name__,
-               url_prefix="/sales-performances")
-
-STATUS_LABELS = {
-    "DRAFT": "草稿",
-    "SUBMITTED": "已提交",
-    "PRODUCTION_PLANNED": "生产计划中",
-    "FINISHED_GOODS_STOCKED": "成品已入库",
-    "SHIPMENT_SCHEDULED": "发货已排程",
-    "COMPLETED": "已完成",
-    "CANCELLED": "已取消",
-}
-
-PAYMENT_LABELS = {"UNPAID": "未收款", "PAID": "已收款"}
-
+bp = Blueprint("sales_performance", __name__, url_prefix="/sales-performances")
 
 def _parse_date(s):
     if not s:
@@ -266,15 +250,16 @@ def detail_page(perf_id):
 
 @bp.post("/<int:perf_id>/<action>")
 def change_status(perf_id, action):
-    if action not in ("submit", "stock_in", "ship", "complete", "cancel"):
+    # {'confirm', 'produce', 'ship', 'complete', 'cancel'}
+    if action not in ("confirm", "produce", "ship", "complete", "cancel"):
         abort(404)
     try:
         perf = SalesPerformanceService.change_status(
             perf_id, action, operator_id=1,
         )
         labels = {
-            "submit": "已提交",
-            "stock_in": "已标记生产入库，成本/利润已更新",
+            "confirm": "已确认",
+            "produce": "已生产",
             "ship": "已发货",
             "complete": "已完成",
             "cancel": "已取消",
@@ -286,4 +271,13 @@ def change_status(perf_id, action):
             flash(perf._cost_warning, "error")
     except SalesPerformanceError as e:
         flash(str(e), "error")
-    return redirect(request.referrer or url_for("sales_performance.list_page")) 
+    return redirect(request.referrer or url_for("sales_performance.list_page"))
+
+@bp.post("/<int:perf_id>/reopen")
+def reopen(perf_id):
+    try:
+        SalesPerformanceService.reopen(perf_id, operator_id=1)
+        flash("业绩单已重新打开为草稿，可继续编辑", "success")
+    except SalesPerformanceError as e:
+        flash(str(e), "error")
+    return redirect(request.referrer or url_for("sales_performance.list_page"))

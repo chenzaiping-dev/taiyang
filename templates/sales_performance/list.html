@@ -121,21 +121,21 @@
           {# ====== 主按钮：按状态确定 ====== #}
           {% if r.status == 'DRAFT' %}
             <form method="post" style="display:inline;"
-                  action="{{ url_for('sales_performance.change_status', perf_id=r.id, action='submit') }}"
+                  action="{{ url_for('sales_performance.change_status', perf_id=r.id, action='confirm') }}"
                   onsubmit="return confirm('确认提交该业绩单？');">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn btn-sm btn-primary">提交</button>
+              <button type="submit" class="btn btn-sm btn-primary">确认</button>
             </form>
 
-          {% elif r.status == 'SUBMITTED' %}
+          {% elif r.status == 'CONFIRMED' %}
             <form method="post" style="display:inline;"
-                  action="{{ url_for('sales_performance.change_status', perf_id=r.id, action='stock_in') }}"
-                  onsubmit="return confirm('确认生产入库？需生产计划已完成。');">
+                  action="{{ url_for('sales_performance.change_status', perf_id=r.id, action='produce') }}"
+                  onsubmit="return confirm('确认已下单生产？');">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn btn-sm btn-warn">生产入库</button>
+              <button type="submit" class="btn btn-sm btn-warn">生产</button>
             </form>
 
-          {% elif r.status == 'FINISHED_GOODS_STOCKED' %}
+          {% elif r.status == 'PRODUCED' %}
             <form method="post" style="display:inline;"
                   action="{{ url_for('sales_performance.change_status', perf_id=r.id, action='ship') }}"
                   onsubmit="return confirm('确认标记为已发货？');">
@@ -143,7 +143,7 @@
               <button type="submit" class="btn btn-sm btn-success">发货</button>
             </form>
 
-          {% elif r.status == 'SHIPMENT_SCHEDULED' %}
+          {% elif r.status == 'SHIPPED' %}
             <form method="post" style="display:inline;"
                   action="{{ url_for('sales_performance.change_status', perf_id=r.id, action='complete') }}"
                   onsubmit="return confirm('确认完成该业绩单？');">
@@ -151,12 +151,26 @@
               <button type="submit" class="btn btn-sm btn-primary">完成</button>
             </form>
 
+          {% elif r.status == 'COMPLETED' %}
+            <form method="post" style="display:inline;"
+                  action="{{ url_for('sales_performance.change_status', perf_id=r.id, action='cancel') }}"
+                  onsubmit="return confirm('已完成业绩单取消前，请确认是否要回滚发货计划/生产计划。确认取消？');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-danger">取消</button>
+            </form>
           {% else %}
             <span style="color:#bbb;">——</span>
           {% endif %}
 
           {# ====== 更多操作：下拉 ====== #}
-          {% if not is_done %}
+          {% if r.status == 'CANCELLED' %}
+            <form method="post" style="display:inline;"
+                  action="{{ url_for('sales_performance.reopen', perf_id=r.id) }}"
+                  onsubmit="return confirm('确认重新打开为草稿？将复用已有生产/发货计划。');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-primary">重新编辑</button>
+            </form>
+          {% elif not is_done %}
           <div class="op-more">
             <button type="button" class="op-more-btn" title="更多操作"
                     onclick="toggleOpMenu(this)">⋮</button>

@@ -2,44 +2,42 @@ from decimal import Decimal
 from datetime import date, datetime
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select, case, func, or_, exists
+from flask import flash
 
 from app.extensions import db
 from app.generated.models.employees import Employee
 from app.generated.models.sales_performance import SalesPerformance
 from app.generated.models.production_plans import ProductionPlan
 from app.generated.models.shipment_plans import ShipmentPlan
+from app.services.production_plan_service import PLAN_STATUS_LABELS
 from app.utils.datetime_utils import now_beijing_naive
 from app.utils.decimal_utils import _q3, _q6
 
-ALLOWED_STATUS = {"DRAFT", "SUBMITTED", "PRODUCTION_PLANNED",
-                  "FINISHED_GOODS_STOCKED", "SHIPMENT_SCHEDULED",
-                  "COMPLETED", "CANCELLED"}
-ALLOWED_PAYMENT = {"UNPAID", "PAID"}
+PAYMENT_LABELS = {"UNPAID": "未收款", "PAID": "已收款"}
 
 STATUS_ACTIONS = {
-    "submit": {
+    "confirm": {
         "from": {"DRAFT"},
-        "to": "SUBMITTED",
-        "label": "提交",
+        "to": "CONFIRMED",
+        "label": "确认",
     },
-    "stock_in": {
-        "from": {"SUBMITTED"},
-        "to": "FINISHED_GOODS_STOCKED",
-        "label": "生产入库",
+    "produce": {
+        "from": {"CONFIRMED"},
+        "to": "PRODUCED",
+        "label": "生产",
     },
     "ship": {
-        "from": {"FINISHED_GOODS_STOCKED"},
-        "to": "SHIPMENT_SCHEDULED",
+        "from": {"PRODUCED", "CONFIRMED"},
+        "to": "SHIPPED",
         "label": "发货",
     },
     "complete": {
-        "from": {"SHIPMENT_SCHEDULED"},
+        "from": {"SHIPPED"},
         "to": "COMPLETED",
         "label": "完成",
     },
     "cancel": {
-        "from": {"DRAFT", "SUBMITTED", "FINISHED_GOODS_STOCKED",
-                 "SHIPMENT_SCHEDULED"},
+        "from": {"DRAFT", "CONFIRMED", "PRODUCED", "SHIPPED", "COMPLETED"},
         "to": "CANCELLED",
         "label": "取消",
     },
@@ -47,10 +45,9 @@ STATUS_ACTIONS = {
 
 STATUS_LABELS = {
     "DRAFT": "草稿",
-    "SUBMITTED": "已提交",
-    "PRODUCTION_PLANNED": "生产计划中",
-    "FINISHED_GOODS_STOCKED": "成品已入库",
-    "SHIPMENT_SCHEDULED": "发货已排程",
+    "CONFIRMED": "已确认",
+    "PRODUCED": "已生产",
+    "SHIPPED": "已发货",
     "COMPLETED": "已完成",
     "CANCELLED": "已取消",
 }
@@ -72,11 +69,11 @@ class SalesPerformanceService:
             raise SalesPerformanceError("日期必填")
 
         status = data.get("status") or "DRAFT"
-        if status not in ALLOWED_STATUS:
+        if status not in STATUS_LABELS:
             raise SalesPerformanceError(f"非法状态: {status}")
 
         payment = data.get("payment_status") or "UNPAID"
-        if payment not in ALLOWED_PAYMENT:
+        if payment not in PAYMENT_LABELS:
             raise SalesPerformanceError(f"非法收款状态: {payment}")
 
         try:
@@ -327,7 +324,7 @@ class SalesPerformanceService:
                       operator_id: int = None) -> SalesPerformance:
         """
         统一状态流转入口。
-        action ∈ {'submit', 'stock_in', 'ship', 'complete', 'cancel'}
+        action ∈ {'confirm', 'produce', 'ship', 'complete', 'cancel'}
         """
         rule = STATUS_ACTIONS.get(action)
         if not rule:
@@ -344,20 +341,42 @@ class SalesPerformanceService:
             )
 
         # ⭐ 生产入库：额外校验生产计划状态
-        if action == "stock_in":
+        if action == "ship" and perf.is_changzhou_factory:
             plan = ProductionPlan.query.filter_by(
                 performance_id=perf.id
             ).first()
             if not plan:
                 raise SalesPerformanceError(
-                    "该业绩单没有关联的生产计划，无法执行生产入库"
+                    "该业绩单没有关联的生产计划，无法执行发货"
                 )
             if plan.status != "COMPLETED":
-                from app.services.production_plan_service import PLAN_STATUS_LABELS
                 plan_label = PLAN_STATUS_LABELS.get(plan.status, plan.status)
                 raise SalesPerformanceError(
                     f"生产计划【{plan.plan_no}】状态为【{plan_label}】，"
-                    f"必须为【已完成】才能执行生产入库"
+                    f"必须为【已完成】才能发货"
+                )
+        # 取消提示，不强制拦截，因为取消业绩单本身可能先于计划清理
+        if action == "cancel":
+            active_plan = ProductionPlan.query.filter(
+                ProductionPlan.performance_id == perf.id,
+                ProductionPlan.status.in_(["CONFIRMED", "IN_PROGRESS", "COMPLETED"]),
+            ).first()
+            if active_plan:
+                #raise SalesPerformanceError(
+                flash(
+                    f"关联生产计划【{active_plan.plan_no}】状态为"
+                    f"【{PLAN_STATUS_LABELS.get(active_plan.status, active_plan.status)}】，"
+                    f"请先取消生产计划再取消业绩单"
+                )
+            active_ship = ShipmentPlan.query.filter(
+                ShipmentPlan.performance_id == perf.id,
+                ShipmentPlan.status.in_(["CONFIRMED", "PARTIALLY_SHIPPED", "SHIPPED"]),
+            ).first()
+            if active_ship:
+                #raise SalesPerformanceError(
+                flash(
+                    f"存在未取消的发货计划【{active_ship.shipment_plan_no}】，"
+                    f"请先取消发货计划再取消业绩单"
                 )
 
         # ============ 状态切换 ============
@@ -370,4 +389,55 @@ class SalesPerformanceService:
             db.session.rollback()
             raise SalesPerformanceError(f"状态更新失败: {e}")
 
+        return perf
+
+    @staticmethod
+    def reopen(perf_id: int, operator_id: int = None) -> SalesPerformance:
+        """
+        CANCELLED → DRAFT，允许重新编辑并重走流程。
+        前置：关联的生产计划/发货计划必须已处于可复用状态，
+        否则会造成状态与库存不一致。不新建任何计划。
+        """
+        perf = db.session.get(SalesPerformance, perf_id)
+        if not perf:
+            raise SalesPerformanceError("业绩单不存在")
+        if perf.status != "CANCELLED":
+            raise SalesPerformanceError(
+                f"当前状态【{STATUS_LABELS.get(perf.status, perf.status)}】"
+                f"不允许重新编辑，仅已取消可重新编辑"
+            )
+
+        # 1. 生产计划：只允许不存在，或状态为 CANCELLED / DRAFT
+        plan = ProductionPlan.query.filter_by(performance_id=perf.id).first()
+        if plan and plan.status not in ("DRAFT", "CANCELLED"):
+            raise SalesPerformanceError(
+                f"关联生产计划【{plan.plan_no}】状态为"
+                f"【{PLAN_STATUS_LABELS.get(plan.status, plan.status)}】，"
+                f"请先在计划页取消/处理后再重新编辑业绩单"
+            )
+
+        # 2. 发货计划：允许不存在，或全部为 CANCELLED
+        active_shipments = (
+            ShipmentPlan.query
+            .filter(
+                ShipmentPlan.performance_id == perf.id,
+                ShipmentPlan.status != "CANCELLED",
+            )
+            .all()
+        )
+        if active_shipments:
+            nos = "、".join(p.shipment_plan_no for p in active_shipments)
+            raise SalesPerformanceError(
+                f"存在未取消的发货计划：{nos}，"
+                f"请先取消发货计划后再重新编辑业绩单"
+            )
+
+        perf.status = "DRAFT"
+        perf.updated_by = operator_id
+        perf.updated_at = now_beijing_naive()
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            raise SalesPerformanceError(f"重新编辑失败: {e}")
         return perf
