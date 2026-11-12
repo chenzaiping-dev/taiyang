@@ -11,6 +11,7 @@ from app.services.inventory_service import (
     PurchaseInService, StockOutService, InventoryError, 
     INBOUND_TYPE_LABELS, OUTBOUND_TYPE_LABELS, _rm_warehouses
 )
+from app.utils.datetime_utils import util_parse_date
 
 bp = Blueprint("inventory_query", __name__, url_prefix="/inventory")
 
@@ -153,16 +154,8 @@ def material_io_summary_page():
     date_from_raw = request.args.get("date_from", "").strip() or None
     date_to_raw = request.args.get("date_to", "").strip() or None
 
-    def _parse_date(s):
-        if not s:
-            return None
-        try:
-            return datetime.strptime(s, "%Y-%m-%d")
-        except ValueError:
-            return None
-
-    date_from = _parse_date(date_from_raw)
-    date_to = _parse_date(date_to_raw)
+    date_from = util_parse_date(date_from_raw)
+    date_to = util_parse_date(date_to_raw)
 
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 50
@@ -239,16 +232,8 @@ def material_transactions_page():
     date_from_raw = request.args.get("date_from", "").strip() or None
     date_to_raw = request.args.get("date_to", "").strip() or None
 
-    def _parse_date(s):
-        if not s:
-            return None
-        try:
-            return datetime.strptime(s, "%Y-%m-%d")
-        except ValueError:
-            return None
-
-    date_from = _parse_date(date_from_raw)
-    date_to = _parse_date(date_to_raw)
+    date_from = util_parse_date(date_from_raw)
+    date_to = util_parse_date(date_to_raw)
 
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 50
@@ -281,17 +266,6 @@ def material_transactions_page():
         document_types=DOC_TYPE_LABELS,
     )
 
-# ==================== 通用状态/类型标签 ====================
-
-def _parse_date(s):
-    if not s:
-        return None
-    try:
-        return datetime.strptime(s, "%Y-%m-%d")
-    except ValueError:
-        return None
-
-
 # ==================== 通用列表 ====================
 @bp.get("/documents/<direction>")
 def document_list_page(direction):
@@ -317,8 +291,8 @@ def document_list_page(direction):
         keyword=keyword, status=status,
         inbound_type=inbound_type,
         outbound_type=outbound_type,
-        date_from=_parse_date(date_from_raw),
-        date_to=_parse_date(date_to_raw),
+        date_from=util_parse_date(date_from_raw),
+        date_to=util_parse_date(date_to_raw),
         page=page, page_size=page_size,
     )
     total_pages = max((total + page_size - 1) // page_size, 1)

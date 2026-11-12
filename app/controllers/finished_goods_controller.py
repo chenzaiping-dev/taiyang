@@ -17,6 +17,7 @@ from app.services.finished_goods_service import (
     FinishedGoodsError, FinishedGoodsService, FG_INBOUND_TYPE_LABELS, FG_OUTBOUND_TYPE_LABELS,
     FG_TX_TYPE_LABELS, FG_TRANSACTION_TYPE_DIRECTION
 )
+from app.utils.datetime_utils import util_parse_date
 
 bp = Blueprint("finished_goods", __name__, url_prefix="/finished-goods")
 
@@ -343,22 +344,14 @@ def transactions_page():
     date_from_raw = request.args.get("date_from", "").strip() or None
     date_to_raw = request.args.get("date_to", "").strip() or None
 
-    def _parse_date(s):
-        if not s:
-            return None
-        try:
-            return datetime.strptime(s, "%Y-%m-%d")
-        except ValueError:
-            return None
-
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 50
 
     rows, total = FinishedGoodsQueryService.list_transactions(
         warehouse_id=warehouse_id, batch_keyword=keyword,
         tx_type=tx_type, document_no=document_no,
-        date_from=_parse_date(date_from_raw),
-        date_to=_parse_date(date_to_raw),
+        date_from=util_parse_date(date_from_raw),
+        date_to=util_parse_date(date_to_raw),
         page=page, page_size=page_size,
     )
     total_pages = max((total + page_size - 1) // page_size, 1)
@@ -389,22 +382,14 @@ def io_summary_page():
     if group_by not in ("batch", "product"):
         group_by = "batch"
 
-    def _parse_date(s):
-        if not s:
-            return None
-        try:
-            return datetime.strptime(s, "%Y-%m-%d")
-        except ValueError:
-            return None
-
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 50
 
     rows, total = FinishedGoodsQueryService.query_io_summary(
         warehouse_id=warehouse_id,
         batch_keyword=batch_keyword,
-        date_from=_parse_date(date_from_raw),
-        date_to=_parse_date(date_to_raw),
+        date_from=util_parse_date(date_from_raw),
+        date_to=util_parse_date(date_to_raw),
         group_by=group_by,
         page=page, page_size=page_size,
     )
@@ -441,22 +426,14 @@ def document_list_page(direction):
     page_size = 50
     print(status, inbound_type, outbound_type)
 
-    def _parse_date(s):
-        if not s:
-            return None
-        try:
-            return datetime.strptime(s, "%Y-%m-%d")
-        except ValueError:
-            return None
-
     rows, total = FinishedGoodsQueryService.list_fg_documents(
         direction=direction_code,
         keyword=keyword, status=status,
         inbound_type=inbound_type,
         outbound_type=outbound_type,
         warehouse_id=warehouse_id,
-        date_from=_parse_date(date_from_raw),
-        date_to=_parse_date(date_to_raw),
+        date_from=util_parse_date(date_from_raw),
+        date_to=util_parse_date(date_to_raw),
         page=page, page_size=page_size,
     )
     total_pages = max((total + page_size - 1) // page_size, 1)

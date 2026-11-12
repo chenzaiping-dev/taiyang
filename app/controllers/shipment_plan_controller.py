@@ -14,9 +14,8 @@ from app.generated.models.finished_goods_reservations import FinishedGoodsReserv
 from app.generated.models.shipment_plans import ShipmentPlan
 from app.generated.models.shipment_plan_lines import ShipmentPlanLine
 from app.generated.models.shipment_plan_allocations import ShipmentPlanAllocation
-from app.utils.datetime_utils import now_beijing
+from app.utils.datetime_utils import util_parse_date
 from app.services.shipment_plan_service import ShipmentPlanService, ShipmentPlanError
-
 
 bp = Blueprint("shipment_plan", __name__, url_prefix="/shipment-plans")
 
@@ -268,26 +267,8 @@ def list_page():
     page_size = 20
 
     from sqlalchemy import func, select, or_
-    from datetime import datetime, timedelta
-
-    def _parse_dt_start(s):
-        if not s:
-            return None
-        try:
-            return datetime.strptime(s, "%Y-%m-%d")
-        except ValueError:
-            return None
-
-    def _parse_dt_end(s):
-        if not s:
-            return None
-        try:
-            return datetime.strptime(s, "%Y-%m-%d") + timedelta(days=1)
-        except ValueError:
-            return None
-
-    ship_from = _parse_dt_start(ship_time_from_raw)
-    ship_to = _parse_dt_end(ship_time_to_raw)   # 含结束日
+    date_from = util_parse_date(ship_time_from_raw)
+    date_to = util_parse_date(ship_time_to_raw)   # 含结束日
 
     # 已发货数量：每个计划的总和
     shipped_subq = (
@@ -332,10 +313,10 @@ def list_page():
         base = base.where(SalesPerformance.company_name.like(f"%{company_name}%"))
     if product_name:
         base = base.where(SalesPerformance.product_name.like(f"%{product_name}%"))
-    if ship_from:
-        base = base.where(ShipmentPlan.planned_ship_time >= ship_from)
-    if ship_to:
-        base = base.where(ShipmentPlan.planned_ship_time < ship_to)
+    if date_from:
+        base = base.where(ShipmentPlan.planned_ship_time >= date_from)
+    if date_to:
+        base = base.where(ShipmentPlan.planned_ship_time < date_to)
 
     total = db.session.execute(
         select(func.count()).select_from(base.subquery())

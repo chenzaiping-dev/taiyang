@@ -252,8 +252,8 @@ class SalesPerformanceService:
     # ---------- 列表 ----------
     @staticmethod
     def list_performances(keyword=None, status=None, payment_status=None,
+                          date_from=None, date_to=None, salesperson_id=None,
                           page=1, page_size=20):
-        from sqlalchemy import select, func, or_
         creator = db.aliased(Employee)
         sales = db.aliased(Employee)
         co_sales = db.aliased(Employee)
@@ -310,6 +310,19 @@ class SalesPerformanceService:
             base = base.where(SalesPerformance.status == status)
         if payment_status:
             base = base.where(SalesPerformance.payment_status == payment_status)
+
+        # ⭐ 时间跨度（按业绩日期）
+        if date_from:
+            base = base.where(SalesPerformance.performance_date >= date_from)
+        if date_to:
+            base = base.where(SalesPerformance.performance_date < date_to)
+
+        # ⭐ 销售员：主/副任一命中
+        if salesperson_id:
+            base = base.where(or_(
+                SalesPerformance.main_salesperson_id == salesperson_id,
+                SalesPerformance.co_salesperson_id == salesperson_id,
+            ))
 
         total = db.session.execute(
             select(func.count()).select_from(base.subquery())

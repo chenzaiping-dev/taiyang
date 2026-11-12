@@ -21,6 +21,19 @@
         {% if payment_status == code %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
   </select>
+  <select name="salesperson_id">
+    <option value="">-- 全部销售员 --</option>
+    {% for e in employees %}
+      <option value="{{ e.id }}"
+        {% if salesperson_id|string == e.id|string %}selected{% endif %}>
+        {{ e.real_name }} ({{ e.username }})
+      </option>
+    {% endfor %}
+  </select>
+  <label style="font-size:12px;color:#666;">
+    从 <input type="date" name="date_from" value="{{ date_from }}">
+    到 <input type="date" name="date_to" value="{{ date_to }}">
+  </label>
   <button type="submit" class="btn btn-primary">查询</button>
   <a class="btn" href="{{ url_for('sales_performance.list_page') }}">重置</a>
   <a class="btn btn-primary" style="float:right;"
@@ -32,24 +45,24 @@
     <tr style="background:#f5f5f5;">
       <th style="width:20px;">ID</th>
       <th>业绩单号</th>
-      <th style="width:120px;text-align:right;">公司名称</th>
-      <th style="width:120px;text-align:right;">产品名称</th>
+      <th style="width:100px;text-align:right;">公司名称</th>
+      <th style="width:130px;text-align:right;">产品名称</th>
       <th>规格</th>
-      <th style="width:90px;text-align:right;">数量</th>
-      <th style="width:40px;">单位</th>
-      <th style="width:100px;text-align:right;">单价</th>
-      <th style="width:100px;text-align:right;">金额</th>
-      <th style="width:100px;text-align:right;">成本</th>
-      <th style="width:100px;text-align:right;">利润</th>
-      <th style="width:80px;text-align:right;">主销售</th>
-      <th style="width:50px;text-align:right;">是否共同销售</th>
-      <th style="width:80px;text-align:right;">副销售</th>
+      <th style="width:60px;text-align:right;">数量</th>
+      <th style="width:20px;">单位</th>
+      <th style="width:50px;text-align:right;">单价</th>
+      <th style="width:60px;text-align:right;">金额</th>
+      <th style="width:60px;text-align:right;">成本</th>
+      <th style="width:60px;text-align:right;">利润</th>
+      <th style="width:60px;text-align:right;">主销售</th>
+      <th style="width:40px;text-align:right;">是否共同销售</th>
+      <th style="width:60px;text-align:right;">副销售</th>
       <th style="width:40px;text-align:right;">走常州工厂</th>
-      <th style="width:60px;text-align:right;">期待发货日期</th>
-      <th style="width:50px;">收款状态</th>
+      <th style="width:80px;text-align:right;">期待发货日期</th>
+      <th style="width:60px;">收款状态</th>
       <th style="width:100px;">创建时间</th>
       <th style="width:100px;">创建计划</th>
-      <th style="width:70px;">状态</th>
+      <th style="width:40px;">状态</th>
       <th style="width:100px;">操作</th>
     </tr>
   </thead>
@@ -234,11 +247,15 @@
   {% if page > 1 %}
     <a class="btn" href="{{ url_for('sales_performance.list_page',
          keyword=keyword, status=status, payment_status=payment_status,
+         date_from=date_from, date_to=date_to,
+         salesperson_id=salesperson_id,
          page=page-1) }}">上一页</a>
   {% endif %}
   {% if page < total_pages %}
     <a class="btn" href="{{ url_for('sales_performance.list_page',
          keyword=keyword, status=status, payment_status=payment_status,
+         date_from=date_from, date_to=date_to,
+         salesperson_id=salesperson_id,
          page=page+1) }}">下一页</a>
   {% endif %}
 </div>

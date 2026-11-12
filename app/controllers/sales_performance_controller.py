@@ -10,17 +10,9 @@ from app.generated.models.shipment_plans import ShipmentPlan
 from app.services.sales_performance_service import (
     SalesPerformanceService, SalesPerformanceError, STATUS_LABELS, PAYMENT_LABELS,
 )
+from app.utils.datetime_utils import util_parse_date
 
 bp = Blueprint("sales_performance", __name__, url_prefix="/sales-performances")
-
-def _parse_date(s):
-    if not s:
-        return None
-    try:
-        return datetime.strptime(s, "%Y-%m-%d").date()
-    except ValueError:
-        return None
-
 
 def _parse_form(form):
     def fnum(k):
@@ -34,7 +26,7 @@ def _parse_form(form):
     return {
         # ⭐ 不再读取 performance_no
         "sales_order_no": form.get("sales_order_no", "").strip() or None,
-        "performance_date": _parse_date(form.get("performance_date", "")),
+        "performance_date": util_parse_date(form.get("performance_date", "")),
         "company_name": form.get("company_name", "").strip(),
         "product_name": form.get("product_name", "").strip(),
         "product_specification":
@@ -51,7 +43,7 @@ def _parse_form(form):
         "is_joint_sales": form.get("is_joint_sales") == "on",
         "co_salesperson_id": fint("co_salesperson_id"),
         "expected_delivery_date":
-            _parse_date(form.get("expected_delivery_date", "")),
+            util_parse_date(form.get("expected_delivery_date", "")),
         "status": form.get("status", "DRAFT"),
         "remark": form.get("remark", "").strip() or None,
     }
@@ -93,12 +85,20 @@ def list_page():
     keyword = request.args.get("keyword", "").strip() or None
     status = request.args.get("status", "").strip() or None
     payment_status = request.args.get("payment_status", "").strip() or None
+    date_from_raw = request.args.get("date_from", "").strip() or None
+    date_to_raw = request.args.get("date_to", "").strip() or None
+    sp_raw = request.args.get("salesperson_id", "").strip()
+    salesperson_id = int(sp_raw) if sp_raw.isdigit() else None
+
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 20
 
     rows, total = SalesPerformanceService.list_performances(
         keyword=keyword, status=status,
         payment_status=payment_status,
+        date_from=util_parse_date(date_from_raw),
+        date_to=util_parse_date(date_to_raw),
+        salesperson_id=salesperson_id,
         page=page, page_size=page_size,
     )
     total_pages = max((total + page_size - 1) // page_size, 1)
@@ -110,6 +110,10 @@ def list_page():
         keyword=keyword or "",
         status=status or "",
         payment_status=payment_status or "",
+        date_from=date_from_raw or "",
+        date_to=date_to_raw or "",
+        salesperson_id=salesperson_id or "",
+        employees=_employees(),          # ⭐ 销售员下拉用
         status_labels=STATUS_LABELS,
         payment_labels=PAYMENT_LABELS,
     )

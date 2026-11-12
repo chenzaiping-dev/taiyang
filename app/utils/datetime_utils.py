@@ -17,3 +17,11 @@ def to_beijing_str(dt, fmt="%Y-%m-%d %H:%M:%S") -> str:
     if dt is None:
         return ""
     return dt.strftime(fmt)
+
+def util_parse_date(s):
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s, "%Y-%m-%d")
+    except ValueError:
+        return None
