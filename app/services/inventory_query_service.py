@@ -296,6 +296,9 @@ class InventoryQueryService:
         if date_to:
             filters.append(InventoryTransaction.transaction_time < date_to)
 
+        # ⭐ 只统计已确认单据，排除 DRAFT / CANCELLED
+        filters.append(InventoryDocument.status == "CONFIRMED")
+
         # 汇总列
         cols = [
             InventoryTransaction.material_id,
@@ -351,6 +354,8 @@ class InventoryQueryService:
         stmt = (
             select(*cols)
             .join(Material, Material.id == InventoryTransaction.material_id)
+            .join(InventoryDocument,
+                  InventoryDocument.id == InventoryTransaction.document_id)   # ⭐ 新增
         )
         if warehouse_id:
             stmt = stmt.join(
@@ -433,6 +438,10 @@ class InventoryQueryService:
         )
 
         filters = []
+        # ⭐ 只统计已确认单据，排除 DRAFT / CANCELLED
+        filters.append(InventoryDocument.status == "CONFIRMED")
+        #filters.append(InventoryDocument.status != "DRAFT")
+
         if material_code:
             like = f"%{material_code}%"
             filters.append(or_(

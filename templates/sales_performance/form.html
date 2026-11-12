@@ -143,13 +143,14 @@
   <fieldset>
     <legend>状态与备注</legend>
     <div class="form-row">
-      <label>状态</label>
-      <select name="status">
+      <label for="status">状态</label>
+      <select id="status" disabled style="background:#eee;color:#666;">
         {% for code, label in status_labels.items() %}
           <option value="{{ code }}"
             {% if form_data.status == code %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
+      <input type="hidden" name="status" value="{{ form_data.status }}">
     </div>
     <div class="form-row">
       <label>备注</label>

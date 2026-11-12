@@ -7,20 +7,6 @@
       style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
   <input type="text" name="keyword" value="{{ keyword }}"
          placeholder="编号/公司/产品" maxlength="100">
-  <select name="status">
-    <option value="">-- 全部状态 --</option>
-    {% for code, label in status_labels.items() %}
-      <option value="{{ code }}"
-        {% if status == code %}selected{% endif %}>{{ label }}</option>
-    {% endfor %}
-  </select>
-  <select name="payment_status">
-    <option value="">-- 全部收款状态 --</option>
-    {% for code, label in payment_labels.items() %}
-      <option value="{{ code }}"
-        {% if payment_status == code %}selected{% endif %}>{{ label }}</option>
-    {% endfor %}
-  </select>
   <select name="salesperson_id">
     <option value="">-- 全部销售员 --</option>
     {% for e in employees %}
@@ -28,6 +14,20 @@
         {% if salesperson_id|string == e.id|string %}selected{% endif %}>
         {{ e.real_name }} ({{ e.username }})
       </option>
+    {% endfor %}
+  </select>
+  <select name="payment_status">
+    <option value="">-- 收款状态 --</option>
+    {% for code, label in payment_labels.items() %}
+      <option value="{{ code }}"
+        {% if payment_status == code %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <select name="status">
+    <option value="">-- 全部状态 --</option>
+    {% for code, label in status_labels.items() %}
+      <option value="{{ code }}"
+        {% if status == code %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
   </select>
   <label style="font-size:12px;color:#666;">

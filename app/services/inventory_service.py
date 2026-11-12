@@ -703,7 +703,9 @@ class StockOutService:
             raise InventoryError(f"单据状态不为草稿，当前: {doc.status}")
 
         doc.status = "CONFIRMED"
-        doc.confirmed_at = now_beijing_naive()
+        doc_time = now_beijing_naive()
+        doc.confirmed_at = doc_time
+        doc.document_time = doc_time
 
         txs = (
             InventoryTransaction.query
@@ -733,6 +735,8 @@ class StockOutService:
         for tx in txs:
             if tx.quantity_delta >= 0:
                 continue  # 只处理出库行
+            # 对于草稿后才confirm的提交，更新流水时间
+            tx.transaction_time = doc_time
             qty = -tx.quantity_delta
             result = StockOutService._consume_fifo(
                 warehouse_id=tx.warehouse_id,
