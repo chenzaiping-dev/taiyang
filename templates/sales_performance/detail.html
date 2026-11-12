@@ -114,14 +114,28 @@
 <fieldset>
   <legend>关联计划</legend>
   <div style="display:flex;gap:12px;flex-wrap:wrap;">
+    {% if production_plan %}
+    <a class="btn btn-primary"
+       href="{{ url_for('production_plan.detail_page', plan_id=production_plan.id) }}">
+      + 生产计划
+    </a>
+    {% else %}
     <a class="btn btn-primary"
        href="{{ url_for('production_plan.new_page', performance_id=perf.id) }}">
       + 生产计划
     </a>
+    {% endif %}
+    {% if shipment_plan %}
     <a class="btn btn-success"
        href="{{ url_for('shipment_plan.list_page', performance_id=perf.id) }}">
       发货计划
     </a>
+    {% else %}
+    <a class="btn btn-success"
+       href="{{ url_for('shipment_plan.new_page', performance_id=perf.id) }}">
+      发货计划
+    </a>
+    {% endif %}
   </div>
 </fieldset>
 

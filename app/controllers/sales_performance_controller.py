@@ -5,6 +5,8 @@ from flask import (
 from app.extensions import db
 from app.generated.models.employees import Employee
 from app.generated.models.sales_performance import SalesPerformance
+from app.generated.models.production_plans import ProductionPlan
+from app.generated.models.shipment_plans import ShipmentPlan
 from app.services.sales_performance_service import (
     SalesPerformanceService, SalesPerformanceError, STATUS_LABELS, PAYMENT_LABELS,
 )
@@ -239,6 +241,9 @@ def detail_page(perf_id):
     co_sales = (db.session.get(Employee, perf.co_salesperson_id)
                 if perf.co_salesperson_id else None)
 
+    production_plan = ProductionPlan.query.filter_by(performance_id=perf_id).first()
+    shipment_plan = ShipmentPlan.query.filter_by(performance_id=perf_id).first()
+
     return render_template(
         "sales_performance/detail.html",
         perf=perf,
@@ -246,6 +251,8 @@ def detail_page(perf_id):
         co_sales=co_sales,
         status_labels=STATUS_LABELS,
         payment_labels=PAYMENT_LABELS,
+        production_plan=production_plan,
+        shipment_plan=shipment_plan,
     )
 
 @bp.post("/<int:perf_id>/<action>")

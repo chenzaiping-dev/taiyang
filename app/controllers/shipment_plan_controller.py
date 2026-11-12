@@ -14,11 +14,9 @@ from app.generated.models.finished_goods_reservations import FinishedGoodsReserv
 from app.generated.models.shipment_plans import ShipmentPlan
 from app.generated.models.shipment_plan_lines import ShipmentPlanLine
 from app.generated.models.shipment_plan_allocations import ShipmentPlanAllocation
-
 from app.utils.datetime_utils import now_beijing
-
 from app.services.shipment_plan_service import ShipmentPlanService, ShipmentPlanError
-#from app.services.shipment_query_service import ShipmentQueryService
+
 
 bp = Blueprint("shipment_plan", __name__, url_prefix="/shipment-plans")
 
@@ -249,6 +247,10 @@ def list_page():
     keyword = request.args.get("keyword", "").strip() or None
     status = request.args.get("status", "").strip() or None
     perf_raw = request.args.get("performance_id", "").strip()
+    company_name = request.args.get("company_name", "").strip() or None
+    product_name = request.args.get("product_name", "").strip() or None
+    ship_time_from_raw = request.args.get("ship_time_from", "").strip() or None
+    ship_time_to_raw = request.args.get("ship_time_to", "").strip() or None
 
     # ⭐ 支持两种输入：数字 → 直接当 ID；非数字 → 按业绩单号反查
     performance_id = None
@@ -266,6 +268,27 @@ def list_page():
     page_size = 20
 
     from sqlalchemy import func, select, or_
+    from datetime import datetime, timedelta
+
+    def _parse_dt_start(s):
+        if not s:
+            return None
+        try:
+            return datetime.strptime(s, "%Y-%m-%d")
+        except ValueError:
+            return None
+
+    def _parse_dt_end(s):
+        if not s:
+            return None
+        try:
+            return datetime.strptime(s, "%Y-%m-%d") + timedelta(days=1)
+        except ValueError:
+            return None
+
+    ship_from = _parse_dt_start(ship_time_from_raw)
+    ship_to = _parse_dt_end(ship_time_to_raw)   # 含结束日
+
     # 已发货数量：每个计划的总和
     shipped_subq = (
         select(
@@ -282,9 +305,11 @@ def list_page():
             ShipmentPlan.id,
             ShipmentPlan.shipment_plan_no,
             ShipmentPlan.performance_id,
-            SalesPerformance.performance_no,          # ⭐
+            SalesPerformance.performance_no,
+            SalesPerformance.company_name,                 # ⭐ 公司名
             SalesPerformance.product_name.label("product_name"),
             ShipmentPlan.destination,
+            ShipmentPlan.planned_ship_time,                # ⭐ 计划发货时间
             ShipmentPlan.status,
             ShipmentPlan.created_at,
             func.coalesce(shipped_subq.c.total_planned, 0).label("planned_qty"),
@@ -303,6 +328,14 @@ def list_page():
         base = base.where(ShipmentPlan.status == status)
     if performance_id:
         base = base.where(ShipmentPlan.performance_id == performance_id)
+    if company_name:
+        base = base.where(SalesPerformance.company_name.like(f"%{company_name}%"))
+    if product_name:
+        base = base.where(SalesPerformance.product_name.like(f"%{product_name}%"))
+    if ship_from:
+        base = base.where(ShipmentPlan.planned_ship_time >= ship_from)
+    if ship_to:
+        base = base.where(ShipmentPlan.planned_ship_time < ship_to)
 
     total = db.session.execute(
         select(func.count()).select_from(base.subquery())
@@ -318,7 +351,11 @@ def list_page():
         keyword=keyword or "",
         status=status or "",
         performance_id=performance_id or "",
-        performance_id_raw=perf_raw or "",       # ⭐ 原始输入，用于回显
+        performance_id_raw=perf_raw or "",
+        company_name=company_name or "",
+        product_name=product_name or "",
+        ship_time_from=ship_time_from_raw or "",
+        ship_time_to=ship_time_to_raw or "",
         status_labels=SP_STATUS_LABELS,
     )
 
