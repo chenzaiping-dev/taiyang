@@ -118,12 +118,13 @@
              value="{{ form_data.unit }}">
 
       <label for="status">状态</label>
-      <select id="status" name="status">
+      <select id="status" disabled style="background:#eee;color:#666;">
         {% for code, label in status_labels.items() %}
           <option value="{{ code }}"
             {% if form_data.status == code %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}    
+        {% endfor %}
       </select>
+      <input type="hidden" name="status" value="{{ form_data.status }}">
     </div>
 
     <div class="form-row">

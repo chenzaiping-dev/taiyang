@@ -207,6 +207,7 @@ class ProcessOrderService:
                 cost=0,
                 remark=it["remark"],
             )
+            print(row)
             db.session.add(row)
             rows.append(row)
 
@@ -526,7 +527,9 @@ class ProcessOrderService:
         document_no = f"PROD-OUT-{order.process_order_no}"
 
         # 5. 先改状态，同事务里出库（commit=False）
+        doc_time = now_beijing_naive()
         old_status = order.status
+        order.order_time = doc_time
         order.status = "ORDERED"
         order.completed_quantity = order.planned_quantity
         order.material_warehouse_id = out_warehouse_id   # ⭐ 新增
@@ -540,7 +543,7 @@ class ProcessOrderService:
                 lines=lines,
                 outbound_type="PRODUCTION_OUT",
                 document_no=document_no,
-                document_time=now_beijing_naive(),
+                document_time=doc_time,
                 process_order_id=order.id,
                 remark=remark or f"下单自动领料 - {order.process_order_no}",
                 auto_confirm=True,

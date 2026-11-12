@@ -398,6 +398,71 @@ class StockOutService:
     """原料出库（FIFO 成本层消耗）"""
 
     @staticmethod
+    def _precheck_available(warehouse_id, lines, allow_partial=False):
+        """
+        整单出库前预检：按 (warehouse_id, material_id) 汇总需求，
+        与当前成本层剩余量比较，收集全部不足项后一次性抛出。
+        allow_partial=True 时不做"不足"拦截（与 _consume_fifo 语义一致）。
+        """
+        if allow_partial:
+            return
+
+        # 1. 聚合本单需求
+        need_map = {}
+        for l in lines:
+            mid = int(l["material_id"])
+            qty = _q6(l["quantity"])
+            if qty <= 0:
+                continue
+            key = (int(warehouse_id), mid)
+            need_map[key] = need_map.get(key, Decimal("0")) + qty
+
+        if not need_map:
+            return
+
+        # 2. 一次性查出涉及的原料
+        mids = {mid for _, mid in need_map.keys()}
+        materials = {
+            m.id: m for m in Material.query.filter(Material.id.in_(mids)).all()
+        }
+
+        # 3. 一次性按 (warehouse, material) 汇总可用量
+        avail_rows = (
+            db.session.query(
+                InventoryCostLayer.material_id.label("mid"),
+                func.coalesce(func.sum(InventoryCostLayer.remaining_qty), 0)
+                    .label("available"),
+            )
+            .filter(
+                InventoryCostLayer.warehouse_id == warehouse_id,
+                InventoryCostLayer.material_id.in_(mids),
+                InventoryCostLayer.remaining_qty > 0,
+            )
+            .group_by(InventoryCostLayer.material_id)
+            .all()
+        )
+        available_map = {int(r.mid): _q6(r.available or 0) for r in avail_rows}
+
+        # 4. 收集不足项
+        shortages = []
+        for (wh_id, mid), need in need_map.items():
+            available = available_map.get(mid, Decimal("0"))
+            if need > available:
+                m = materials.get(mid)
+                label = (
+                    f"{m.material_code} - {m.material_name}"
+                    if m else f"#{mid}"
+                )
+                shortages.append(
+                    f"{label}：需要 {need}，可用 {available}"
+                )
+
+        if shortages:
+            raise InventoryError(
+                "以下原料库存不足，无法出库：\n" + "\n".join(shortages)
+            )
+
+    @staticmethod
     def _consume_fifo(
         warehouse_id: int,
         material_id: int,
@@ -424,10 +489,15 @@ class StockOutService:
             .all()
         )
 
+        #material = db.session.get(Material, material_id)
+        #if not material:
+        #    raise InventoryError(f"原料不存在: {material_id}")
+
         available = sum((l.remaining_qty for l in layers), Decimal("0"))
         if available < quantity and not allow_partial:
             raise InventoryError(
                 f"库存不足：material_id={material_id} 需要 {quantity}，可用 {available}"
+                #f"原料库存不足, {material.material_code} - {material.material_name} 需要 {quantity}，可用 {available}"
             )
 
         need = quantity
@@ -516,9 +586,15 @@ class StockOutService:
             if mid not in materials:
                 raise InventoryError(f"原料不存在: {mid}")
             if materials[mid].status != 1:
-                raise InventoryError(f"原料已禁用: {materials[mid].material_code}")
+                raise InventoryError(f"原料已禁用: {materials[mid].material_code} - {materials[mid].material_name}")
             if _q6(l["quantity"]) <= 0:
-                raise InventoryError(f"原料 {materials[mid].material_code} 数量必须 > 0")
+                raise InventoryError(f"原料 {materials[mid].material_code} - {materials[mid].material_name} 数量必须 > 0")
+
+        # 2.5 ⭐ 整单预检：一次性收集全部不足项
+        if auto_confirm:
+            StockOutService._precheck_available(
+                warehouse_id, lines, allow_partial=allow_partial,
+            )
 
         # 3. 单据头
         doc_no = document_no or generate_document_no(prefix_map[outbound_type])
@@ -635,6 +711,25 @@ class StockOutService:
             .order_by(InventoryTransaction.line_no.asc())
             .all()
         )
+
+        # 确认前整单预检
+        pre_lines = [
+            {"material_id": tx.material_id, "quantity": str(-tx.quantity_delta)}
+            for tx in txs if tx.quantity_delta < 0
+        ]
+        # 注意：草稿可能多仓？当前 inventory_documents 草稿是单仓（create 时一个 warehouse_id）
+        # 若未来支持多仓，需要按 tx.warehouse_id 分组预检
+        if pre_lines:
+            wh_ids = {tx.warehouse_id for tx in txs if tx.quantity_delta < 0}
+            for wh_id in wh_ids:
+                group = [
+                    {"material_id": tx.material_id,
+                     "quantity": str(-tx.quantity_delta)}
+                    for tx in txs
+                    if tx.quantity_delta < 0 and tx.warehouse_id == wh_id
+                ]
+                StockOutService._precheck_available(wh_id, group)
+
         for tx in txs:
             if tx.quantity_delta >= 0:
                 continue  # 只处理出库行

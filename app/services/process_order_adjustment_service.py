@@ -257,16 +257,19 @@ class ProcessOrderAdjustmentService:
         红冲：把某些原料的部分消耗退回成本层。
         按 (process_order_id, material_id) 从所有正向消耗流水里逆序归还。
         """
+        doc_time = now_beijing_naive()
+        order.order_time = doc_time
+
         adjust_type = "ADJUSTMENT_RED"
         doc_no = generate_document_no_new(adjust_type)
         doc = InventoryDocument(
             document_no=doc_no,
             document_type=adjust_type,
-            document_time=now_beijing_naive(),
+            document_time=doc_time,
             status="CONFIRMED",
             remark=f"[MATERIAL_ADJUST_RED] {order.process_order_no} 配比减少红冲",
-            created_at=now_beijing_naive(),
-            confirmed_at=now_beijing_naive(),
+            created_at=doc_time,
+            confirmed_at=doc_time,
         )
         db.session.add(doc)
         db.session.flush()
@@ -332,11 +335,11 @@ class ProcessOrderAdjustmentService:
                     line_no=next_line_no,          # ⭐ 全局递增，避免重复
                     material_id=mid,
                     transaction_type=adjust_type,
-                    transaction_time=now_beijing_naive(),
+                    transaction_time=doc_time,
                     quantity_delta=take_qty,
                     process_order_id=order.id,
                     warehouse_id=orig_tx.warehouse_id,
-                    created_at=now_beijing_naive(),
+                    created_at=doc_time,
                 )
                 next_line_no += 1                  # ⭐ 每插一条 +1
                 db.session.add(new_tx)
@@ -413,6 +416,8 @@ class ProcessOrderAdjustmentService:
         #doc_no = f"ADJ-BLUE-{order.process_order_no}-{adjust_no[-6:]}"
         adjust_type = "ADJUSTMENT_BLUE"
         doc_no = generate_document_no_new(adjust_type)
+        doc_time = now_beijing_naive()
+        order.order_time = doc_time
 
         lines = [
             {"material_id": mid, "quantity": str(qty), "line_no": idx + 1}
@@ -427,7 +432,7 @@ class ProcessOrderAdjustmentService:
             lines=lines,
             outbound_type=adjust_type,
             document_no=doc_no,
-            document_time=now_beijing_naive(),
+            document_time=doc_time,
             process_order_id=order.id,
             remark=f"[MATERIAL_ADJUST_ADD] {order.process_order_no} 配比增加补充出库",
             auto_confirm=True,
