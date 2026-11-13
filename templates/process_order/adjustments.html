@@ -89,10 +89,10 @@
           <th>原料</th>
           <th style="width:130px;text-align:right;">调整前配比</th>
           <th style="width:130px;text-align:right;">调整前数量</th>
-          <th style="width:130px;text-align:right;">调整前成本</th>
+          <th style="width:130px;text-align:right;">{{ "调整前成本" if can_view_production_cost() else "" }}</th>
           <th style="width:130px;text-align:right;">调整后配比</th>
           <th style="width:130px;text-align:right;">调整后数量</th>
-          <th style="width:130px;text-align:right;">调整后成本</th>
+          <th style="width:130px;text-align:right;">{{ "调整后成本" if can_view_production_cost() else "" }}</th>
           <th style="width:130px;text-align:right;">数量差异</th>
         </tr>
       </thead>
@@ -127,7 +127,7 @@
             </td>
             <td style="text-align:right;">{{ om.ratio_value if om else "-" }}</td>
             <td style="text-align:right;">{{ om.quantity if om else "-" }}</td>
-            <td style="text-align:right;">{{ om.cost if om else "-" }}</td>
+            <td style="text-align:right;">{% if can_view_production_cost() %}{{ om.cost if om else "-" }}{% else %}—{% endif %}</td>
             <td style="text-align:right;color:#1976d2;">
               {{ nm.ratio_value if nm else "-" }}
             </td>
@@ -135,7 +135,7 @@
               {{ nm.quantity if nm else "-" }}
             </td>
             <td style="text-align:right;color:#1976d2;">
-              {{ nm.cost if nm else "-" }}
+              {% if can_view_production_cost() %}{{ nm.cost if nm else "-" }}{% else %}—{% endif %}
             </td>
             <td style="text-align:right;font-weight:600;
                        color:{{ '#c62828' if diff_qty > 0

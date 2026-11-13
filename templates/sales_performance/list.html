@@ -36,8 +36,10 @@
   </label>
   <button type="submit" class="btn btn-primary">查询</button>
   <a class="btn" href="{{ url_for('sales_performance.list_page') }}">重置</a>
+  {% if has_permission('sales_performance.create') %}
   <a class="btn btn-primary" style="float:right;"
      href="{{ url_for('sales_performance.new_page') }}">+ 新建业绩单</a>
+  {% endif %}
 </form>
 
 <table style="width:100%;border-collapse:collapse;font-size:13px;">
@@ -50,10 +52,10 @@
       <th>规格</th>
       <th style="width:60px;text-align:right;">数量</th>
       <th style="width:20px;">单位</th>
-      <th style="width:50px;text-align:right;">单价</th>
-      <th style="width:60px;text-align:right;">金额</th>
-      <th style="width:60px;text-align:right;">成本</th>
-      <th style="width:60px;text-align:right;">利润</th>
+      <th style="width:50px;text-align:right;">{{ "单价" if can_view_sales_performance_money() else "" }}</th>
+      <th style="width:60px;text-align:right;">{{ "金额" if can_view_sales_performance_money() else "" }}</th>
+      <th style="width:60px;text-align:right;">{{ "成本" if can_view_sales_performance_cost() else "" }}</th>
+      <th style="width:60px;text-align:right;">{{ "利润" if can_view_sales_performance_cost() else "" }}</th>
       <th style="width:60px;text-align:right;">主销售</th>
       <th style="width:40px;text-align:right;">是否共同销售</th>
       <th style="width:60px;text-align:right;">副销售</th>
@@ -81,10 +83,10 @@
         <td>{{ r.product_specification or "-" }}</td>
         <td style="text-align:right;">{{ r.quantity }}</td>
         <td>{{ r.unit or "" }}</td>
-        <td style="text-align:right;">{{ r.unit_price }}</td>
-        <td style="text-align:right;color:#2440b3;">{{ r.amount }}</td>
-        <td style="text-align:right;color:#ef6c00;">{{ r.cost }}</td>
-        <td style="text-align:right;color:#2e7d32;">{{ r.profit }}</td>
+        <td style="text-align:right;">{% if can_view_sales_performance_money() %}{{ r.unit_price }}{% else %}—{% endif %}</td>
+        <td style="text-align:right;color:#2440b3;">{% if can_view_sales_performance_money() %}{{ r.amount }}{% else %}—{% endif %}</td>
+        <td style="text-align:right;color:#ef6c00;">{% if can_view_sales_performance_cost() %}{{ r.cost }}{% else %}—{% endif %}</td>
+        <td style="text-align:right;color:#2e7d32;">{% if can_view_sales_performance_cost() %}{{ r.profit }}{% else %}—{% endif %}</td>
         <td style="text-align:right;">{{ r.salesperson_name }}</td>
         <td style="text-align:right;">{{ r.is_joint_sales }}</td>
         <td style="text-align:right;">{{ r.co_salesperson_name }}</td>
@@ -94,33 +96,25 @@
         <td>{{ r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "-" }}</td>
         <!-- ⭐ 生产计划：有则跳详情，无则跳新建 -->
         <td style="text-align:center;white-space:nowrap;">
-          {% if r.production_plan_id %}
+          {% if r.production_plan_id and has_permission('production_plan.view') %}
             <a class="btn btn-sm"
               href="{{ url_for('production_plan.detail_page', plan_id=r.production_plan_id) }}"
-              title="查看已有生产计划">
-              生产
-            </a>
-          {% else %}
+              title="查看已有生产计划">生产</a>
+          {% elif not r.production_plan_id and has_permission('production_plan.create') %}
             <a class="btn btn-sm"
               href="{{ url_for('production_plan.new_page', performance_id=r.id) }}"
-              title="为业绩单创建生产计划">
-              生产
-            </a>
+              title="为业绩单创建生产计划">生产</a>
           {% endif %}
 
           <!-- ⭐ 发货计划：有则跳列表（带过滤），无则跳新建 -->
-          {% if r.has_shipment_plan %}
+          {% if r.has_shipment_plan and has_permission('shipment.view') %}
             <a class="btn btn-sm"
               href="{{ url_for('shipment_plan.list_page', performance_id=r.id) }}"
-              title="查看该业绩单的发货计划">
-              发货
-            </a>
-          {% else %}
+              title="查看该业绩单的发货计划">发货</a>
+          {% elif not r.has_shipment_plan and has_permission('shipment.create') %}
             <a class="btn btn-sm"
               href="{{ url_for('shipment_plan.new_page', performance_id=r.id) }}"
-              title="为该业绩单创建发货计划">
-              发货
-            </a>
+              title="为该业绩单创建发货计划">发货</a>
           {% endif %}
         </td>
         <td>
@@ -131,6 +125,7 @@
         <td style="text-align:center;white-space:nowrap;position:relative;">
           {% set is_done = r.status in ('COMPLETED', 'CANCELLED') %}
 
+          {% if has_permission('sales_performance.status.change') %}
           {# ====== 主按钮：按状态确定 ====== #}
           {% if r.status == 'DRAFT' %}
             <form method="post" style="display:inline;"
@@ -175,8 +170,10 @@
             <span style="color:#bbb;">——</span>
           {% endif %}
 
+          {% endif %}
+
           {# ====== 更多操作：下拉 ====== #}
-          {% if r.status == 'CANCELLED' %}
+          {% if r.status == 'CANCELLED' and has_permission('sales_performance.reopen') %}
             <form method="post" style="display:inline;"
                   action="{{ url_for('sales_performance.reopen', perf_id=r.id) }}"
                   onsubmit="return confirm('确认重新打开为草稿？将复用已有生产/发货计划。');">
@@ -189,17 +186,19 @@
                     onclick="toggleOpMenu(this)">⋮</button>
             <div class="op-more-menu">
               {# 编辑：仅 DRAFT #}
-              {% if r.status == 'DRAFT' %}
+              {% if r.status == 'DRAFT' and has_permission('sales_performance.edit') %}
                 <a href="{{ url_for('sales_performance.edit_page', perf_id=r.id) }}">编辑</a>
               {% endif %}
 
               {# 取消：非终态 #}
+              {% if has_permission('sales_performance.status.change') %}
               <form method="post"
                     action="{{ url_for('sales_performance.change_status', perf_id=r.id, action='cancel') }}"
                     onsubmit="return confirm('确认取消该业绩单？');">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="op-more-item-danger">取消</button>
               </form>
+              {% endif %}
             </div>
           </div>
           {% endif %}
@@ -220,13 +219,13 @@
       <td></td>
       <td></td>
       <td style="text-align:right;color:#2440b3;">
-        {{ rows|sum(attribute='amount') }}
+        {% if can_view_sales_performance_money() %}{{ rows|sum(attribute='amount') }}{% else %}—{% endif %}
       </td>
       <td style="text-align:right;color:#ef6c00;">
-        {{ rows|sum(attribute='cost') }}
+        {% if can_view_sales_performance_cost() %}{{ rows|sum(attribute='cost') }}{% else %}—{% endif %}
       </td>
       <td style="text-align:right;color:#2e7d32;">
-        {{ rows|sum(attribute='profit') }}
+        {% if can_view_sales_performance_cost() %}{{ rows|sum(attribute='profit') }}{% else %}—{% endif %}
       </td>
       <td></td>
       <td></td>

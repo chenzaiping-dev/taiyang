@@ -13,7 +13,7 @@
 <table>
   <thead>
     <tr>
-      <th>明细ID</th><th>原料ID</th><th>配比</th><th>数量</th><th>成本</th><th>备注</th>
+      <th>明细ID</th><th>原料ID</th><th>配比</th><th>数量</th><th>{{ "成本" if can_view_production_cost() else "" }}</th><th>备注</th>
     </tr>
   </thead>
   <tbody>
@@ -23,7 +23,7 @@
       <td>{{ m.material_id }}</td>
       <td>{{ m.ratio_value }}</td>
       <td>{{ m.quantity }}</td>
-      <td>{{ m.cost }}</td>
+      <td>{% if can_view_production_cost() %}{{ m.cost }}{% else %}—{% endif %}</td>
       <td>{{ m.remark }}</td>
     </tr>
     {% endfor %}
@@ -48,7 +48,7 @@
         <td colspan="2" style="text-align:right;">合计</td>
         <td>{{ "%.4f"|format(ns.sum_ratio + water_ratio) }}</td>
         <td>{{ "%.4f"|format(ns.sum_qty + water_qty) }}</td>
-        <td>{{ result.materials | sum(attribute='cost') }}</td>
+        <td>{% if can_view_production_cost() %}{{ result.materials | sum(attribute='cost') }}{% else %}—{% endif %}</td>
         <td></td>
       </tr>
     {% endif %}

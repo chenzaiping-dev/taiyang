@@ -25,12 +25,16 @@ ENDPOINT_PERMISSIONS = {
 def register_finished_goods_permission_hooks(bp):
     @bp.before_request
     def enforce_finished_goods_permission():
-        if not session.get("employee_id"):
+        if not session.get("logged_in"):
             # API clients receive a status code rather than an HTML redirect.
             if request.path.startswith("/finished-goods/api/"):
                 return {"code": 401, "message": "请先登录"}, 401
             from flask import redirect, url_for
             return redirect(url_for("auth.employee_login", next=request.path))
+
+        from app.services.permission_service import is_super_admin
+        if is_super_admin():
+            return None
 
         endpoint = request.endpoint.rsplit(".", 1)[-1]
         permission_code = ENDPOINT_PERMISSIONS.get(endpoint)

@@ -69,6 +69,7 @@
           <th>规格</th>
           <th style="width:60px;">单位</th>
           <th style="width:120px;text-align:right;">可用（锁定）</th>
+          {% if can_view_shipment_money() %}<th style="width:110px;text-align:right;">发货单价</th>{% endif %}
           <th style="width:140px;">发货数量</th>
         </tr>
       </thead>
@@ -84,6 +85,17 @@
           <td>{{ r.product_specification or "-" }}</td>
           <td>{{ r.unit or "" }}</td>
           <td style="text-align:right;">{{ r.remaining_quantity }}</td>
+          {% if can_view_shipment_money() %}
+          <td style="text-align:right;">
+            {% if can_edit_shipment_money() %}
+              <input type="number" step="0.0001" min="0"
+                     name="lines[{{ loop.index0 }}][unit_price]"
+                     value="{{ existing.unit_price if existing else '' }}">
+            {% else %}
+              {{ existing.unit_price if existing else "—" }}
+            {% endif %}
+          </td>
+          {% endif %}
           <td>
             <input type="hidden" name="lines[{{ loop.index0 }}][reservation_id]"
                    value="{{ r.reservation_id }}">
@@ -105,7 +117,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="8" style="text-align:center;color:#999;padding:16px;">
+        <tr><td colspan="{{ 9 if can_view_shipment_money() else 8 }}" style="text-align:center;color:#999;padding:16px;">
           该业绩单对应生产计划无可用预留
         </td></tr>
         {% endfor %}

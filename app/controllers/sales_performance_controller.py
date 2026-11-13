@@ -1,6 +1,6 @@
 from datetime import datetime
 from flask import (
-    Blueprint, render_template, request, redirect, url_for, flash, abort
+    Blueprint, render_template, request, redirect, url_for, flash, abort, session
 )
 from app.extensions import db
 from app.generated.models.employees import Employee
@@ -11,6 +11,9 @@ from app.services.sales_performance_service import (
     SalesPerformanceService, SalesPerformanceError, STATUS_LABELS, PAYMENT_LABELS,
 )
 from app.utils.datetime_utils import util_parse_date
+from app.services.permission_service import (
+    can_view_sales_performance_money, can_edit_sales_performance_money
+)
 
 bp = Blueprint("sales_performance", __name__, url_prefix="/sales-performances")
 
@@ -138,7 +141,9 @@ def new_page():
 def create_submit():
     try:
         data = _parse_form(request.form)
-        perf = SalesPerformanceService.create(data, created_by=1)
+        if not can_edit_sales_performance_money():
+            data.update({"unit_price": "0", "amount": "0", "cost": "0", "profit": "0"})
+        perf = SalesPerformanceService.create(data, created_by=session.get("employee_id"))
         flash(f"业绩单创建成功: {perf.performance_no}", "success")
         return redirect(url_for("sales_performance.detail_page",
                                 perf_id=perf.id))
@@ -214,7 +219,15 @@ def update_submit(perf_id):
 
     try:
         data = _parse_form(request.form)
-        SalesPerformanceService.update(perf_id, data, updated_by=1)
+        if not can_edit_sales_performance_money():
+            # 服务端保留原金额，绝不信任无权限用户提交的隐藏/伪造字段。
+            data.update({
+                "unit_price": str(perf.unit_price or 0),
+                "amount": str(perf.amount or 0),
+                "cost": str(perf.cost or 0),
+                "profit": str(perf.profit or 0),
+            })
+        SalesPerformanceService.update(perf_id, data, updated_by=session.get("employee_id"))
         flash("业绩单已更新", "success")
         return redirect(url_for("sales_performance.detail_page",
                                 perf_id=perf_id))
@@ -266,7 +279,7 @@ def change_status(perf_id, action):
         abort(404)
     try:
         perf = SalesPerformanceService.change_status(
-            perf_id, action, operator_id=1,
+            perf_id, action, operator_id=session.get("employee_id"),
         )
         labels = {
             "confirm": "已确认",
@@ -287,7 +300,7 @@ def change_status(perf_id, action):
 @bp.post("/<int:perf_id>/reopen")
 def reopen(perf_id):
     try:
-        SalesPerformanceService.reopen(perf_id, operator_id=1)
+        SalesPerformanceService.reopen(perf_id, operator_id=session.get("employee_id"))
         flash("业绩单已重新打开为草稿，可继续编辑", "success")
     except SalesPerformanceError as e:
         flash(str(e), "error")

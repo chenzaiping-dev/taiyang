@@ -6,17 +6,19 @@
   <span style="color:#888;font-size:14px;">
     {{ plan.shipment_plan_no }}
   </span>
-  {% if plan.status in ("DRAFT", "CONFIRMED") %}
+  {% if has_permission('shipment.edit') and plan.status == "DRAFT" %}
     <a class="btn btn-primary" style="float:right;"
        href="{{ url_for('shipment_plan.edit_page', plan_id=plan.id) }}">编辑</a>
   {% endif %}
   {% if plan.status != 'CANCELLED' %}
-    <form method="post" action="{{ url_for('shipment_plan.cancel_plan', plan_id=plan.id) }}"
+    {% if has_permission('shipment.cancel') %}
+<form method="post" action="{{ url_for('shipment_plan.cancel_plan', plan_id=plan.id) }}"
           onsubmit="return confirm('确认取消该发货计划？{% if plan.status in ('PARTIALLY_SHIPPED','SHIPPED') %}将撤销已发生的成品出库并还原生产计划预留{% endif %}');"
           style="display:inline;">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn btn-danger">取消</button>
     </form>
+    {% endif %}
   {% endif %}
 </h2>
 
@@ -101,7 +103,7 @@
           </strong>
         </span>
         <span style="margin-left:12px;color:#888;">
-          单价：{{ line.unit_price }}
+          {% if can_view_shipment_money() %}单价：{{ line.unit_price }}{% endif %}
         </span>
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:13px;">

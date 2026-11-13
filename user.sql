@@ -1079,6 +1079,7 @@ CREATE TABLE finished_goods_reservations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 COMMENT='成品库存统一预留表';
 
+-- super_admin 是角色编码约定，创建后需由可信管理员手动分配给指定员工。
 INSERT INTO roles (role_code, role_name, description, status)
 VALUES
 ('super_admin', '超级管理员', '拥有全部业务模块权限；仅授予可信系统管理员', 1),
@@ -1099,11 +1100,6 @@ VALUES
 ('chen4', 'pbkdf2:sha256:600000$v4yER3CBaCeZwyHJ$f685bbd8d191ede977cbebeab7d4bb096e22f6e25ed4dab92a3cd274a37aaaad', 1, '陈四', 'D', 1);
 
 -- 成品管理 RBAC 权限目录。可重复执行；不会自动给现有角色授权。
--- super_admin 是角色编码约定，创建后需由可信管理员手动分配给指定员工。
-INSERT INTO roles (role_code, role_name, description, status)
-VALUES ('super_admin', '超级管理员', '拥有全部业务模块权限；仅授予可信系统管理员', 1)
-ON DUPLICATE KEY UPDATE role_name = VALUES(role_name), description = VALUES(description);
-
 INSERT INTO permissions (permission_code, permission_name, module_code, description) VALUES
 ('finished_goods.menu.view', '查看成品管理菜单', 'finished_goods', '允许在导航中看到成品管理入口'),
 ('finished_goods.inventory.view', '查看成品库存', 'finished_goods', '查看成品仓库库存及数量'),
@@ -1120,6 +1116,75 @@ INSERT INTO permissions (permission_code, permission_name, module_code, descript
 ON DUPLICATE KEY UPDATE permission_name = VALUES(permission_name),
                         module_code = VALUES(module_code),
                         description = VALUES(description);
+
+-- 其他业务模块权限目录：原料、生产、发货、业绩表
+-- Taiyang business module RBAC permissions
+-- Idempotent: safe to execute more than once.
+-- Does not grant these permissions to any role automatically.
+
+INSERT INTO permissions
+    (permission_code, permission_name, module_code, description)
+VALUES
+('inventory.materials.view','查看原料资料','inventory','查看原料基础资料列表'),
+('inventory.materials.create','新增原料资料','inventory','新增原料基础资料'),
+('inventory.materials.edit','编辑原料资料','inventory','编辑原料基础资料'),
+('inventory.suppliers.view','查看供应商资料','inventory','查看供应商基础资料'),
+('inventory.suppliers.create','新增供应商资料','inventory','新增供应商基础资料'),
+('inventory.suppliers.edit','编辑供应商资料','inventory','编辑供应商基础资料'),
+('inventory.stock.view','查看原料库存','inventory','查看原料库存数量'),
+('inventory.cost.view','查看原料成本','inventory','查看原料单价、FIFO成本层、库存成本和出入库成本'),
+('inventory.cost.edit','维护原料成本','inventory','录入采购单价及修改原料成本字段'),
+('inventory.summary.view','查看原料出入库汇总','inventory','查看原料出入库汇总'),
+('inventory.transactions.view','查看原料库存流水','inventory','查看原料库存流水'),
+('inventory.documents.view','查看原料库存单据','inventory','查看原料入库/出库单据及详情'),
+('inventory.purchase_in.create','创建原料入库单','inventory','创建采购入库草稿；需要同时具备原料成本维护权限'),
+('inventory.purchase_in.edit','编辑原料入库草稿','inventory','编辑采购入库草稿'),
+('inventory.purchase_in.confirm','确认原料入库单','inventory','确认原料入库并生成FIFO成本层'),
+('inventory.stock_out.create','创建原料出库单','inventory','创建原料出库单'),
+('inventory.stock_out.edit','编辑原料出库草稿','inventory','编辑原料出库草稿'),
+('inventory.stock_out.confirm','确认原料出库单','inventory','确认原料出库并进行FIFO成本分配'),
+('process_order.view','查看工艺单','process_order','查看工艺单列表及详情'),
+('process_order.create','创建工艺单','process_order','创建工艺单及原料配比'),
+('process_order.edit','编辑工艺单','process_order','编辑草稿工艺单'),
+('process_order.place','工艺单下单','process_order','工艺单下单并自动领用原料'),
+('process_order.produce','开始生产','process_order','将工艺单状态变更为生产中'),
+('process_order.receive','工艺单成品入库','process_order','生产完成后办理成品入库'),
+('process_order.cancel','取消工艺单','process_order','取消工艺单并执行相关库存冲销'),
+('process_order.status.change','变更工艺单状态','process_order','通过API变更工艺单状态'),
+('process_order.materials.adjust','调整工艺单原料配比','process_order','调整工艺单原料配比'),
+('process_order.adjustments.view','查看工艺单配比调整记录','process_order','查看工艺单配比调整历史'),
+('production.cost.view','查看生产成本','process_order','查看工艺单预计成本、实际成本及原料成本'),
+('production.cost.edit','维护生产成本','process_order','录入或修改工艺单预计成本和成本明细'),
+('production_plan.view','查看生产计划','production','查看生产计划列表及详情'),
+('production_plan.create','创建生产计划','production','创建生产计划并锁定成品库存'),
+('production_plan.edit','编辑生产计划','production','编辑草稿生产计划'),
+('production_plan.confirm','确认生产计划','production','确认生产计划'),
+('production_plan.process','处理生产计划','production','开始执行生产计划'),
+('production_plan.complete','完成生产计划','production','完成生产计划并处理库存预留'),
+('production_plan.cancel','取消生产计划','production','取消生产计划并释放库存预留'),
+('production_plan.reopen','重新打开生产计划','production','将生产计划重新打开为草稿'),
+('shipment.view','查看发货计划','shipment','查看发货计划列表及详情'),
+('shipment.create','创建发货计划','shipment','从生产计划预留中创建发货计划'),
+('shipment.edit','编辑发货计划','shipment','编辑草稿发货计划'),
+('shipment.confirm','确认发货计划','shipment','确认发货计划'),
+('shipment.cancel','取消发货计划','shipment','取消发货计划并释放相关预留'),
+('shipment.ship','登记发货','shipment','登记实际发货并扣减成品库存'),
+('shipment.money.view','查看发货金额','shipment','查看发货明细单价及金额'),
+('shipment.money.edit','维护发货金额','shipment','录入或修改发货明细单价'),
+('sales_performance.view','查看业绩表','sales_performance','查看业绩表列表及详情'),
+('sales_performance.create','创建业绩表','sales_performance','创建销售业绩表'),
+('sales_performance.edit','编辑业绩表','sales_performance','编辑业绩表非金额信息及状态'),
+('sales_performance.status.change','变更业绩表状态','sales_performance','确认、生产、发货、完成或取消业绩表'),
+('sales_performance.reopen','重新打开业绩表','sales_performance','将业绩表重新打开为草稿'),
+('sales_performance.cost.view','查看业绩金额','sales_performance','查看成本和利润'),
+('sales_performance.cost.edit','维护业绩金额','sales_performance','录入或修改成本和利润'),
+('sales_performance.money.view','查看业绩金额','sales_performance','查看销售单价、销售金额'),
+('sales_performance.money.edit','维护业绩金额','sales_performance','录入或修改销售单价、销售金额')
+ON DUPLICATE KEY UPDATE
+    permission_name = VALUES(permission_name),
+    module_code = VALUES(module_code),
+    description = VALUES(description);
+
 
 -- 示例授权：管理人员可操作成品业务，但成本查看/维护权限单独授予。
 -- 按实际岗位职责调整，不要把 admin 自动视为 super_admin。

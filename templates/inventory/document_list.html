@@ -44,9 +44,11 @@
      href="{{ url_for('inventory_query.document_list_page', direction=direction) }}">
     重置
   </a>
+  {% if (direction == 'in' and has_permission('inventory.purchase_in.create') and has_permission('inventory.cost.edit')) or (direction == 'out' and has_permission('inventory.stock_out.create')) %}
   <a class="btn btn-primary" style="float:right;" href="{{ new_doc_url }}">
     + 新建{{ '入库单' if direction == 'in' else '出库单' }}
   </a>
+  {% endif %}
 </form>
 
 <table style="width:100%;border-collapse:collapse;font-size:13px;">
@@ -61,7 +63,7 @@
         {{ '入库数量合计' if direction == 'in' else '出库数量合计' }}
       </th>
       <th style="width:140px;text-align:right;">
-        {{ '入库成本合计' if direction == 'in' else '出库成本合计' }}
+        {% if can_view_inventory_cost() %}{{ '入库成本合计' if direction == 'in' else '出库成本合计' }}{% endif %}
       </th>
       <th style="width:90px;">状态</th>
       <th style="width:150px;">创建时间</th>
@@ -84,7 +86,7 @@
                if r.document_time else "-" }}</td>
         <td style="text-align:right;">{{ r.line_count }}</td>
         <td style="text-align:right;">{{ r.total_qty }}</td>
-        <td style="text-align:right;">{{ r.total_cost }}</td>
+        <td style="text-align:right;">{% if can_view_inventory_cost() %}{{ r.total_cost }}{% else %}—{% endif %}</td>
         <td>
           <span class="status-badge status-{{ r.status|lower }}">
             {{ status_labels.get(r.status, r.status) }}
@@ -94,23 +96,24 @@
                if r.created_at else "-" }}</td>
         <td style="text-align:center;white-space:nowrap;">
           {% if r.status == 'DRAFT' %}
-            <a class="btn btn-sm"
-               href="{% if direction == 'in' %}
-                       {{ url_for('purchase_in.purchase_in_edit_page', document_id=r.id) }}
-                     {% else %}
-                       {{ url_for('stock_out.stock_out_edit_page', document_id=r.id) }}
-                     {% endif %}">
-              编辑
-            </a>
-            <form method="post"
-                  action="{{ url_for(confirm_endpoint, document_id=r.id) }}"
-                  onsubmit="return confirm('确认该单据？将扣减/生成 FIFO 成本层。');"
-                  style="display:inline;">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn btn-sm btn-primary">确认</button>
-            </form>
-          {% else %}
-            <span class="btn btn-sm disabled">确认</span>
+            {% if direction == 'in' and has_permission('inventory.purchase_in.edit') and has_permission('inventory.cost.edit') %}
+              <a class="btn btn-sm" href="{{ url_for('purchase_in.purchase_in_edit_page', document_id=r.id) }}">编辑</a>
+            {% elif direction == 'out' and has_permission('inventory.stock_out.edit') %}
+              <a class="btn btn-sm" href="{{ url_for('stock_out.stock_out_edit_page', document_id=r.id) }}">编辑</a>
+            {% endif %}
+            {% if direction == 'in' and has_permission('inventory.purchase_in.confirm') %}
+              <form method="post" action="{{ url_for(confirm_endpoint, document_id=r.id) }}"
+                    onsubmit="return confirm('确认该单据？将扣减/生成 FIFO 成本层。');" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm btn-primary">确认</button>
+              </form>
+            {% elif direction == 'out' and has_permission('inventory.stock_out.confirm') %}
+              <form method="post" action="{{ url_for(confirm_endpoint, document_id=r.id) }}"
+                    onsubmit="return confirm('确认该单据？将扣减/生成 FIFO 成本层。');" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm btn-primary">确认</button>
+              </form>
+            {% endif %}
           {% endif %}
         </td>
       </tr>
@@ -126,7 +129,7 @@
       <td colspan="5" style="text-align:right;">本页合计：</td>
       <td style="text-align:right;color:#2440b3;">{{ rows|sum(attribute='total_qty') }}</td>
       <td style="text-align:right;color:#ef6c00;">
-        {{ rows|sum(attribute='total_cost') }}
+        {% if can_view_inventory_cost() %}{{ rows|sum(attribute='total_cost') }}{% else %}—{% endif %}
       </td>
       <td></td>
       <td></td>

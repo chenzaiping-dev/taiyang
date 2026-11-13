@@ -72,8 +72,8 @@
         <th>仓库</th>
       {% endif %}
       <th style="width:150px;text-align:right;">库存数量</th>
-      <th style="width:150px;text-align:right;">平均单价</th>
-      <th style="width:150px;text-align:right;">库存金额</th>
+      <th style="width:150px;text-align:right;">{{ "平均单价" if can_view_inventory_cost() else "" }}</th>
+      <th style="width:150px;text-align:right;">{{ "库存金额" if can_view_inventory_cost() else "" }}</th>
     </tr>
   </thead>
   <tbody>
@@ -95,8 +95,8 @@
           </td>
         {% endif %}
         <td style="text-align:right;color:#2440b3;">{{ r.total_qty }}</td>
-        <td style="text-align:right;">{{ r.avg_unit_cost }}</td>
-        <td style="text-align:right;color:#ef6c00;">{{ r.total_cost }}</td>
+        <td style="text-align:right;">{% if can_view_inventory_cost() %}{{ r.avg_unit_cost }}{% else %}—{% endif %}</td>
+        <td style="text-align:right;color:#ef6c00;">{% if can_view_inventory_cost() %}{{ r.total_cost }}{% else %}—{% endif %}</td>
       </tr>
       {% endfor %}
     {% else %}
@@ -122,7 +122,7 @@
       <td style="text-align:right;color:#2440b3;">{{ rows|sum(attribute='total_qty') }}</td>
       <td></td>
       <td style="text-align:right;color:#ef6c00;">
-        {{ rows|sum(attribute='total_cost') }}
+        {% if can_view_inventory_cost() %}{{ rows|sum(attribute='total_cost') }}{% else %}—{% endif %}
       </td>
     </tr>
   </tfoot>

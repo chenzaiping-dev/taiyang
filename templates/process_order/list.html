@@ -25,8 +25,10 @@
   </select>
   <button type="submit" class="btn btn-primary">查询</button>
   <a class="btn" href="{{ url_for('process_order.list_page') }}">重置</a>
+  {% if has_permission('process_order.create') %}
   <a class="btn btn-primary" href="{{ url_for('process_order.new_page') }}"
      style="float:right;">+ 新建工艺单</a>
+  {% endif %}
 </form>
 
 <table style="width:100%;border-collapse:collapse;font-size:13px;">
@@ -43,7 +45,7 @@
       <th style="width:70px;">下单时间</th>
       <th>跟单人</th>
       <th>创建人</th>
-      <th style="width:40px;">实际单位成本</th>
+      <th style="width:40px;">{{ "实际单位成本" if can_view_production_cost() else "" }}</th>
       <th style="width:50px;">状态</th>
       <th style="width:120px;">操作</th>
     </tr>
@@ -93,11 +95,13 @@
         <td>{{ it.followup_employee_name or "-" }}</td>
         <td>{{ it.created_by_name or "-" }}</td>
         <td style="text-align:right;">
-          {% if it.completed_quantity > 0 %}
-            {{ it.actual_total_cost / it.completed_quantity }}
-          {% else %}
-            -
-          {% endif %}
+          {% if can_view_production_cost() %}
+            {% if it.completed_quantity > 0 %}
+              {{ it.actual_total_cost / it.completed_quantity }}
+            {% else %}
+              -
+            {% endif %}
+          {% else %}—{% endif %}
         </td>
         <td>
           <span class="status-badge status-{{ it.status|lower }}">
@@ -106,16 +110,12 @@
         </td>
         <td style="white-space:nowrap;">
           <!-- ===== 编辑：仅 DRAFT ===== -->
-          {% if it.status == 'DRAFT' %}
+          {% if has_permission('process_order.edit') and it.status == 'DRAFT' %}
               <a class="btn btn-small"
               href="{{ url_for('process_order.edit_page', order_id=it.id) }}">编辑</a>
-          {% else %}
-              <button type="button" class="btn btn-small" disabled
-                      data-locked-status="{{ it.status }}"
-                      onclick="alertEditLocked(this)"
-                      title="仅草稿可编辑">编辑</button>
           {% endif %}
 
+          {% if has_permission('process_order.place') %}
           <!-- ===== 下单：仅 DRAFT ===== -->
           {% if it.status == 'DRAFT' %}
               <form method="post"
@@ -138,6 +138,7 @@
               <button class="btn btn-small" disabled title="仅草稿可下单">下单</button>
           {% endif %}
 
+          {% endif %}
           <!-- ===== 出库：仅 ORDERED ===== -->
           <!--{% if it.status == 'ORDERED' %}
             <form method="post"
@@ -151,6 +152,7 @@
             <button class="btn btn-small" disabled title="仅已下单可生产">生产</button>
           {% endif %}-->
 
+          {% if has_permission('process_order.receive') %}
           <!-- ===== 入库：仅 PRODUCING ===== -->
           {% if it.status == 'ORDERED' %}
             <form method="post"
@@ -173,6 +175,8 @@
             <button class="btn btn-small" disabled>入库</button>
           {% endif %}
 
+          {% endif %}
+          {% if has_permission('process_order.cancel') %}
           <!-- ===== 取消：DRAFT / ORDERED ===== -->
           {% if it.status in ['DRAFT', 'ORDERED', 'PRODUCING', 'RECEIVED'] %}
             <form method="post"
@@ -184,6 +188,7 @@
             </form>
           {% else %}
             <button class="btn btn-small" disabled title="当前状态不可取消">取消</button>
+          {% endif %}
           {% endif %}
         </td>
       </tr>

@@ -28,8 +28,10 @@
 
   <button type="submit" class="btn btn-primary">查询</button>
   <a class="btn" href="{{ url_for('shipment_plan.list_page') }}">重置</a>
+  {% if has_permission('shipment.create') and performance_id %}
   <a class="btn btn-primary" style="float:right;"
      href="{{ url_for('shipment_plan.new_page', performance_id=performance_id) }}">+ 新建发货计划</a>
+  {% endif %}
 </form>
 
 <table style="width:100%;border-collapse:collapse;font-size:13px;">
@@ -81,14 +83,13 @@
         <td>{{ r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "-" }}</td>
         <td style="white-space:nowrap;">
           {# 编辑：仅草稿 #}
-          {% if r.status == 'DRAFT' %}
+          {% if has_permission('shipment.edit') and r.status == 'DRAFT' %}
             <a class="btn btn-sm"
                href="{{ url_for('shipment_plan.edit_page', plan_id=r.id) }}">编辑</a>
-          {% else %}
-            <span class="btn btn-sm disabled" title="仅草稿可编辑">编辑</span>
           {% endif %}
 
-          {# 确认：仅草稿 #}
+                    {% if has_permission('shipment.confirm') %}
+{# 确认：仅草稿 #}
           {% if r.status == 'DRAFT' %}
             <form method="post" style="display:inline;"
                   action="{{ url_for('shipment_plan.mark_planned', plan_id=r.id) }}"
@@ -100,7 +101,9 @@
             <span class="btn btn-sm disabled" title="仅草稿可确认">确认</span>
           {% endif %}
 
-          {# 发货：仅已确认 #}
+                    {% endif %}
+          {% if has_permission('shipment.ship') %}
+{# 发货：仅已确认 #}
           {% if r.status == 'CONFIRMED' %}
             <form method="post" style="display:inline;"
                   action="{{ url_for('shipment_plan.ship_plan', plan_id=r.id) }}"
@@ -111,7 +114,9 @@
           {% else %}
             <span class="btn btn-sm disabled" title="仅已确认可发货">发货</span>
           {% endif %}
-          {# 取消：非已发货、非已取消 #}
+                    {% endif %}
+          {% if has_permission('shipment.cancel') %}
+{# 取消：非已发货、非已取消 #}
           {% if r.status != 'CANCELLED' %}
             <form method="post" style="display:inline;"
                   action="{{ url_for('shipment_plan.cancel_plan', plan_id=r.id) }}"
@@ -121,6 +126,7 @@
             </form>
           {% else %}
             <span class="btn btn-sm disabled">取消</span>
+          {% endif %}
           {% endif %}
         </td>
       </tr>

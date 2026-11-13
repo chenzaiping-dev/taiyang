@@ -1,4 +1,4 @@
-from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, redirect, render_template, request, url_for, session
 from sqlalchemy import select, or_, cast, String
 from sqlalchemy.exc import IntegrityError
 from app.core.auth import login_required, admin_required
@@ -31,9 +31,11 @@ def get_config(table_name):
 
 @admin_bp.route("/admin/t/<table_name>", methods=["GET", "POST"])
 @login_required
-@admin_required
 def table_list(table_name):
     table, cfg = get_config(table_name)
+    _require_table_permission(table_name, "view")
+    if request.method == "POST":
+        _require_table_permission(table_name, "create")
     if request.method == "POST":
         if cfg.get("mode") != "crud" or not cfg.get("can_create"):
             abort(403)
@@ -66,8 +68,20 @@ def table_list(table_name):
     fields = [f for f in cfg.get("list_fields", []) if f in table.c]
     form_fields = [f for f in cfg.get("form_fields", []) if f in table.c]
     fk_options = build_fk_options(table, form_fields)
+    # Render action controls only when the current employee holds the matching
+    # permission. The POST handler repeats the check independently.
+    ui_cfg = dict(cfg)
+    from app.services.permission_service import has_permission, is_super_admin
+    is_admin_console = bool(session.get("is_admin") or is_super_admin())
+    if table_name == "materials" and not is_admin_console:
+        ui_cfg["can_create"] = bool(cfg.get("can_create") and has_permission("inventory.materials.create"))
+        ui_cfg["can_edit"] = bool(cfg.get("can_edit") and has_permission("inventory.materials.edit"))
+    elif table_name == "suppliers" and not is_admin_console:
+        ui_cfg["can_create"] = bool(cfg.get("can_create") and has_permission("inventory.suppliers.create"))
+        ui_cfg["can_edit"] = bool(cfg.get("can_edit") and has_permission("inventory.suppliers.edit"))
+
     return render_template(
-        "admin/table_list.html", table_name=table_name, cfg=cfg, table=table,
+        "admin/table_list.html", table_name=table_name, cfg=ui_cfg, table=table,
         rows=rows, fields=fields, form_fields=form_fields, keyword=keyword,
         fk_options=fk_options, pk_name=pk.name,
     )
@@ -75,9 +89,9 @@ def table_list(table_name):
 
 @admin_bp.route("/admin/t/<table_name>/<int:row_id>/edit", methods=["GET", "POST"])
 @login_required
-@admin_required
 def table_edit(table_name, row_id):
     table, cfg = get_config(table_name)
+    _require_table_permission(table_name, "edit")
     if cfg.get("mode") != "crud" or not cfg.get("can_edit"):
         abort(403)
     pk = get_pk_column(table)
@@ -154,3 +168,35 @@ def build_fk_options(table, field_names):
         rows = db.session.execute(select(target.c[target_col], target.c[display]).limit(500)).all()
         options[name] = [{"value": r[0], "label": f"{r[1]} (ID {r[0]})"} for r in rows]
     return options
+
+
+def _require_table_permission(table_name, action):
+    """Employee-facing CRUD permissions for selected master-data tables.
+
+    All other generic tables remain restricted to administrators/super-admins.
+    """
+    from app.services.permission_service import has_permission, is_super_admin, get_data_scopes
+
+    # Preserve the existing administrator console access model.
+    if session.get("is_admin") or is_super_admin():
+        return
+
+    table_permissions = {
+        "materials": {
+            "view": "inventory.materials.view",
+            "create": "inventory.materials.create",
+            "edit": "inventory.materials.edit",
+        },
+        "suppliers": {
+            "view": "inventory.suppliers.view",
+            "create": "inventory.suppliers.create",
+            "edit": "inventory.suppliers.edit",
+        },
+    }
+    code = table_permissions.get(table_name, {}).get(action)
+    if not code or not has_permission(code):
+        abort(403)
+    scopes = get_data_scopes(code)
+    if scopes and "all" not in scopes:
+        # Do not expose all master-data rows while own/factory filtering is absent.
+        abort(403)

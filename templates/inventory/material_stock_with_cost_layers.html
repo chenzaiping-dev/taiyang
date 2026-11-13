@@ -104,8 +104,8 @@
         <td style="text-align:right;color:#2440b3;font-weight:600;">
           {{ r.remaining_qty }}
         </td>
-        <td style="text-align:right;">{{ r.unit_cost }}</td>
-        <td style="text-align:right;color:#ef6c00;">{{ r.remaining_cost }}</td>
+        <td style="text-align:right;">{% if can_view_inventory_cost() %}{{ r.unit_cost }}{% else %}—{% endif %}</td>
+        <td style="text-align:right;color:#ef6c00;">{% if can_view_inventory_cost() %}{{ r.remaining_cost }}{% else %}—{% endif %}</td>
       </tr>
       {% endfor %}
     {% else %}
@@ -133,7 +133,7 @@
       </td>
       <td></td>
       <td style="text-align:right;color:#ef6c00;">
-        {{ rows|sum(attribute='remaining_cost') }}
+        {% if can_view_inventory_cost() %}{{ rows|sum(attribute='remaining_cost') }}{% else %}—{% endif %}
       </td>
     </tr>
   </tfoot>

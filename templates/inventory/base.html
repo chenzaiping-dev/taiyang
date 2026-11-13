@@ -228,19 +228,27 @@
   <nav class="topnav">
     <a class="brand" href="/">🌤 太洋ERP</a>
 
-    <!-- 1. 原料管理 -->
+    <!-- 1. 原料管理：菜单只负责展示，后端路由仍独立校验权限 -->
+    {% if has_permission('inventory.stock.view') or has_permission('inventory.purchase_in.create') or has_permission('inventory.stock_out.create') or has_permission('inventory.documents.view') or has_permission('inventory.summary.view') or has_permission('inventory.transactions.view') or has_permission('inventory.materials.view') or has_permission('inventory.suppliers.view') %}
     <div class="nav-group">
       <div class="nav-label">原料管理</div>
       <div class="nav-dropdown">
-        <a href="{{ url_for('inventory_query.document_list_page', direction='in') }}">原料入库</a>
-        <a href="{{ url_for('inventory_query.document_list_page', direction='out') }}">原料出库</a>
-        <div class="divider"></div>
-        <a href="{{ url_for('inventory_query.material_stock_page') }}">原料库存</a>
-        <a href="{{ url_for('inventory_query.material_stock_with_cost_layers_page') }}">原料库存（按层级）</a>
-        <a href="{{ url_for('inventory_query.material_io_summary_page') }}">原料出入库汇总</a>
-        <a href="{{ url_for('inventory_query.material_transactions_page') }}">原料出入库流水</a>
+        {% if has_permission('inventory.purchase_in.create') and has_permission('inventory.cost.edit') %}<a href="{{ url_for('purchase_in.purchase_in_page') }}">原料入库</a>{% endif %}
+        {% if has_permission('inventory.stock_out.create') %}<a href="{{ url_for('stock_out.stock_out_page') }}">原料出库</a>{% endif %}
+        {% if has_permission('inventory.materials.view') %}<a href="{{ url_for('admin.table_list', table_name='materials') }}">原料资料</a>{% endif %}
+        {% if has_permission('inventory.suppliers.view') %}<a href="{{ url_for('admin.table_list', table_name='suppliers') }}">供应商资料</a>{% endif %}
+        {% if has_permission('inventory.documents.view') %}
+          <div class="divider"></div>
+          <a href="{{ url_for('inventory_query.document_list_page', direction='in') }}">原料入库单据</a>
+          <a href="{{ url_for('inventory_query.document_list_page', direction='out') }}">原料出库单据</a>
+        {% endif %}
+        {% if has_permission('inventory.stock.view') %}<div class="divider"></div><a href="{{ url_for('inventory_query.material_stock_page') }}">原料库存</a>{% endif %}
+        {% if has_permission('inventory.cost.view') %}<a href="{{ url_for('inventory_query.material_stock_with_cost_layers_page') }}">原料库存（成本层）</a>{% endif %}
+        {% if has_permission('inventory.summary.view') %}<a href="{{ url_for('inventory_query.material_io_summary_page') }}">原料出入库汇总</a>{% endif %}
+        {% if has_permission('inventory.transactions.view') %}<a href="{{ url_for('inventory_query.material_transactions_page') }}">原料出入库流水</a>{% endif %}
       </div>
     </div>
+    {% endif %}
 
     <!-- 2. 成品管理：菜单展示与后端权限分开控制 -->
     {% if has_permission('finished_goods.menu.view') or has_permission('finished_goods.inventory.view') or has_permission('finished_goods.documents.view') or has_permission('finished_goods.inbound.create') or has_permission('finished_goods.outbound.create') %}
@@ -261,29 +269,35 @@
     {% endif %}
 
     <!-- 3. 生产管理 -->
+    {% if has_permission('production_plan.view') or has_permission('production_plan.create') or has_permission('process_order.view') or has_permission('process_order.create') %}
     <div class="nav-group">
       <div class="nav-label">生产管理</div>
       <div class="nav-dropdown">
-        <a href="{{ url_for('production_plan.list_page') }}">生产计划</a>
-        <a href="{{ url_for('process_order.list_page') }}">工艺单列表</a>
+        {% if has_permission('production_plan.view') %}<a href="{{ url_for('production_plan.list_page') }}">生产计划</a>{% elif has_permission('production_plan.create') %}<a href="{{ url_for('production_plan.new_page') }}">新建生产计划</a>{% endif %}
+        {% if has_permission('process_order.view') %}<a href="{{ url_for('process_order.list_page') }}">工艺单列表</a>{% elif has_permission('process_order.create') %}<a href="{{ url_for('process_order.new_page') }}">新建工艺单</a>{% endif %}
       </div>
     </div>
+    {% endif %}
 
     <!-- 4. 发货管理 -->
+    {% if has_permission('shipment.view') or has_permission('shipment.create') %}
     <div class="nav-group">
       <div class="nav-label">发货管理</div>
       <div class="nav-dropdown">
-        <a href="{{ url_for('shipment_plan.list_page') }}">发货计划</a>
+        {% if has_permission('shipment.view') %}<a href="{{ url_for('shipment_plan.list_page') }}">发货计划</a>{% endif %}
       </div>
     </div>
+    {% endif %}
 
     <!-- 5. 业绩表管理 -->
+    {% if has_permission('sales_performance.view') or has_permission('sales_performance.create') %}
     <div class="nav-group">
       <div class="nav-label">业绩表管理</div>
       <div class="nav-dropdown">
-        <a href="{{ url_for('sales_performance.list_page') }}">业绩单列表</a>
+        {% if has_permission('sales_performance.view') %}<a href="{{ url_for('sales_performance.list_page') }}">业绩单列表</a>{% elif has_permission('sales_performance.create') %}<a href="{{ url_for('sales_performance.new_page') }}">新建业绩单</a>{% endif %}
       </div>
     </div>
+    {% endif %}
 
     <!-- 5. 员工管理 -->
     <div class="nav-group">
@@ -293,7 +307,6 @@
         <a class="nav-link" href="{{ url_for('auth.change_password') }}">修改密码</a>
         <a href="{{ url_for('auth.logout') }}">退出登录</a>
         {% endif %}
-        <a href="{{ url_for('auth.employee_login') }}">登录界面</a>
       </div>
     </div>
 

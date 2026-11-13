@@ -17,8 +17,8 @@
       <th>出库数量</th>
       <th>已消耗</th>
       <th>短缺</th>
-      <th>总成本</th>
-      <th>成本层明细</th>
+      <th>{{ "总成本" if can_view_inventory_cost() else "" }}</th>
+      <th>{{ "成本层明细" if can_view_inventory_cost() else "" }}</th>
     </tr>
   </thead>
   <tbody>
@@ -28,10 +28,10 @@
       <td>{{ l.quantity }}</td>
       <td>{{ l.consumed }}</td>
       <td>{{ l.shortage }}</td>
-      <td>{{ l.total_cost }}</td>
+      <td>{% if can_view_inventory_cost() %}{{ l.total_cost }}{% else %}—{% endif %}</td>
       <td>
         {% for a in l.allocations %}
-          <div>层#{{ a.cost_layer_id }}：{{ a.quantity }} × {{ a.unit_cost }} = {{ a.cost_amount }}</div>
+          {% if can_view_inventory_cost() %}<div>层#{{ a.cost_layer_id }}：{{ a.quantity }} × {{ a.unit_cost }} = {{ a.cost_amount }}</div>{% endif %}
         {% endfor %}
       </td>
     </tr>

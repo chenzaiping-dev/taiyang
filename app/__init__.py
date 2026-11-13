@@ -67,8 +67,16 @@ def create_app(test_config=None):
     app.register_blueprint(admin_bp)
     app.register_blueprint(documents_bp)
 
+    from app.core.business_permission_hooks import register_business_permission_hooks
+    register_business_permission_hooks(app)
+
     from app.services.permission_service import (
-        has_permission, can_view_finished_goods_cost, is_super_admin
+        has_permission, can_view_finished_goods_cost, is_super_admin,
+        can_view_inventory_cost, can_edit_inventory_cost,
+        can_view_production_cost, can_edit_production_cost,
+        can_view_shipment_money, can_edit_shipment_money,
+        can_view_sales_performance_cost, can_edit_sales_performance_cost,
+        can_view_sales_performance_money, can_edit_sales_performance_money,
     )
 
     @app.context_processor
@@ -77,6 +85,16 @@ def create_app(test_config=None):
             "has_permission": has_permission,
             "can_view_finished_goods_cost": can_view_finished_goods_cost,
             "is_super_admin": is_super_admin,
+            "can_view_inventory_cost": can_view_inventory_cost,
+            "can_edit_inventory_cost": can_edit_inventory_cost,
+            "can_view_production_cost": can_view_production_cost,
+            "can_edit_production_cost": can_edit_production_cost,
+            "can_view_shipment_money": can_view_shipment_money,
+            "can_edit_shipment_money": can_edit_shipment_money,
+            "can_view_sales_performance_cost": can_view_sales_performance_cost,
+            "can_edit_sales_performance_cost": can_edit_sales_performance_cost,
+            "can_view_sales_performance_money": can_view_sales_performance_money,
+            "can_edit_sales_performance_money": can_edit_sales_performance_money,
         }
 
     @app.get("/")

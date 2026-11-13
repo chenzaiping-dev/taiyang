@@ -1,6 +1,6 @@
 from datetime import datetime
 from flask import (
-    Blueprint, render_template, request, redirect, url_for, flash, abort
+    Blueprint, render_template, request, redirect, url_for, flash, abort, session
 )
 from app.extensions import db
 from app.generated.models.employees import Employee
@@ -196,7 +196,9 @@ def create_submit():
     try:
         data = _parse_form(request.form)
         plan = ProductionPlanService.create_plan(
-            performance_id=performance_id, **data,
+            performance_id=performance_id,
+            created_by=session.get("employee_id"),
+            **data,
         )
         flash(f"生产计划创建成功，单号 {plan.plan_no}", "success")
         return redirect(url_for("production_plan.detail_page", plan_id=plan.id))
@@ -495,7 +497,7 @@ def process_plan(plan_id):
 @bp.post("/<int:plan_id>/complete")
 def complete_plan(plan_id):
     try:
-        plan = ProductionPlanService.complete_plan(plan_id, operator_id=1)
+        plan = ProductionPlanService.complete_plan(plan_id, operator_id=session.get("employee_id"))
         flash("已完成，成品已预留", "success")
         # ⭐ 成本缺失提示
         if getattr(plan, "_cost_warning", None):

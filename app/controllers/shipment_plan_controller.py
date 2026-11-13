@@ -1,6 +1,6 @@
 from datetime import datetime
 from flask import (
-    Blueprint, render_template, request, redirect, url_for, flash, abort
+    Blueprint, render_template, request, redirect, url_for, flash, abort, session
 )
 
 from app.extensions import db
@@ -16,6 +16,7 @@ from app.generated.models.shipment_plan_lines import ShipmentPlanLine
 from app.generated.models.shipment_plan_allocations import ShipmentPlanAllocation
 from app.utils.datetime_utils import util_parse_date
 from app.services.shipment_plan_service import ShipmentPlanService, ShipmentPlanError
+from app.services.permission_service import can_view_shipment_money, can_edit_shipment_money
 
 bp = Blueprint("shipment_plan", __name__, url_prefix="/shipment-plans")
 
@@ -119,9 +120,12 @@ def create_submit():
 
     try:
         data = _parse_form(request.form)
+        if not can_edit_shipment_money():
+            for line in data.get("lines", []):
+                line["unit_price"] = None
         plan = ShipmentPlanService.create_plan(
             performance_id=performance_id,
-            created_by=1,
+            created_by=session.get("employee_id"),
             **data,
         )
         flash(f"发货计划创建成功，单号 {plan.shipment_plan_no}", "success")
@@ -214,6 +218,27 @@ def update_submit(plan_id):
 
     try:
         data = _parse_form(request.form)
+        if not can_edit_shipment_money():
+            existing_prices = {}
+            existing_rows = (
+                db.session.query(
+                    ShipmentPlanAllocation.warehouse_id,
+                    ShipmentPlanAllocation.batch_id,
+                    ShipmentPlanLine.unit_price,
+                )
+                .join(ShipmentPlanLine,
+                      ShipmentPlanLine.id == ShipmentPlanAllocation.shipment_line_id)
+                .filter(ShipmentPlanLine.shipment_plan_id == plan_id)
+                .all()
+            )
+            existing_prices = {
+                (row.warehouse_id, row.batch_id): row.unit_price
+                for row in existing_rows
+            }
+            for line in data.get("lines", []):
+                line["unit_price"] = existing_prices.get(
+                    (line["warehouse_id"], line["batch_id"]), 0
+                )
         ShipmentPlanService.update_plan(plan_id=plan_id, **data)
         flash("发货计划已更新", "success")
         return redirect(url_for("shipment_plan.detail_page", plan_id=plan_id))
@@ -433,7 +458,7 @@ def mark_planned(plan_id):
 @bp.post("/<int:plan_id>/cancel")
 def cancel_plan(plan_id):
     try:
-        ShipmentPlanService.cancel_plan(plan_id, operator_id=1)
+        ShipmentPlanService.cancel_plan(plan_id, operator_id=session.get("employee_id"))
         flash("发货计划已取消", "success")
     except ShipmentPlanError as e:
         flash(str(e), "error")
@@ -443,7 +468,7 @@ def cancel_plan(plan_id):
 @bp.post("/<int:plan_id>/ship")
 def ship_plan(plan_id):
     """列表页【发货】按钮：整体发货 + 出库"""
-    operator_id = 1  # 接入登录后替换为 current_user.id
+    operator_id = session.get("employee_id")
     try:
         ShipmentPlanService.ship_plan(plan_id, operator_id=operator_id)
         flash("发货成功，已出库", "success")

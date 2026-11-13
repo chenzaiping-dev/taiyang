@@ -16,6 +16,8 @@ from app.services.form_parser import parse_stock_out_form, FormParseError
 from app.services.inventory_service import (
     StockOutService, InventoryError, OUTBOUND_TYPE_LABELS, _rm_warehouses, tx_type_map
 )
+from app.services.permission_service import can_view_inventory_cost
+from app.core.money_redaction import redact_money_fields
 
 bp = Blueprint("stock_out", __name__, url_prefix="/inventory")
 schema = StockOutRequestSchema()
@@ -47,6 +49,8 @@ def api_stock_out():
         )
     except InventoryError as e:
         return jsonify({"code": 400, "msg": str(e)}), 400
+    if not can_view_inventory_cost():
+        result = redact_money_fields(result)
     return jsonify({"code": 0, "msg": "出库成功", "data": result})
 
 
@@ -56,6 +60,8 @@ def api_confirm(document_id):
         result = StockOutService.confirm_document(document_id)
     except InventoryError as e:
         return jsonify({"code": 400, "msg": str(e)}), 400
+    if not can_view_inventory_cost():
+        result = redact_money_fields(result)
     return jsonify({"code": 0, "msg": "确认成功", "data": result})
 
 
@@ -102,7 +108,10 @@ def stock_out_submit():
     except (FormParseError, InventoryError) as e:
         return _render_stock_out_error(str(e))
 
-    return render_template("inventory/stock_out_success.html", result=result)
+    return render_template(
+        "inventory/stock_out_success.html", result=result,
+        can_view_cost=can_view_inventory_cost(),
+    )
 
 
 def _render_stock_out_error(error_msg: str, edit_mode=False, document_id=None):
@@ -146,6 +155,7 @@ def _render_stock_out_error(error_msg: str, edit_mode=False, document_id=None):
             outbound_types=OUTBOUND_TYPE_LABELS,
             form_data=form_data,
             errors=[error_msg],
+            can_view_cost=can_view_inventory_cost(),
         ),
         400,
     )

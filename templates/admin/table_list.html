@@ -3,7 +3,11 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h2>{{ cfg.label }}</h2>
-  <a class="btn btn-outline-secondary" href="{{ url_for('admin.dashboard') }}">返回首页</a>
+  {% if session.get('is_admin') or is_super_admin() %}
+    <a class="btn btn-outline-secondary" href="{{ url_for('admin.dashboard') }}">返回首页</a>
+  {% elif has_permission('inventory.stock.view') %}
+    <a class="btn btn-outline-secondary" href="{{ url_for('inventory_query.material_stock_page') }}">返回原料库存</a>
+  {% endif %}
 </div>
 
 {% if cfg.search_fields %}

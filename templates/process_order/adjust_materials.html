@@ -90,7 +90,7 @@
               data-original-material-id="{{ m.material_id }}"
               data-original-ratio="{{ m.ratio_value }}"
               data-original-qty="{{ m.quantity }}"
-              data-original-cost="{{ m.cost }}"
+              data-original-cost="{{ m.cost if can_view_production_cost() else '' }}"
               data-original-remark="{{ m.remark or '' }}">
             <td class="row-no">{{ loop.index }}</td>
             <td>

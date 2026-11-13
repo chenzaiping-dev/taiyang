@@ -7,7 +7,7 @@
 <div class="form-row"><label>单据号：</label>{{ result.document_no }}</div>
 <div class="form-row"><label>状态：</label>{{ result.status }}</div>
 <div class="form-row"><label>入库时间：</label>{{ result.document_time }}</div>
-<div class="form-row"><label>总金额：</label>{{ result.total_cost }}</div>
+{% if can_view_inventory_cost() %}<div class="form-row"><label>总金额：</label>{{ result.total_cost }}</div>{% endif %}
 <div class="form-row"><label>明细行数：</label>{{ result.line_count }}</div>
 
 <h3>生成的 FIFO 成本层</h3>
@@ -15,7 +15,7 @@
   <thead>
     <tr>
       <th>层ID</th><th>原料ID</th><th>原始数量</th>
-      <th>剩余数量</th><th>单价</th>
+      <th>剩余数量</th><th>{{ "单价" if can_view_inventory_cost() else "" }}</th>
     </tr>
   </thead>
   <tbody>
@@ -25,7 +25,7 @@
       <td>{{ l.material_id }}</td>
       <td>{{ l.original_qty }}</td>
       <td>{{ l.remaining_qty }}</td>
-      <td>{{ l.unit_cost }}</td>
+      <td>{% if can_view_inventory_cost() %}{{ l.unit_cost }}{% else %}—{% endif %}</td>
     </tr>
     {% endfor %}
   </tbody>

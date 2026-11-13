@@ -127,15 +127,25 @@
       <input type="hidden" name="status" value="{{ form_data.status }}">
     </div>
 
+    {% if can_view_production_cost() %}
     <div class="form-row">
       <label for="planned_cost_price">预计单位成本</label>
-      <input type="number" id="planned_cost_price" name="planned_cost_price"
-             step="0.0001" min="0" value="{{ form_data.planned_cost_price }}">
+      {% if can_edit_production_cost() %}
+        <input type="number" id="planned_cost_price" name="planned_cost_price"
+               step="0.0001" min="0" value="{{ form_data.planned_cost_price }}">
+      {% else %}
+        <span>{{ form_data.planned_cost_price }}</span>
+      {% endif %}
 
       <label for="planned_total_cost">预计总成本</label>
-      <input type="number" id="planned_total_cost" name="planned_total_cost"
-             step="0.0001" min="0" value="{{ form_data.planned_total_cost }}">
+      {% if can_edit_production_cost() %}
+        <input type="number" id="planned_total_cost" name="planned_total_cost"
+               step="0.0001" min="0" value="{{ form_data.planned_total_cost }}">
+      {% else %}
+        <span>{{ form_data.planned_total_cost }}</span>
+      {% endif %}
     </div>
+    {% endif %}
 
     <div class="form-row">
       <label for="remark">备注</label>

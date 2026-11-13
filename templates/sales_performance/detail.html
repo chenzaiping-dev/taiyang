@@ -4,14 +4,14 @@
 <h2>
   业绩单详情
   <span style="color:#888;font-size:14px;">#{{ perf.performance_no }}</span>
-    {% if perf.status == 'CANCELLED' %}
+    {% if perf.status == 'CANCELLED' and has_permission('sales_performance.reopen') %}
     <form method="post" style="float:right;margin-right:8px;"
           action="{{ url_for('sales_performance.reopen', perf_id=perf.id) }}"
           onsubmit="return confirm('确认重新打开为草稿？将复用已有生产/发货计划。');">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn btn-primary">重新编辑</button>
     </form>
-  {% elif perf.status == 'DRAFT' %}
+  {% elif perf.status == 'DRAFT' and has_permission('sales_performance.edit') %}
     <a class="btn" style="float:right;margin-right:8px;"
        href="{{ url_for('sales_performance.edit_page', perf_id=perf.id) }}">编辑</a>
   {% endif %}
@@ -46,16 +46,17 @@
   </table>
 </fieldset>
 
+{% if can_view_sales_performance_money() %}
 <fieldset>
   <legend>金额信息</legend>
   <table class="detail-table">
     <tr>
-      <th>销售单价</th><td>{{ perf.unit_price }}</td>
-      <th>销售金额</th><td>{{ perf.amount }}</td>
+      <th>销售单价</th><td>{% if can_view_sales_performance_money() %}{{ perf.unit_price }}{% else %}—{% endif %}</td>
+      <th>销售金额</th><td>{% if can_view_sales_performance_money() %}{{ perf.amount }}{% else %}—{% endif %}</td>
     </tr>
     <tr>
-      <th>成本</th><td>{{ perf.cost }}</td>
-      <th>利润</th><td>{{ perf.profit }}</td>
+      <th>成本</th><td>{% if can_view_sales_performance_cost() %}{{ perf.cost }}{% else %}—{% endif %}</td>
+      <th>利润</th><td>{% if can_view_sales_performance_cost() %}{{ perf.profit }}{% else %}—{% endif %}</td>
     </tr>
     <tr>
       <th>收款状态</th>
@@ -73,6 +74,7 @@
     </tr>
   </table>
 </fieldset>
+{% endif %}
 
 <fieldset>
   <legend>销售与工厂</legend>
@@ -114,27 +116,19 @@
 <fieldset>
   <legend>关联计划</legend>
   <div style="display:flex;gap:12px;flex-wrap:wrap;">
-    {% if production_plan %}
+    {% if production_plan and has_permission('production_plan.view') %}
     <a class="btn btn-primary"
-       href="{{ url_for('production_plan.detail_page', plan_id=production_plan.id) }}">
-      + 生产计划
-    </a>
-    {% else %}
+       href="{{ url_for('production_plan.detail_page', plan_id=production_plan.id) }}">查看生产计划</a>
+    {% elif not production_plan and has_permission('production_plan.create') %}
     <a class="btn btn-primary"
-       href="{{ url_for('production_plan.new_page', performance_id=perf.id) }}">
-      + 生产计划
-    </a>
+       href="{{ url_for('production_plan.new_page', performance_id=perf.id) }}">创建生产计划</a>
     {% endif %}
-    {% if shipment_plan %}
+    {% if shipment_plan and has_permission('shipment.view') %}
     <a class="btn btn-success"
-       href="{{ url_for('shipment_plan.list_page', performance_id=perf.id) }}">
-      发货计划
-    </a>
-    {% else %}
+       href="{{ url_for('shipment_plan.list_page', performance_id=perf.id) }}">查看发货计划</a>
+    {% elif not shipment_plan and has_permission('shipment.create') %}
     <a class="btn btn-success"
-       href="{{ url_for('shipment_plan.new_page', performance_id=perf.id) }}">
-      发货计划
-    </a>
+       href="{{ url_for('shipment_plan.new_page', performance_id=perf.id) }}">创建发货计划</a>
     {% endif %}
   </div>
 </fieldset>

@@ -70,21 +70,30 @@
   <fieldset>
     <legend>金额与数量</legend>
     <div class="form-row">
-      <label>销售单价 *</label>
-      <input type="number" step="0.0001" min="0" name="unit_price"
-            id="unit_price"
-            value="{{ form_data.unit_price }}" required>
+      {% if can_view_sales_performance_money() %}
+        <label>销售单价</label>
+        {% if can_edit_sales_performance_money() %}
+          <input type="number" step="0.0001" min="0" name="unit_price"
+                 id="unit_price" value="{{ form_data.unit_price }}">
+        {% else %}
+          <span>{{ form_data.unit_price }}</span>
+        {% endif %}
+      {% endif %}
 
       <label>销售数量 *</label>
       <input type="number" step="0.0001" min="0.0001" name="quantity"
-            id="quantity"
-            value="{{ form_data.quantity }}" required>
+             id="quantity" value="{{ form_data.quantity }}" required>
     </div>
     <div class="form-row">
-      <label>销售金额 *</label>
-      <input type="number" step="0.0001" min="0" name="amount"
-            id="amount"
-            value="{{ form_data.amount }}" required>
+      {% if can_view_sales_performance_money() %}
+        <label>销售金额</label>
+        {% if can_edit_sales_performance_money() %}
+          <input type="number" step="0.0001" min="0" name="amount"
+                 id="amount" value="{{ form_data.amount }}">
+        {% else %}
+          <span>{{ form_data.amount }}</span>
+        {% endif %}
+      {% endif %}
       <label>收款状态</label>
       <select name="payment_status">
         {% for code, label in payment_labels.items() %}
@@ -93,15 +102,24 @@
         {% endfor %}
       </select>
     </div>
+    {% if can_view_sales_performance_cost() %}
     <div class="form-row">
       <label>成本</label>
-      <input type="number" step="0.0001" min="0" name="cost"
-             value="{{ form_data.cost }}">
-
+      {% if can_edit_sales_performance_cost() %}
+        <input type="number" step="0.0001" min="0" name="cost"
+               value="{{ form_data.cost }}">
+      {% else %}
+        <span>{{ form_data.cost }}</span>
+      {% endif %}
       <label>利润</label>
-      <input type="number" step="0.0001" name="profit"
-             value="{{ form_data.profit }}">
+      {% if can_edit_sales_performance_cost() %}
+        <input type="number" step="0.0001" name="profit"
+               value="{{ form_data.profit }}">
+      {% else %}
+        <span>{{ form_data.profit }}</span>
+      {% endif %}
     </div>
+    {% endif %}
   </fieldset>
 
   <fieldset>
@@ -197,8 +215,10 @@
     }
   }
 
-  priceEl.addEventListener("input", recalcAmount);
-  qtyEl.addEventListener("input",  recalcAmount);
+  if (priceEl && qtyEl && amountEl) {
+    priceEl.addEventListener("input", recalcAmount);
+    qtyEl.addEventListener("input", recalcAmount);
+  }
 
   /* ===== 3. 初始行为 =====
      新建模式：表单为空，等用户输入时再算，不主动覆盖。

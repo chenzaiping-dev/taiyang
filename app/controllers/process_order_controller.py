@@ -1,5 +1,5 @@
 from datetime import datetime
-from flask import Blueprint, request, jsonify, render_template, abort, flash, redirect, url_for
+from flask import Blueprint, request, jsonify, render_template, abort, flash, redirect, url_for, session
 from marshmallow import ValidationError
 import re
 
@@ -24,6 +24,8 @@ from app.services.form_parser import parse_process_order_form, FormParseError
 from app.services.inventory_service import _rm_warehouses, InventoryError
 from app.generated.models.inventory_documents import InventoryDocument
 from app.generated.models.process_order_material_adjustments import ProcessOrderMaterialAdjustment
+from app.services.permission_service import can_view_production_cost, can_edit_production_cost
+from app.core.money_redaction import redact_money_fields
 
 
 bp = Blueprint("process_order", __name__, url_prefix="/process-orders")
@@ -142,6 +144,13 @@ def api_create():
     except ValidationError as e:
         return jsonify({"code": 422, "msg": "参数校验失败", "errors": e.messages}), 422
 
+    data["created_by"] = session.get("employee_id")
+    if not can_edit_production_cost():
+        data["planned_cost_price"] = "0"
+        data["planned_total_cost"] = "0"
+        for material in data.get("materials", []):
+            material["cost"] = "0"
+
     try:
         result = ProcessOrderService.create_process_order(
             factory_id=data["factory_id"],
@@ -173,6 +182,8 @@ def api_create():
     except ProcessOrderError as e:
         return jsonify({"code": 400, "msg": str(e)}), 400
 
+    if not can_view_production_cost():
+        result = redact_money_fields(result)
     return jsonify({"code": 0, "msg": "工艺单创建成功", "data": result})
 
 
@@ -238,6 +249,12 @@ def new_page():
 def create_submit():
     try:
         data = parse_process_order_form(request.form)
+        data["created_by"] = session.get("employee_id")
+        if not can_edit_production_cost():
+            data["planned_cost_price"] = "0"
+            data["planned_total_cost"] = "0"
+            for material in data.get("materials", []):
+                material["cost"] = "0"
         result = ProcessOrderService.create_process_order(**data)
     except (FormParseError, ProcessOrderError) as e:
         fd = _build_form_data_from_request(request.form)
@@ -320,6 +337,20 @@ def update_submit(order_id: int):
 
     try:
         data = parse_process_order_form(request.form)
+        # 没有成本维护权限时忽略客户端提交的成本字段，保留数据库原值。
+        if not can_edit_production_cost():
+            data["planned_cost_price"] = str(order.planned_cost_price or 0)
+            data["planned_total_cost"] = str(order.planned_total_cost or 0)
+            old_costs = {
+                row.material_id: str(row.cost or 0)
+                for row in ProcessOrderMaterial.query.filter_by(
+                    process_order_id=order_id
+                ).all()
+            }
+            for material in data.get("materials", []):
+                material["cost"] = old_costs.get(
+                    int(material["material_id"]), "0"
+                )
         # 编辑不允许改单号/创建人
         data.pop("process_order_no", None)
         data.pop("created_by", None)
@@ -367,7 +398,7 @@ def place_order(order_id: int):
         ProcessOrderService.place_order(
             order_id=order_id,
             out_warehouse_id=warehouse_id,
-            operator_id=1,     # 从 session 取当前用户
+            operator_id=session.get("employee_id"),     # 从 session 取当前用户
             remark=request.form.get("remark"),
             allow_partial=False,
         )
@@ -409,14 +440,13 @@ def receive(order_id: int):
         result = ProcessOrderService.receive_to_finished_goods(
             order_id=order_id,
             warehouse_id=warehouse_id,
-            operator_id=1,
+            operator_id=session.get("employee_id"),
             remark=request.form.get("remark"),
         )
-        flash(
-            f"入库成功：批次 {result['batch_no']}，数量 {result['quantity']}，"
-            f"单价 {result['unit_cost']}",
-            "success",
-        )
+        message = f"入库成功：批次 {result['batch_no']}，数量 {result['quantity']}"
+        if can_view_production_cost():
+            message += f"，单位成本 {result['unit_cost']}"
+        flash(message, "success")
         return redirect(url_for("finished_goods.document_detail_page",
             direction="in", document_id=result["finished_goods"]["document_id"]))
     except ProcessOrderError as e:
@@ -431,7 +461,7 @@ def cancel(order_id: int):
         result = ProcessOrderService.cancel_with_reversal(
             order_id=order_id,
             reason=request.form.get("remark") or None,
-            operator_id=1,
+            operator_id=session.get("employee_id"),
         )
         msgs = ["已取消"]
         if result.get("finished_goods_reverse"):
@@ -455,13 +485,15 @@ def api_change_status(order_id: int, action: str):
     try:
         if action == "cancel":
             result = ProcessOrderService.cancel_with_reversal(
-                order_id=order_id, reason=None, operator_id=1,
+                order_id=order_id, reason=None, operator_id=session.get("employee_id"),
             )
         else:
             action_key = action.replace("-", "_")
             result = ProcessOrderService.change_status(order_id, action_key)
     except ProcessOrderError as e:
         return jsonify({"code": 400, "msg": str(e)}), 400
+    if not can_view_production_cost():
+        result = redact_money_fields(result)
     return jsonify({"code": 0, "msg": "操作成功", "data": result})
 
 def _render_error(error_msg: str):
@@ -555,7 +587,7 @@ def adjust_materials(order_id):
             order_id=order_id,
             new_materials=new_materials,
             reason=request.form.get("reason", "").strip() or None,
-            operator_id=1,
+            operator_id=session.get("employee_id"),
         )
         flash(
             f"配比调整成功，红冲单 {result['reverse_doc_no'] or '-'}，"
@@ -681,7 +713,7 @@ def api_get_order_materials(order_id: int):
                     "material_id": r.material_id,
                     "ratio_value": str(r.ratio_value),
                     "quantity": str(r.quantity),
-                    "cost": str(r.cost),
+                    **({"cost": str(r.cost)} if can_view_production_cost() else {}),
                     "remark": r.remark or "",
                 }
                 for r in rows

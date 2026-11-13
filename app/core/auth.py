@@ -89,6 +89,34 @@ def _employee_landing():
     from app.services.permission_service import has_permission, is_super_admin
     if is_super_admin():
         return redirect(url_for("admin.dashboard"))
+
+    # Choose the first module the employee can actually open.
+    if has_permission("sales_performance.view"):
+        return redirect(url_for("sales_performance.list_page"))
+    if has_permission("sales_performance.create"):
+        return redirect(url_for("sales_performance.new_page"))
+    if has_permission("inventory.stock.view"):
+        return redirect(url_for("inventory_query.material_stock_page"))
+    if has_permission("inventory.purchase_in.create") and has_permission("inventory.cost.edit"):
+        return redirect(url_for("purchase_in.purchase_in_page"))
+    if has_permission("inventory.stock_out.create"):
+        return redirect(url_for("stock_out.stock_out_page"))
+    if has_permission("inventory.documents.view"):
+        return redirect(url_for("inventory_query.document_list_page", direction="in"))
+    if has_permission("inventory.summary.view"):
+        return redirect(url_for("inventory_query.material_io_summary_page"))
+    if has_permission("inventory.transactions.view"):
+        return redirect(url_for("inventory_query.material_transactions_page"))
+    if has_permission("inventory.materials.view"):
+        return redirect(url_for("admin.table_list", table_name="materials"))
+    if has_permission("process_order.view"):
+        return redirect(url_for("process_order.list_page"))
+    if has_permission("process_order.create"):
+        return redirect(url_for("process_order.new_page"))
+    if has_permission("production_plan.view"):
+        return redirect(url_for("production_plan.list_page"))
+    if has_permission("shipment.view"):
+        return redirect(url_for("shipment_plan.list_page"))
     if has_permission("finished_goods.inventory.view"):
         return redirect(url_for("finished_goods.warehouses_page"))
     if has_permission("finished_goods.inbound.create"):

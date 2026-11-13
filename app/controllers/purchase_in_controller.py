@@ -18,6 +18,7 @@ from app.services.form_parser import parse_purchase_in_form, FormParseError
 from app.services.inventory_service import (
     PurchaseInService, InventoryError, INBOUND_TYPE_LABELS, _rm_warehouses, tx_type_map
 )
+from app.services.permission_service import can_view_inventory_cost, can_edit_inventory_cost
 
 bp = Blueprint("purchase_in", __name__, url_prefix="/inventory")
 schema = PurchaseInRequestSchema()
@@ -75,6 +76,8 @@ def purchase_in_page():
             "lines": default_lines,
         },
         errors=[],
+        can_view_cost=can_view_inventory_cost(),
+        can_edit_cost=can_edit_inventory_cost(),
     )
 
 
@@ -151,6 +154,8 @@ def _render_form_with_error(error_msg: str, edit_mode=False, document_id=None):
             inbound_types=INBOUND_TYPE_LABELS,   # ⭐
             form_data=form_data,
             errors=[error_msg],
+            can_view_cost=can_view_inventory_cost(),
+            can_edit_cost=can_edit_inventory_cost(),
         ),
         400,
     )
@@ -204,6 +209,8 @@ def purchase_in_edit_page(document_id):
             "lines": form_lines,
         },
         errors=[],
+        can_view_cost=can_view_inventory_cost(),
+        can_edit_cost=can_edit_inventory_cost(),
     )
 
 

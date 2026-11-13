@@ -58,10 +58,11 @@ def is_super_admin():
 
 
 def has_permission(permission_code: str) -> bool:
-    if not _employee_id():
-        return False
+    # Bootstrap admin is a development-only identity and has no employee_id.
     if _bootstrap_bypass() or is_super_admin():
         return True
+    if not _employee_id():
+        return False
     return any(row.get("permission_code") == permission_code for row in _load_permission_rows())
 
 
@@ -94,3 +95,48 @@ def can_view_finished_goods_cost():
 
 def can_edit_finished_goods_cost():
     return has_permission("finished_goods.cost.edit")
+
+
+# ---------------------- module-specific monetary permissions ----------------------
+def can_view_inventory_cost():
+    return has_permission("inventory.cost.view") or has_permission("inventory.cost.edit")
+
+
+def can_edit_inventory_cost():
+    return has_permission("inventory.cost.edit")
+
+
+def can_view_production_cost():
+    return has_permission("production.cost.view") or has_permission("production.cost.edit")
+
+
+def can_edit_production_cost():
+    return has_permission("production.cost.edit")
+
+
+def can_view_shipment_money():
+    return has_permission("shipment.money.view") or has_permission("shipment.money.edit")
+
+
+def can_edit_shipment_money():
+    return has_permission("shipment.money.edit")
+
+
+def can_view_sales_performance_cost():
+    return (
+        has_permission("sales_performance.cost.view")
+        or has_permission("sales_performance.cost.edit")
+    )
+
+def can_edit_sales_performance_cost():
+    return has_permission("sales_performance.cost.edit")
+
+
+def can_view_sales_performance_money():
+    return (
+        has_permission("sales_performance.money.view")
+        or has_permission("sales_performance.money.edit")
+    )
+
+def can_edit_sales_performance_money():
+    return has_permission("sales_performance.money.edit")
