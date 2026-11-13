@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}尚未分配权限{% endblock %}
+{% block content %}
+<div class="container py-5" style="max-width:680px;">
+  <h3>账号已登录，但尚未分配业务权限</h3>
+  <p class="text-muted">请联系系统管理员为当前员工分配角色，并为角色配置对应的权限。</p>
+  <a class="btn btn-outline-secondary" href="{{ url_for('auth.logout') }}">退出登录</a>
+</div>
+{% endblock %}

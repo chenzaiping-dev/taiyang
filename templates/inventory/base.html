@@ -150,6 +150,7 @@
     .status-badge { display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px; }
     .status-draft       { background:#eee;color:#555; }
     .status-confirmed   { background:#e3f2fd;color:#1565c0; }
+    .status-produced    { background:#fff3e0;color:#ef6c00; }
     .status-in_progress { background:#fff3e0;color:#ef6c00; }
     .status-completed   { background:#e8f5e9;color:#2e7d32; }
     .status-cancelled   { background:#fdecea;color:#c62828; }
@@ -241,18 +242,23 @@
       </div>
     </div>
 
-    <!-- 2. 成品管理 -->
+    <!-- 2. 成品管理：菜单展示与后端权限分开控制 -->
+    {% if has_permission('finished_goods.menu.view') or has_permission('finished_goods.inventory.view') or has_permission('finished_goods.documents.view') or has_permission('finished_goods.inbound.create') or has_permission('finished_goods.outbound.create') %}
     <div class="nav-group">
       <div class="nav-label">成品管理</div>
       <div class="nav-dropdown">
-        <a href="{{ url_for('finished_goods.document_list_page', direction='in') }}">成品入库</a>
-        <a href="{{ url_for('finished_goods.document_list_page', direction='out') }}">成品出库</a>
-        <div class="divider"></div>
-        <a href="{{ url_for('finished_goods.warehouses_page') }}">成品库存</a>
-        <a href="{{ url_for('finished_goods.io_summary_page') }}">成品出入库汇总</a>
-        <a href="{{ url_for('finished_goods.transactions_page') }}">成品流水</a>
+        {% if has_permission('finished_goods.inbound.create') %}<a href="{{ url_for('finished_goods.inbound_page') }}">成品入库</a>{% endif %}
+        {% if has_permission('finished_goods.outbound.create') %}<a href="{{ url_for('finished_goods.outbound_page') }}">成品出库</a>{% endif %}
+        {% if has_permission('finished_goods.documents.view') %}
+          <a href="{{ url_for('finished_goods.document_list_page', direction='in') }}">入库单据</a>
+          <a href="{{ url_for('finished_goods.document_list_page', direction='out') }}">出库单据</a>
+        {% endif %}
+        {% if has_permission('finished_goods.inventory.view') %}<div class="divider"></div><a href="{{ url_for('finished_goods.warehouses_page') }}">成品库存</a>{% endif %}
+        {% if has_permission('finished_goods.summary.view') %}<a href="{{ url_for('finished_goods.io_summary_page') }}">成品出入库汇总</a>{% endif %}
+        {% if has_permission('finished_goods.transactions.view') %}<a href="{{ url_for('finished_goods.transactions_page') }}">成品流水</a>{% endif %}
       </div>
     </div>
+    {% endif %}
 
     <!-- 3. 生产管理 -->
     <div class="nav-group">
@@ -276,6 +282,18 @@
       <div class="nav-label">业绩表管理</div>
       <div class="nav-dropdown">
         <a href="{{ url_for('sales_performance.list_page') }}">业绩单列表</a>
+      </div>
+    </div>
+
+    <!-- 5. 员工管理 -->
+    <div class="nav-group">
+      <div class="nav-label">员工管理</div>
+      <div class="nav-dropdown">
+        {% if session.get('auth_source') == 'employee' %}
+        <a class="nav-link" href="{{ url_for('auth.change_password') }}">修改密码</a>
+        <a href="{{ url_for('auth.logout') }}">退出登录</a>
+        {% endif %}
+        <a href="{{ url_for('auth.employee_login') }}">登录界面</a>
       </div>
     </div>
 

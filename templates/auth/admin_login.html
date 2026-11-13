@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}管理员登录{% endblock %}
+{% block content %}
+<div class="row justify-content-center py-4">
+  <div class="col-md-5 col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-body p-4">
+        <h3 class="mb-2">管理员登录</h3>
+        <p class="text-muted small mb-4">系统维护、基础资料和权限配置入口</p>
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
+          <div class="mb-3"><label class="form-label">管理员账号</label><input class="form-control" name="username" autocomplete="username" required autofocus></div>
+          <div class="mb-3"><label class="form-label">管理员密码</label><input class="form-control" type="password" name="password" autocomplete="current-password" required></div>
+          <button class="btn btn-dark w-100" type="submit">管理员登录</button>
+        </form>
+        <div class="text-center mt-3 small"><a href="{{ url_for('auth.employee_login') }}">员工登录入口</a></div>
+        <p class="text-muted mt-3 mb-0 small">管理员开发账号由服务器 .env 配置。正式环境请关闭开发引导账号。</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

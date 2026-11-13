@@ -14,7 +14,8 @@
     <span style="color:#888;font-size:14px;">#{{ doc.document_no }}</span>
 
     {% if doc.status == 'DRAFT' %}
-      <!-- 草稿：确认 + 编辑 -->
+      <!-- 按后端相同的权限码显示操作按钮 -->
+      {% if has_permission('finished_goods.documents.confirm') %}
       <form method="post" style="float:right;margin-right:8px;"
             action="{{ url_for('finished_goods.document_confirm',
                     direction=direction, document_id=doc.id) }}"
@@ -22,11 +23,12 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn btn-primary">确认{{ '入库' if direction == 'in' else '出库' }}</button>
       </form>
+      {% endif %}
+      {% if has_permission('finished_goods.documents.edit') %}
       <a class="btn" style="float:right;margin-right:8px;"
         href="{{ url_for('finished_goods.document_edit_page',
-                  direction=direction, document_id=doc.id) }}">
-        编辑草稿
-      </a>
+                  direction=direction, document_id=doc.id) }}">编辑草稿</a>
+      {% endif %}
 
     {% elif doc.status == 'CONFIRMED' %}
       {# ⭐ 三种情况：撤销单 / 已撤销 / 可撤销 #}
@@ -34,7 +36,7 @@
         <span style="color:#888;font-size:12px;">撤销单不可再次撤销</span>
       {% elif detail.is_reversed %}
         <span style="color:#888;font-size:12px;">该单已撤销</span>
-      {% else %}
+      {% elif has_permission('finished_goods.documents.reverse') %}
         <form method="post" style="float:right;margin-right:8px;"
               action="{{ url_for('finished_goods.document_reverse',
                       direction=direction, document_id=doc.id) }}"
@@ -117,7 +119,7 @@
           <th>质量</th>
           <th>来源/去向仓库</th>
           <th style="width:110px;text-align:right;">数量</th>
-          <th style="width:110px;text-align:right;">单价</th>
+          {% if can_view_cost %}<th style="width:110px;text-align:right;">单价</th>{% endif %}
           <th style="width:130px;">变动类型</th>
           <th style="width:140px;">变动时间</th>
           <th>备注</th>
@@ -160,7 +162,7 @@
               {{ '+' if l.quantity_delta > 0 }}{{ l.quantity_delta }}
             {% endif %}
           </td>
-          <td style="text-align:right;">{{ l.unit_cost or "-" }}</td>
+          {% if can_view_cost %}<td style="text-align:right;">{{ l.unit_cost or "-" }}</td>{% endif %}
           <td>
             {% if l.transaction_type %}
               <span class="tx-badge tx-{{ l.transaction_type|lower }}">

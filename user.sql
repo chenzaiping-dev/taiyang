@@ -69,6 +69,7 @@ CREATE TABLE employees (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     username VARCHAR(50) NOT NULL COMMENT '登录账号',
     password_hash VARCHAR(255) NOT NULL COMMENT '密码哈希',
+    must_change_password TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否首次登录后强制修改密码',
     real_name VARCHAR(50) NOT NULL COMMENT '员工姓名',
     phone VARCHAR(30) DEFAULT NULL COMMENT '联系电话',
     nickname VARCHAR(50) DEFAULT NULL COMMENT '代号，销售非空',
@@ -1078,19 +1079,55 @@ CREATE TABLE finished_goods_reservations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 COMMENT='成品库存统一预留表';
 
-INSERT INTO roles (role_code, role_name, description)
+INSERT INTO roles (role_code, role_name, description, status)
 VALUES
-('sales', '销售人员', '负责销售业绩及销售需求'),
-('order_followup', '跟单员', '负责工艺单、生产跟进和发货计划'),
-('factory_worker', '加工厂员工', '负责生产任务及完工登记'),
-('admin', '管理人员', '负责系统管理及授权范围内的管理操作');
+('super_admin', '超级管理员', '拥有全部业务模块权限；仅授予可信系统管理员', 1),
+('sales', '销售人员', '负责销售业绩及销售需求', 1),
+('order_followup', '跟单员', '负责工艺单、生产跟进和发货计划', 1),
+('factory_worker', '加工厂员工', '负责生产任务及完工登记', 1),
+('warehouse_staff', '仓库人员', '负责原料库和成品库的管理', 1),
+('admin', '管理人员', '负责系统管理、员工管理及授权范围内的管理操作', 1)
+ON DUPLICATE KEY UPDATE role_name = VALUES(role_name), description = VALUES(description);
 
-INSERT INTO employees (username, password_hash, real_name, nickname, status)
+-- 以下仅为开发/测试示例账号，初始密码均为 123456；首次登录必须修改。
+-- 每个账号使用独立 salt 的 Werkzeug pbkdf2:sha256 哈希。
+INSERT INTO employees (username, password_hash, must_change_password, real_name, nickname, status)
 VALUES
-('chen1', 'hashed_password1', '陈一', 'A', 1),
-('chen2', 'hashed_password2', '陈二', 'B', 1),
-('chen3', 'hashed_password3', '陈三', 'C', 1),
-('chen4', 'hashed_password4', '陈四', 'D', 1);
+('chen1', 'pbkdf2:sha256:600000$2qFPiojLTjcMCwus$16141b7efc0c8513ca810af0610c1070c4680dcb0a193550c81fcfad4baebf64', 1, '陈一', 'A', 1),
+('chen2', 'pbkdf2:sha256:600000$hZTfN1WQ4faeeEXW$1371be51f8d6d0792c146c22f776126de0a5376a9522d9bfc5907e72018338c8', 1, '陈二', 'B', 1),
+('chen3', 'pbkdf2:sha256:600000$TTvqrVp5U3pGH70g$355ef55eeaa81ddfa8cfd3bf3638cd4c2ffef1f8475d5f09707d1a6541562ea3', 1, '陈三', 'C', 1),
+('chen4', 'pbkdf2:sha256:600000$v4yER3CBaCeZwyHJ$f685bbd8d191ede977cbebeab7d4bb096e22f6e25ed4dab92a3cd274a37aaaad', 1, '陈四', 'D', 1);
+
+-- 成品管理 RBAC 权限目录。可重复执行；不会自动给现有角色授权。
+-- super_admin 是角色编码约定，创建后需由可信管理员手动分配给指定员工。
+INSERT INTO roles (role_code, role_name, description, status)
+VALUES ('super_admin', '超级管理员', '拥有全部业务模块权限；仅授予可信系统管理员', 1)
+ON DUPLICATE KEY UPDATE role_name = VALUES(role_name), description = VALUES(description);
+
+INSERT INTO permissions (permission_code, permission_name, module_code, description) VALUES
+('finished_goods.menu.view', '查看成品管理菜单', 'finished_goods', '允许在导航中看到成品管理入口'),
+('finished_goods.inventory.view', '查看成品库存', 'finished_goods', '查看成品仓库库存及数量'),
+('finished_goods.cost.view', '查看成品成本', 'finished_goods', '查看成品单价、库存成本、单据成本'),
+('finished_goods.cost.edit', '维护成品成本', 'finished_goods', '录入或修改成品单价/成本'),
+('finished_goods.inbound.create', '创建成品入库单', 'finished_goods', '创建成品入库单及查询来源工艺单'),
+('finished_goods.outbound.create', '创建成品出库单', 'finished_goods', '创建成品出库单'),
+('finished_goods.transactions.view', '查看成品库存流水', 'finished_goods', '查看成品库存历史流水'),
+('finished_goods.summary.view', '查看成品出入库汇总', 'finished_goods', '查看成品出入库汇总报表'),
+('finished_goods.documents.view', '查看成品单据', 'finished_goods', '查看成品入库/出库单据及详情'),
+('finished_goods.documents.confirm', '确认成品单据', 'finished_goods', '确认成品入库或出库单，产生库存变化'),
+('finished_goods.documents.edit', '编辑成品草稿单据', 'finished_goods', '编辑草稿状态的成品单据'),
+('finished_goods.documents.reverse', '撤销已确认成品单据', 'finished_goods', '通过反向单据撤销已确认成品单据')
+ON DUPLICATE KEY UPDATE permission_name = VALUES(permission_name),
+                        module_code = VALUES(module_code),
+                        description = VALUES(description);
+
+-- 示例授权：管理人员可操作成品业务，但成本查看/维护权限单独授予。
+-- 按实际岗位职责调整，不要把 admin 自动视为 super_admin。
+-- INSERT INTO role_permissions (role_id, permission_id, data_scope)
+-- SELECT r.id, p.id, 'all'
+--   FROM roles r CROSS JOIN permissions p
+--  WHERE r.role_code = 'admin' AND p.module_code = 'finished_goods'
+--    AND p.permission_code <> 'finished_goods.cost.edit';
 
 INSERT INTO warehouses (warehouse_code, warehouse_name, warehouse_type, manager_employee_id, status)
 VALUES

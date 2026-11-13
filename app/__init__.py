@@ -44,6 +44,8 @@ def create_app(test_config=None):
     app.register_blueprint(inventory_query_bp)
 
     from app.controllers.finished_goods_controller import bp as fg_bp
+    from app.core.permission_hooks import register_finished_goods_permission_hooks
+    register_finished_goods_permission_hooks(fg_bp)
     app.register_blueprint(fg_bp)
 
     from app.controllers.production_plan_controller import bp as pp_bp
@@ -52,12 +54,30 @@ def create_app(test_config=None):
     from app.controllers.shipment_plan_controller import bp as sp_bp
     app.register_blueprint(sp_bp)
 
-    from app.controllers.sales_performance_controller import bp as sp_bp
-    app.register_blueprint(sp_bp)
+    from app.controllers.sales_performance_controller import bp as sales_bp
+    app.register_blueprint(sales_bp)
+
+    from app.controllers.role_management_controller import bp as role_management_bp
+    app.register_blueprint(role_management_bp)
+
+    from app.controllers.employee_account_controller import bp as employee_accounts_bp
+    app.register_blueprint(employee_accounts_bp)
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(documents_bp)
+
+    from app.services.permission_service import (
+        has_permission, can_view_finished_goods_cost, is_super_admin
+    )
+
+    @app.context_processor
+    def inject_permission_helpers():
+        return {
+            "has_permission": has_permission,
+            "can_view_finished_goods_cost": can_view_finished_goods_cost,
+            "is_super_admin": is_super_admin,
+        }
 
     @app.get("/")
     def index():

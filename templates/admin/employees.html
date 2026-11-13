@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}员工账号管理{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div><h2 class="mb-1">员工账号管理</h2><div class="text-muted small">可重置员工密码。重置后初始密码为 123456，员工下次登录必须修改。</div></div>
+  <a class="btn btn-outline-secondary" href="{{ url_for('role_management.role_list') }}">返回角色管理</a>
+</div>
+<div class="card mb-3">
+  <div class="card-header fw-semibold">新增员工</div>
+  <div class="card-body">
+    <form method="post" action="{{ url_for('employee_accounts.employee_create') }}" class="row g-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="col-md-3"><label class="form-label">员工账号</label><input class="form-control" name="username" maxlength="50" required></div>
+      <div class="col-md-3"><label class="form-label">员工姓名</label><input class="form-control" name="real_name" maxlength="50" required></div>
+      <div class="col-md-3"><label class="form-label">联系电话</label><input class="form-control" name="phone" maxlength="30"></div>
+      <div class="col-md-2"><label class="form-label">代号</label><input class="form-control" name="nickname" maxlength="50"></div>
+      <div class="col-md-1"><button class="btn btn-primary w-100" type="submit">新增</button></div>
+    </form>
+    <div class="form-text mt-2">新员工初始密码为 123456，首次登录必须修改；创建后还需在角色权限管理中分配角色。</div>
+  </div>
+</div>
+<div class="card"><div class="table-responsive">
+<table class="table table-hover align-middle mb-0">
+  <thead class="table-light"><tr><th>ID</th><th>员工账号</th><th>姓名</th><th>电话</th><th>状态</th><th>密码状态</th><th class="text-end">操作</th></tr></thead>
+  <tbody>
+  {% for employee in employees %}
+    <tr>
+      <td>{{ employee.id }}</td><td>{{ employee.username }}</td><td>{{ employee.real_name }}</td><td>{{ employee.phone or '-' }}</td>
+      <td>{% if employee.status %}<span class="badge text-bg-success">启用</span>{% else %}<span class="badge text-bg-secondary">停用</span>{% endif %}</td>
+      <td>{% if employee.must_change_password %}<span class="badge text-bg-warning">下次登录需修改</span>{% else %}<span class="text-muted">正常</span>{% endif %}</td>
+      <td class="text-end">
+        {% if employee.status %}
+        <form method="post" action="{{ url_for('employee_accounts.reset_password', employee_id=employee.id) }}" class="d-inline" onsubmit="return confirm('确定将该员工密码重置为 123456 吗？员工下次登录必须修改密码。');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-outline-danger" type="submit">重置密码</button>
+        </form>
+        {% else %}<span class="text-muted small">停用员工不可重置</span>{% endif %}
+      </td>
+    </tr>
+  {% else %}<tr><td colspan="7" class="text-center text-muted py-4">暂无员工</td></tr>{% endfor %}
+  </tbody>
+</table></div></div>
+{% endblock %}

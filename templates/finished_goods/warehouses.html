@@ -34,8 +34,10 @@
       <th style="width:130px;text-align:right;">库存总量</th>
       <th style="width:130px;text-align:right;background:#fff8e1;">锁定数量</th>
       <th style="width:130px;text-align:right;background:#e8f5e9;">可用数量</th>
+      {% if can_view_cost %}
       <th style="width:130px;text-align:right;background:#e8f5e9;">单价</th>
       <th style="width:130px;text-align:right;background:#e8f5e9;">库存成本</th>
+      {% endif %}
       <th style="width:150px;">更新时间</th>
     </tr>
   </thead>
@@ -58,13 +60,15 @@
                   color:{{ '#c62828' if r.available_qty <= 0 else '#2e7d32' }};">
           {{ r.available_qty }}
         </td>
+        {% if can_view_cost %}
         <td style="text-align:right;">{{ r.unit_cost or "" }}</td>
         <td style="text-align:right;color:#ef6c00;">{{ r.total_cost }}</td>
+        {% endif %}
         <td>{{ r.updated_at.strftime("%Y-%m-%d %H:%M") if r.updated_at else "-" }}</td>
       </tr>
       {% endfor %}
       {% else %}
-        <tr><td colspan="13" style="text-align:center;color:#999;padding:24px;">暂无库存</td></tr>
+        <tr><td colspan="{{ 13 if can_view_cost else 11 }}" style="text-align:center;color:#999;padding:24px;">暂无库存</td></tr>
       {% endif %}
   </tbody>
   <tfoot>
@@ -77,10 +81,12 @@
       <td style="text-align:right;color:#2e7d32;">
         {{ rows|sum(attribute='available_qty') }}
       </td>
+      {% if can_view_cost %}
       <td></td>
       <td style="text-align:right;color:#ef6c00;">
         {{ rows|sum(attribute='total_cost') }}
       </td>
+      {% endif %}
       <td></td>
     </tr>
   </tfoot>

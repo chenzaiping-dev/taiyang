@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}角色权限配置 - {{ role.role_name }}{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+  <div>
+    <h2 class="mb-1">{{ role.role_name }}：权限配置</h2>
+    <div class="text-muted">角色编码：<code>{{ role.role_code }}</code>　角色 ID：{{ role.id }}</div>
+  </div>
+  <a class="btn btn-outline-secondary" href="{{ url_for('role_management.role_list') }}">返回角色列表</a>
+</div>
+
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">角色基本状态</span>
+        {% if role.status %}<span class="badge text-bg-success">启用</span>{% else %}<span class="badge text-bg-secondary">停用</span>{% endif %}
+      </div>
+      <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div><div class="fw-semibold">{{ role.role_name }}</div><div class="text-muted small">{{ role.description or '暂无说明' }}</div></div>
+        {% if role.role_code != 'super_admin' %}
+        <form method="post" class="d-flex gap-2 align-items-center">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="toggle_status">
+          <input type="hidden" name="status" value="{{ 0 if role.status else 1 }}">
+          <button class="btn btn-sm {{ 'btn-outline-danger' if role.status else 'btn-outline-success' }}" type="submit">{{ '停用角色' if role.status else '启用角色' }}</button>
+        </form>
+        {% else %}<span class="text-muted small">超级管理员角色不可停用</span>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-8">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <span class="fw-semibold">权限清单与数据范围</span>
+        {% if role.role_code == 'super_admin' %}<span class="badge text-bg-warning">拥有全部权限</span>{% endif %}
+      </div>
+      {% if role.role_code == 'super_admin' %}
+      <div class="card-body"><div class="alert alert-info mb-0">超级管理员自动拥有系统全部权限，不需要逐项勾选。新增权限目录后也会自动生效。</div></div>
+      {% else %}
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="save_permissions">
+        <div class="card-body">
+          <div class="d-flex flex-wrap gap-2 mb-3">
+            <button type="button" class="btn btn-sm btn-outline-primary" id="selectAll">全选</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="clearAll">清空</button>
+            <span class="text-muted small align-self-center">数据范围按每项权限独立保存。</span>
+          </div>
+          {% for module, permissions in permission_groups.items() %}
+          <section class="border rounded mb-3">
+            <div class="bg-light px-3 py-2 fw-semibold">{{ module }}</div>
+            <div class="table-responsive">
+              <table class="table table-sm align-middle mb-0">
+                <thead><tr><th style="width:42%">权限</th><th>权限编码</th><th style="width:180px">数据范围</th></tr></thead>
+                <tbody>
+                {% for p in permissions %}
+                  <tr>
+                    <td>
+                      <div class="form-check mb-0">
+                        <input class="form-check-input permission-checkbox" type="checkbox" name="permission_ids" value="{{ p.id }}" id="perm_{{ p.id }}" {% if p.granted %}checked{% endif %}>
+                        <label class="form-check-label fw-medium" for="perm_{{ p.id }}">{{ p.permission_name }}</label>
+                      </div>
+                      {% if p.description %}<div class="small text-muted ms-4">{{ p.description }}</div>{% endif %}
+                    </td>
+                    <td><code class="small">{{ p.permission_code }}</code></td>
+                    <td>
+                      <select class="form-select form-select-sm scope-select" name="scope_{{ p.id }}" data-permission-id="{{ p.id }}" {% if not p.granted %}disabled{% endif %}>
+                        {% for scope in ['all', 'own', 'assigned', 'factory'] %}
+                        <option value="{{ scope }}" {% if (p.data_scope or 'all') == scope %}selected{% endif %}>{{ {'all':'全部数据','own':'本人创建','assigned':'分配给本人','factory':'所属工厂'}[scope] }}</option>
+                        {% endfor %}
+                      </select>
+                    </td>
+                  </tr>
+                {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </section>
+          {% else %}<div class="alert alert-warning">权限字典为空，请先执行权限目录迁移 SQL。</div>{% endfor %}
+        </div>
+        <div class="card-footer d-flex justify-content-end"><button class="btn btn-primary" type="submit" {% if not permission_groups %}disabled{% endif %}>保存权限配置</button></div>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-xl-4">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold">分配员工</div>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="save_employees">
+        <div class="card-body">
+          <p class="small text-muted">勾选后，员工登录时将获得此角色的权限。停用员工不会显示为可分配对象。</p>
+          <div class="mb-2"><input class="form-control form-control-sm" id="employeeFilter" placeholder="搜索姓名或账号"></div>
+          <div class="border rounded p-2" style="max-height:460px;overflow:auto" id="employeeList">
+            {% for employee in employees %}
+            <label class="d-flex align-items-start gap-2 py-2 border-bottom employee-item">
+              <input class="form-check-input mt-1" type="checkbox" name="employee_ids" value="{{ employee.id }}" {% if employee.assigned %}checked{% endif %} {% if not employee.status %}disabled{% endif %}>
+              <span class="flex-grow-1"><span class="d-block fw-medium">{{ employee.real_name }}</span><small class="text-muted">{{ employee.username }}{% if employee.phone %} · {{ employee.phone }}{% endif %}</small></span>
+              {% if not employee.status %}<span class="badge text-bg-secondary">停用</span>{% endif %}
+            </label>
+            {% else %}<div class="text-muted small py-3">暂无员工记录</div>{% endfor %}
+          </div>
+        </div>
+        <div class="card-footer"><button class="btn btn-outline-primary w-100" type="submit">保存员工分配</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  const boxes = Array.from(document.querySelectorAll('.permission-checkbox'));
+  const scopes = Array.from(document.querySelectorAll('.scope-select'));
+  boxes.forEach(box => box.addEventListener('change', () => {
+    const scope = document.querySelector('.scope-select[data-permission-id="' + box.value + '"]');
+    if (scope) scope.disabled = !box.checked;
+  }));
+  document.getElementById('selectAll')?.addEventListener('click', () => {
+    boxes.forEach(box => { box.checked = true; });
+    scopes.forEach(scope => { scope.disabled = false; });
+  });
+  document.getElementById('clearAll')?.addEventListener('click', () => {
+    boxes.forEach(box => { box.checked = false; });
+    scopes.forEach(scope => { scope.disabled = true; });
+  });
+  document.getElementById('employeeFilter')?.addEventListener('input', event => {
+    const keyword = event.target.value.trim().toLowerCase();
+    document.querySelectorAll('.employee-item').forEach(item => {
+      item.style.display = item.innerText.toLowerCase().includes(keyword) ? '' : 'none';
+    });
+  });
+})();
+</script>
+{% endblock %}

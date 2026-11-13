@@ -13,7 +13,13 @@
     <div class="navbar-nav ms-auto">
       {% if session.get('username') %}
         <span class="navbar-text me-3">{{ session.get('username') }}</span>
+        {% if session.get('auth_source') == 'employee' %}
+          <a class="nav-link" href="{{ url_for('auth.change_password') }}">修改密码</a>
+        {% endif %}
         <a class="nav-link" href="{{ url_for('auth.logout') }}">退出</a>
+      {% else %}
+        <a class="nav-link" href="{{ url_for('auth.employee_login') }}">员工登录</a>
+        <a class="nav-link" href="{{ url_for('auth.admin_login') }}">管理员登录</a>
       {% endif %}
     </div>
   </div>

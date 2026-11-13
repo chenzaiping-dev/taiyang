@@ -31,10 +31,11 @@ TABLES = {
     },
     "employees": {
         "label": "员工管理", "module": "权限管理", "mode": "crud",
-        "list_fields": ["id", "username", "password_hash", "real_name", "phone", "nickname", "status"],
-        "form_fields": ["username", "password_hash", "real_name", "phone", "nickname", "status"],
+        "list_fields": ["id", "username", "real_name", "phone", "nickname", "status"],
+        # password_hash 不允许通过通用 CRUD 展示或直接编辑；应使用独立的密码重置流程。
+        "form_fields": ["username", "real_name", "phone", "nickname", "status"],
         "search_fields": ["username", "real_name", "phone"],
-        "can_create": True, "can_edit": True, "can_delete": False,
+        "can_create": False, "can_edit": True, "can_delete": False,
     },
     "roles": {
         "label": "角色管理", "module": "权限管理", "mode": "readonly",

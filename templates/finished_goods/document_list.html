@@ -64,9 +64,11 @@
      href="{{ url_for('finished_goods.document_list_page', direction=direction) }}">
     重置
   </a>
+  {% if (direction == 'in' and has_permission('finished_goods.inbound.create')) or (direction == 'out' and has_permission('finished_goods.outbound.create')) %}
   <a class="btn btn-primary" style="float:right;" href="{{ new_doc_url }}">
     + 新建{{ '入库单' if direction == 'in' else '出库单' }}
   </a>
+  {% endif %}
 </form>
 {% set ns = namespace(total_signed=0) %}
 <table style="width:100%;border-collapse:collapse;font-size:13px;">

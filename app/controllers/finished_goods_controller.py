@@ -1,7 +1,8 @@
 from datetime import datetime
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, abort
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, abort, session
 
 from app.extensions import db
+from app.services.permission_service import can_view_finished_goods_cost, can_edit_finished_goods_cost
 from app.generated.models.warehouses import Warehouse
 
 from app.generated.models.finished_goods_batches import FinishedGoodsBatch
@@ -107,6 +108,8 @@ def inbound_page():
             "remark": "", "lines": [{}],
         },
         errors=[],
+        can_view_cost=can_view_finished_goods_cost(),
+        can_edit_cost=can_edit_finished_goods_cost(),
     )
 
 
@@ -150,7 +153,7 @@ def inbound_submit():
             "quality_status": request.form.get(prefix + "[quality_status]", "QUALIFIED"),
             "process_order_id": process_order_id,
             "quantity": request.form.get(prefix + "[quantity]").strip(),
-            "unit_cost": request.form.get(prefix + "[unit_cost]", "").strip() or None,
+            "unit_cost": (request.form.get(prefix + "[unit_cost]", "").strip() or None) if can_edit_finished_goods_cost() else None,
             "remark": request.form.get(prefix + "[remark]", "").strip() or None,
         })
         line_idx += 1
@@ -163,7 +166,7 @@ def inbound_submit():
             lines=lines,
             inbound_type=inbound_type,
             document_time=doc_time,
-            created_by=1,
+            created_by=session.get("employee_id"),
             remark=remark,
             auto_confirm=False,      # ⭐ 草稿落地
         )
@@ -194,6 +197,8 @@ def inbound_submit():
                 "lines": lines or [{}],
             },
             errors=[str(e)],
+            can_view_cost=can_view_finished_goods_cost(),
+            can_edit_cost=can_edit_finished_goods_cost(),
         ), 400
 
 
@@ -269,7 +274,7 @@ def outbound_submit():
             lines=lines,
             outbound_type=outbound_type,
             document_time=doc_time,
-            created_by=1,
+            created_by=session.get("employee_id"),
             remark=remark,
             auto_confirm=False,       # ⭐ 草稿落地
         )
@@ -321,6 +326,7 @@ def warehouses_page():
         page=page, page_size=page_size,
     )
     total_pages = max((total + page_size - 1) // page_size, 1)
+    print("can_view_finished_goods_cost", can_view_finished_goods_cost())
 
     return render_template(
         "finished_goods/warehouses.html",
@@ -330,6 +336,7 @@ def warehouses_page():
         batch_keyword=keyword or "",
         warehouses=_fg_warehouses(),
         quality_labels={"PENDING": "待检", "QUALIFIED": "合格", "REJECTED": "不合格"},
+        can_view_cost=can_view_finished_goods_cost(),
     )
 
 
@@ -525,6 +532,7 @@ def document_detail_page(direction, document_id):
         tx_types=FG_TX_TYPE_LABELS,
         list_url=url_for("finished_goods.document_list_page",
                          direction=direction),
+        can_view_cost=can_view_finished_goods_cost(),
     )
 
 @bp.post("/documents/<direction>/<int:document_id>/confirm")
@@ -533,10 +541,10 @@ def document_confirm(direction, document_id):
         abort(404)
     try:
         if direction == "in":
-            FinishedGoodsService.confirm_inbound_document(document_id, confirmed_by=1)
+            FinishedGoodsService.confirm_inbound_document(document_id, confirmed_by=session.get("employee_id"))
             flash("入库单已确认，库存已增加", "success")
         else:
-            FinishedGoodsService.confirm_outbound_document(document_id, confirmed_by=1)
+            FinishedGoodsService.confirm_outbound_document(document_id, confirmed_by=session.get("employee_id"))
             flash("出库单已确认，库存已扣减", "success")
     except FinishedGoodsError as e:
         flash(str(e), "error")
@@ -619,6 +627,8 @@ def document_edit_page(direction, document_id):
                 "lines": form_lines,
             },
             errors=[],
+            can_view_cost=can_view_finished_goods_cost(),
+            can_edit_cost=can_edit_finished_goods_cost(),
         )
     else:
         # 批量取仓库
@@ -700,6 +710,8 @@ def document_edit_submit(direction, document_id):
         wh_raw = request.form.get("warehouse_id", "").strip()
         warehouse_id = int(wh_raw) if wh_raw.isdigit() else None
         lines = []
+        existing_lines = (FinishedGoodsDocumentLine.query.filter_by(document_id=doc.id)
+                          .order_by(FinishedGoodsDocumentLine.line_no.asc()).all())
         idx = 0
         while True:
             prefix = f"lines[{idx}]"
@@ -721,7 +733,12 @@ def document_edit_submit(direction, document_id):
                 "quality_status": request.form.get(prefix + "[quality_status]", "QUALIFIED"),
                 "process_order_id": process_order_id,
                 "quantity": request.form.get(prefix + "[quantity]").strip(),
-                "unit_cost": request.form.get(prefix + "[unit_cost]", "").strip() or None,
+                "unit_cost": (
+                    (request.form.get(prefix + "[unit_cost]", "").strip() or None)
+                    if can_edit_finished_goods_cost()
+                    else (str(existing_lines[idx].unit_cost) if idx < len(existing_lines)
+                          and existing_lines[idx].unit_cost is not None else None)
+                ),
                 "remark": request.form.get(prefix + "[remark]", "").strip() or None,
             })
             idx += 1
@@ -799,7 +816,7 @@ def document_reverse(direction, document_id):
         result = FinishedGoodsService.reverse_document(
             document_id=document_id,
             reason=request.form.get("reason", "").strip() or None,
-            created_by=1,
+            created_by=session.get("employee_id"),
         )
         flash(
             f"已撤销，生成新单号 {result['reverse_document_no']}，"

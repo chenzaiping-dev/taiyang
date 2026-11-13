@@ -1,7 +1,15 @@
 {% extends "base.html" %}
 {% block title %}管理首页{% endblock %}
 {% block content %}
-<h2 class="mb-4">管理首页</h2>
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="mb-0">管理首页</h2>
+  {% if is_super_admin() %}
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-primary" href="{{ url_for('employee_accounts.employee_list') }}">员工账号 / 密码管理</a>
+      <a class="btn btn-primary" href="{{ url_for('role_management.role_list') }}">角色权限管理</a>
+    </div>
+  {% endif %}
+</div>
 <div class="row g-3">
 {% for module, entries in groups.items() %}
   <div class="col-xl-4 col-md-6">

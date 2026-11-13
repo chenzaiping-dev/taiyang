@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}角色管理{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+  <div>
+    <h2 class="mb-1">角色权限管理</h2>
+    <div class="text-muted">管理角色、权限清单和员工角色分配。此页面仅超级管理员可访问。</div>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-primary" href="{{ url_for('employee_accounts.employee_list') }}">员工账号管理</a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('admin.dashboard') }}">返回管理首页</a>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-xl-8">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold">系统角色</div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light"><tr><th>角色</th><th>编码</th><th>员工数</th><th>权限数</th><th>状态</th><th class="text-end">操作</th></tr></thead>
+          <tbody>
+          {% for role in roles %}
+            <tr>
+              <td><div class="fw-semibold">{{ role.role_name }}</div><small class="text-muted">{{ role.description or '' }}</small></td>
+              <td><code>{{ role.role_code }}</code></td>
+              <td>{{ role.employee_count }}</td>
+              <td>{% if role.role_code == 'super_admin' %}全部{% else %}{{ role.permission_count }}{% endif %}</td>
+              <td>{% if role.status %}<span class="badge text-bg-success">启用</span>{% else %}<span class="badge text-bg-secondary">停用</span>{% endif %}</td>
+              <td class="text-end"><a class="btn btn-sm btn-primary" href="{{ url_for('role_management.role_detail', role_id=role.id) }}">权限配置</a></td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6" class="text-center text-muted py-4">暂无角色</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-4">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold">新增角色</div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('role_management.role_create') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="mb-3"><label class="form-label">角色编码</label><input class="form-control" name="role_code" required maxlength="50" pattern="[a-z][a-z0-9_]{1,49}" placeholder="例如 warehouse_staff"><div class="form-text">小写字母开头，仅允许小写字母、数字、下划线。</div></div>
+          <div class="mb-3"><label class="form-label">角色名称</label><input class="form-control" name="role_name" required maxlength="50" placeholder="例如仓库人员"></div>
+          <div class="mb-3"><label class="form-label">角色说明</label><textarea class="form-control" name="description" rows="3" maxlength="255"></textarea></div>
+          <button class="btn btn-success w-100" type="submit">创建角色</button>
+        </form>
+      </div>
+    </div>
+    <div class="alert alert-info mt-3 mb-0 small">超级管理员拥有全部权限，不能在普通权限矩阵中删减。请谨慎分配超级管理员身份。</div>
+  </div>
+</div>
+{% endblock %}
