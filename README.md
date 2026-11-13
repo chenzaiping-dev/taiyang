@@ -214,9 +214,14 @@ WHERE username = 'chen1';
 本版本已将原料、工艺单、生产计划、发货计划和业绩表接入统一路由权限校验，并为原料成本、生产成本、发货单价、业绩金额/成本/利润增加独立的查看/维护权限。
 
 已有数据库执行：
+给指定员工分配超级管理员角色：
 
 ```sql
-SOURCE migrations/20261113_business_module_permissions.sql;
+INSERT INTO employee_roles (employee_id, role_id)
+SELECT e.id, r.id
+FROM employees e
+JOIN roles r ON r.role_code = 'super_admin'
+WHERE e.username = 'your_admin_username';
 ```
 
 新建数据库请使用更新后的 `user.sql`。迁移只增加权限字典，不会自动给角色授权；请在「角色权限管理」页面按岗位分配。

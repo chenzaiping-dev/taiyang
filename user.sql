@@ -1099,25 +1099,7 @@ VALUES
 ('chen3', 'pbkdf2:sha256:600000$TTvqrVp5U3pGH70g$355ef55eeaa81ddfa8cfd3bf3638cd4c2ffef1f8475d5f09707d1a6541562ea3', 1, '陈三', 'C', 1),
 ('chen4', 'pbkdf2:sha256:600000$v4yER3CBaCeZwyHJ$f685bbd8d191ede977cbebeab7d4bb096e22f6e25ed4dab92a3cd274a37aaaad', 1, '陈四', 'D', 1);
 
--- 成品管理 RBAC 权限目录。可重复执行；不会自动给现有角色授权。
-INSERT INTO permissions (permission_code, permission_name, module_code, description) VALUES
-('finished_goods.menu.view', '查看成品管理菜单', 'finished_goods', '允许在导航中看到成品管理入口'),
-('finished_goods.inventory.view', '查看成品库存', 'finished_goods', '查看成品仓库库存及数量'),
-('finished_goods.cost.view', '查看成品成本', 'finished_goods', '查看成品单价、库存成本、单据成本'),
-('finished_goods.cost.edit', '维护成品成本', 'finished_goods', '录入或修改成品单价/成本'),
-('finished_goods.inbound.create', '创建成品入库单', 'finished_goods', '创建成品入库单及查询来源工艺单'),
-('finished_goods.outbound.create', '创建成品出库单', 'finished_goods', '创建成品出库单'),
-('finished_goods.transactions.view', '查看成品库存流水', 'finished_goods', '查看成品库存历史流水'),
-('finished_goods.summary.view', '查看成品出入库汇总', 'finished_goods', '查看成品出入库汇总报表'),
-('finished_goods.documents.view', '查看成品单据', 'finished_goods', '查看成品入库/出库单据及详情'),
-('finished_goods.documents.confirm', '确认成品单据', 'finished_goods', '确认成品入库或出库单，产生库存变化'),
-('finished_goods.documents.edit', '编辑成品草稿单据', 'finished_goods', '编辑草稿状态的成品单据'),
-('finished_goods.documents.reverse', '撤销已确认成品单据', 'finished_goods', '通过反向单据撤销已确认成品单据')
-ON DUPLICATE KEY UPDATE permission_name = VALUES(permission_name),
-                        module_code = VALUES(module_code),
-                        description = VALUES(description);
-
--- 其他业务模块权限目录：原料、生产、发货、业绩表
+-- 业务模块权限目录：原料、成品、生产、发货、业绩表
 -- Taiyang business module RBAC permissions
 -- Idempotent: safe to execute more than once.
 -- Does not grant these permissions to any role automatically.
@@ -1143,6 +1125,18 @@ VALUES
 ('inventory.stock_out.create','创建原料出库单','inventory','创建原料出库单'),
 ('inventory.stock_out.edit','编辑原料出库草稿','inventory','编辑原料出库草稿'),
 ('inventory.stock_out.confirm','确认原料出库单','inventory','确认原料出库并进行FIFO成本分配'),
+('finished_goods.menu.view', '查看成品管理菜单', 'finished_goods', '允许在导航中看到成品管理入口'),
+('finished_goods.inventory.view', '查看成品库存', 'finished_goods', '查看成品仓库库存及数量'),
+('finished_goods.cost.view', '查看成品成本', 'finished_goods', '查看成品单价、库存成本、单据成本'),
+('finished_goods.cost.edit', '维护成品成本', 'finished_goods', '录入或修改成品单价/成本'),
+('finished_goods.inbound.create', '创建成品入库单', 'finished_goods', '创建成品入库单及查询来源工艺单'),
+('finished_goods.outbound.create', '创建成品出库单', 'finished_goods', '创建成品出库单'),
+('finished_goods.transactions.view', '查看成品库存流水', 'finished_goods', '查看成品库存历史流水'),
+('finished_goods.summary.view', '查看成品出入库汇总', 'finished_goods', '查看成品出入库汇总报表'),
+('finished_goods.documents.view', '查看成品单据', 'finished_goods', '查看成品入库/出库单据及详情'),
+('finished_goods.documents.confirm', '确认成品单据', 'finished_goods', '确认成品入库或出库单，产生库存变化'),
+('finished_goods.documents.edit', '编辑成品草稿单据', 'finished_goods', '编辑草稿状态的成品单据'),
+('finished_goods.documents.reverse', '撤销已确认成品单据', 'finished_goods', '通过反向单据撤销已确认成品单据'),
 ('process_order.view','查看工艺单','process_order','查看工艺单列表及详情'),
 ('process_order.create','创建工艺单','process_order','创建工艺单及原料配比'),
 ('process_order.edit','编辑工艺单','process_order','编辑草稿工艺单'),
