@@ -250,7 +250,7 @@ class FinishedGoodsService:
                 from_warehouse_id=None,       # ⭐ 每行的仓库
                 to_warehouse_id=wh_id,
                 quantity=qty,
-                unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else None,
+                unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else 0,
                 remark=l.get("remark"),
                 created_at=now_beijing_naive(),
             )
@@ -672,6 +672,19 @@ class FinishedGoodsService:
                 batch = db.session.get(FinishedGoodsBatch, int(l["batch_id"]))
                 if not batch:
                     raise FinishedGoodsError(f"第 {idx} 行批次不存在")
+
+                # ⭐ 批次已存在时校验来源工艺单一致性
+                incoming_po_id = l.get("process_order_id")
+                if incoming_po_id is not None:
+                    if (batch.process_order_id is not None
+                            and int(batch.process_order_id) != int(incoming_po_id)):
+                        raise FinishedGoodsError(
+                            f"第 {idx} 行批次 [{batch.batch_no}] 已有来源工艺单，"
+                            f"不能改为其他工艺单"
+                        )
+                    # 原本为空则允许补写（例如先前手工入库未关联，现在补上）
+                    if batch.process_order_id is None:
+                        batch.process_order_id = int(incoming_po_id)
             else:
                 batch_no = (l.get("batch_no") or "").strip()
                 if not batch_no:
@@ -684,7 +697,7 @@ class FinishedGoodsService:
                         product_name=l.get("product_name") or "未命名",
                         product_specification=l.get("product_specification"),
                         unit=l.get("unit") or "KG",
-                        unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else None,
+                        unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else 0,
                         batch_source="OTHER",
                         quality_status=l.get("quality_status") or "QUALIFIED",
                         remark=l.get("remark"),
@@ -692,6 +705,34 @@ class FinishedGoodsService:
                     )
                     db.session.add(batch)
                     db.session.flush()
+                else:
+                    # 批次已存在（按批次号找的），同样要做一致性校验
+                    incoming_po_id = l.get("process_order_id")
+                    b_old_has_order_id = True
+                    if batch.process_order_id is None:
+                        b_old_has_order_id = False
+                    if incoming_po_id is not None:
+                        if (batch.process_order_id is not None
+                                and int(batch.process_order_id) != int(incoming_po_id)):
+                            raise FinishedGoodsError(
+                                f"第 {idx} 行批次 [{batch.batch_no}] 已有来源工艺单，"
+                                f"不能改为其他工艺单"
+                            )
+                        if batch.process_order_id is None:
+                            batch.process_order_id = int(incoming_po_id)
+                    # 做价格一致性检测, to be continued
+                    input_unit_cost_str = l.get("unit_cost")
+                    if input_unit_cost_str is not None:
+                        input_unit_cost = _q6(input_unit_cost_str)
+                        # 如果旧的产品批号有工艺单，则需要检查价格是否一致
+                        if (b_old_has_order_id and input_unit_cost != batch.unit_cost):
+                            raise FinishedGoodsError(
+                                f"第 {idx} 行批次 [{batch.batch_no}] 价格不一致，"
+                                f"当前: {batch.unit_cost}, 新输入: {input_unit_cost}"
+                            )
+                        # 如果旧的产品批号没有工艺单，则价格可以覆盖
+                        if b_old_has_order_id is False:
+                            batch.unit_cost = input_unit_cost
 
             line = FinishedGoodsDocumentLine(
                 document_id=doc.id,
@@ -700,7 +741,7 @@ class FinishedGoodsService:
                 from_warehouse_id=None,
                 to_warehouse_id=warehouse_id,
                 quantity=qty,
-                unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else None,
+                unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else 0,
                 remark=l.get("remark"),
                 created_at=now_beijing_naive(),
             )
