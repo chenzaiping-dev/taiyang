@@ -11,6 +11,7 @@ from app.generated.models.sales_performance import SalesPerformance
 from app.generated.models.employees import Employee
 from app.generated.models.process_orders import ProcessOrder
 from app.generated.models.process_order_materials import ProcessOrderMaterial
+from app.generated.models.finished_goods_documents import FinishedGoodsDocument
 
 from app.schemas.process_order_schema import ProcessOrderRequestSchema
 from app.services.process_order_service import (
@@ -122,6 +123,12 @@ def detail_page(order_id: int):
     follow = db.session.get(Employee, order.followup_employee_id)
     creator = db.session.get(Employee, order.created_by)
 
+    document_no = "FG-IN-" + order.process_order_no
+    document = FinishedGoodsDocument.query.filter_by(document_no=document_no).first()
+
+    raw_document_no = "PROD-OUT-" + order.process_order_no
+    raw_document = InventoryDocument.query.filter_by(document_no=raw_document_no).first()
+
     return render_template(
         "process_order/detail.html",
         order=order,
@@ -130,6 +137,8 @@ def detail_page(order_id: int):
         material_map=material_map,   # ⭐ 传给模板
         status_labels=PO_STATUS_LABELS,
         factory=factory,
+        document=document,
+        raw_document=raw_document,
         performance=performance,
         follow=follow,
         creator=creator,

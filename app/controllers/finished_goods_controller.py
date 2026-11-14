@@ -3,8 +3,9 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 
 from app.extensions import db
 from app.services.permission_service import can_view_finished_goods_cost, can_edit_finished_goods_cost
-from app.generated.models.warehouses import Warehouse
 
+from app.generated.models.warehouses import Warehouse
+from app.generated.models.employees import Employee
 from app.generated.models.finished_goods_batches import FinishedGoodsBatch
 from app.generated.models.finished_goods_documents import FinishedGoodsDocument
 from app.generated.models.finished_goods_document_lines import FinishedGoodsDocumentLine
@@ -525,6 +526,8 @@ def document_detail_page(direction, document_id):
         "finished_goods/document_detail.html",
         direction=direction,
         detail=detail,
+        creator=detail["document"]["creator"],
+        confirmer=detail["document"]["confirmer"],
         related_direction=related_direction,
         related_document_no=related_document_no,
         status_labels=FG_STATUS_LABELS,

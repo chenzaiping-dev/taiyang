@@ -41,12 +41,21 @@
   <div class="form-row"><label>加工厂：</label>
     {% if factory %}{{ factory.factory_code }} - {{ factory.factory_name }}{% else %}-{% endif %}
   </div>
-  <div class="form-row"><label>领料仓库：</label>
+  <div class="form-row"><label>生产领料仓库：</label>
   {% if order.material_warehouse_id %}
     {% set mw = material_warehouse %}
     {{ mw.warehouse_code }} - {{ mw.warehouse_name }}
   {% else %}-{% endif %}
   </div>
+  <div class="form-row"><label>原料出库单号：</label>
+    {% if raw_document %}
+    <a href="{{ url_for('inventory_query.document_detail_page', direction='out', document_id=raw_document.id) }}">
+      {{ raw_document.document_no }}
+    </a>
+    {% else %}
+    {{ "-" }}
+    {% endif %}
+  </div>  
   <div class="form-row"><label>产品名称：</label>{{ order.product_name }}</div>
   <div class="form-row"><label>产品规格：</label>{{ order.product_specification or "-" }}</div>
   <div class="form-row"><label>计划数量：</label>
@@ -79,6 +88,15 @@
     <span class="status-badge status-{{ order.status|lower }}">
       {{ status_labels.get(order.status, order.status) }}
     </span>
+  </div>
+  <div class="form-row"><label>成品入库单号：</label>
+    {% if document %}
+    <a href="{{ url_for('finished_goods.document_detail_page', direction='in', document_id=document.id) }}">
+      {{ document.document_no }}
+    </a>
+    {% else %}
+    {{ "-" }}
+    {% endif %}
   </div>
   <div class="form-row"><label>备注：</label>{{ order.remark or "-" }}</div>
 </fieldset>

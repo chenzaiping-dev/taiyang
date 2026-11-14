@@ -39,31 +39,19 @@
       <td style="color:#888;">业绩单</td>
       <td>
         {% if performance %}
+        <a href="{{ url_for('sales_performance.detail_page', perf_id=performance.id) }}">
           {{ performance.performance_no }} — {{ performance.company_name }}
+        </a>
         {% else %}-{% endif %}
       </td>
-      <td style="color:#888;">目的地</td>
-      <td>{{ plan.destination }}</td>
-    </tr>
-    <tr>
-      <td style="color:#888;">运输方式</td>
-      <td>{{ plan.transport_method or "-" }}</td>
-      <td style="color:#888;">计划发货时间</td>
+      <td style="color:#888;">成品出库单</td>
       <td>
-        {{ plan.planned_ship_time.strftime("%Y-%m-%d %H:%M")
-           if plan.planned_ship_time else "-" }}
-      </td>
-    </tr>
-    <tr>
-      <td style="color:#888;">发货完成时间</td>
-      <td>
-        {{ plan.actual_ship_time.strftime("%Y-%m-%d %H:%M")
-           if plan.actual_ship_time else "-" }}
-      </td>
-      <td style="color:#888;">创建日期</td>
-      <td>
-        {{ plan.created_at.strftime("%Y-%m-%d %H:%M")
-           if plan.created_at else "-" }}
+        {% if document %}
+        <a href="{{ url_for('finished_goods.document_detail_page',
+                     direction='out', document_id=document.id) }}">
+            {{ document.document_no }}
+        </a>
+        {% else %}-{% endif %}
       </td>
     </tr>
     <tr>
@@ -72,6 +60,35 @@
       <td style="color:#888;">产品规格（快照）</td>
       <td>
         {{ performance.product_specification or "-" if performance else "-" }}
+      </td>
+    </tr>
+    <tr>
+      <td style="color:#888;">目的地</td>
+      <td>{{ plan.destination }}</td>
+      <td style="color:#888;">运输方式</td>
+      <td>{{ plan.transport_method or "-" }}</td>
+    </tr>
+    <tr>
+      <td style="color:#888;">计划发货时间</td>
+      <td>
+        {{ plan.planned_ship_time.strftime("%Y-%m-%d %H:%M")
+           if plan.planned_ship_time else "-" }}
+      </td>
+      <td style="color:#888;">发货完成时间</td>
+      <td>
+        {{ plan.actual_ship_time.strftime("%Y-%m-%d %H:%M")
+           if plan.actual_ship_time else "-" }}
+      </td>
+    </tr>
+    <tr>
+      <td style="color:#888;">创建人</td>
+      <td>
+        {{ creator.real_name if creator else "-" }}
+      </td>
+      <td style="color:#888;">创建日期</td>
+      <td>
+        {{ plan.created_at.strftime("%Y-%m-%d %H:%M")
+           if plan.created_at else "-" }}
       </td>
     </tr>
     <tr>

@@ -11,6 +11,7 @@ from app.generated.models.sales_performance import SalesPerformance
 from app.generated.models.finished_goods_batches import FinishedGoodsBatch
 from app.generated.models.finished_goods_inventory import FinishedGoodsInventory
 from app.generated.models.finished_goods_reservations import FinishedGoodsReservation
+from app.generated.models.finished_goods_documents import FinishedGoodsDocument
 from app.generated.models.shipment_plans import ShipmentPlan
 from app.generated.models.shipment_plan_lines import ShipmentPlanLine
 from app.generated.models.shipment_plan_allocations import ShipmentPlanAllocation
@@ -268,6 +269,7 @@ def update_submit(plan_id):
 # ==================== 列表 ====================
 @bp.get("/")
 def list_page():
+    creator = db.aliased(Employee)
     keyword = request.args.get("keyword", "").strip() or None
     status = request.args.get("status", "").strip() or None
     perf_raw = request.args.get("performance_id", "").strip()
@@ -317,10 +319,13 @@ def list_page():
             ShipmentPlan.destination,
             ShipmentPlan.planned_ship_time,                # ⭐ 计划发货时间
             ShipmentPlan.status,
+            ShipmentPlan.created_by,
+            creator.real_name.label("created_by_name"),
             ShipmentPlan.created_at,
             func.coalesce(shipped_subq.c.total_planned, 0).label("planned_qty"),
             func.coalesce(shipped_subq.c.total_shipped, 0).label("shipped_qty"),
         )
+        .join(creator, creator.id == ShipmentPlan.created_by, isouter=True)
         .join(SalesPerformance,
               SalesPerformance.id == ShipmentPlan.performance_id, isouter=True)
         .join(shipped_subq,
@@ -374,13 +379,19 @@ def detail_page(plan_id):
         abort(404)
 
     perf = db.session.get(SalesPerformance, plan.performance_id)
-
+    creator = (
+        db.session.get(Employee, plan.created_by)
+        if plan.created_by else None
+    )
     lines = (
         ShipmentPlanLine.query
         .filter_by(shipment_plan_id=plan.id)
         .order_by(ShipmentPlanLine.id.asc())
         .all()
     )
+
+    document_no = "FG-OUT-" + plan.shipment_plan_no
+    document = FinishedGoodsDocument.query.filter_by(document_no=document_no).first()
 
     # 每个 line 的 allocations
     allocations_map = {}
@@ -406,7 +417,9 @@ def detail_page(plan_id):
     return render_template(
         "shipment_plan/detail.html",
         plan=plan,
+        creator=creator,
         performance=perf,
+        document=document,
         lines=lines,
         allocations_map=allocations_map,
         status_labels=SP_STATUS_LABELS,

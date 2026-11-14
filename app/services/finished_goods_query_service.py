@@ -579,6 +579,8 @@ class FinishedGoodsQueryService:
                 reverse_doc.status == "CONFIRMED",
             )
         )
+        creator = db.aliased(Employee)
+        confirmer = db.aliased(Employee)
 
         # ---- 方向判定 ----
         inbound_biz = list(FG_INBOUND_TYPE_LABELS.keys())
@@ -627,7 +629,9 @@ class FinishedGoodsQueryService:
                 FinishedGoodsDocument.document_time,
                 FinishedGoodsDocument.status,
                 FinishedGoodsDocument.remark,
+                creator.real_name.label("created_by_name"),
                 FinishedGoodsDocument.created_at,
+                confirmer.real_name.label("confirmed_by_name"),
                 FinishedGoodsDocument.confirmed_at,
                 reversed_exists.label("is_reversed"),
                 func.count(
@@ -635,6 +639,8 @@ class FinishedGoodsQueryService:
                 ).label("line_count"),
                 qty_expr,
             )
+            .join(creator, creator.id == FinishedGoodsDocument.created_by, isouter=True)
+            .join(confirmer, confirmer.id == FinishedGoodsDocument.confirmed_by, isouter=True)
             .join(
                 FinishedGoodsDocumentLine,
                 FinishedGoodsDocumentLine.document_id
@@ -718,6 +724,14 @@ class FinishedGoodsQueryService:
         ):
             return None
 
+        creator = (
+            db.session.get(Employee, doc.created_by)
+            if doc.created_by else None
+        )
+        confirmer = (
+            db.session.get(Employee, doc.confirmed_by)
+            if doc.confirmed_by else None
+        )
         from_wh = db.aliased(Warehouse)
         to_wh = db.aliased(Warehouse)
 
@@ -796,6 +810,8 @@ class FinishedGoodsQueryService:
         return {
             "document": {
                 "id": doc.id,
+                "creator": creator,
+                "confirmer": confirmer,
                 "document_no": doc.document_no,
                 "document_type": doc.document_type,
                 "document_time": doc.document_time,

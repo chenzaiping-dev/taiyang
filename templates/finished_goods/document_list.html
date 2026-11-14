@@ -85,7 +85,10 @@
         {{ '入库数量合计' if direction == 'in' else '出库数量合计' }}
       </th>
       <th style="width:120px;">状态</th>
-      <th style="width:120px;">创建时间</th>
+      <th style="width:50px;">创建人</th>
+      <th style="width:110px;">创建时间</th>
+      <th style="width:50px;">确认人</th>
+      <th style="width:110px;">确认时间</th>
       <th style="width:100px;">操作</th>
     </tr>
   </thead>
@@ -115,8 +118,12 @@
             <span class="status-badge status-reversed" title="该单已被撤销">已撤销</span>
           {% endif %}
         </td>
+        <td>{{ r.created_by_name or "-" }}</td>
         <td>{{ r.created_at.strftime("%Y-%m-%d %H:%M")
                if r.created_at else "-" }}</td>
+        <td>{{ r.confirmed_by_name or "-" }}</td>
+        <td>{{ r.confirmed_at.strftime("%Y-%m-%d %H:%M")
+               if r.confirmed_at else "-" }}</td>
         <td style="text-align:center;white-space:nowrap;">
           {% if r.status == 'DRAFT' %}
             <a class="btn btn-sm"
@@ -147,7 +154,7 @@
       </tr>
       {% endfor %}
     {% else %}
-      <tr><td colspan="9" style="text-align:center;color:#999;padding:24px;">
+      <tr><td colspan="12" style="text-align:center;color:#999;padding:24px;">
         暂无{{ '入库单' if direction == 'in' else '出库单' }}
       </td></tr>
     {% endif %}

@@ -46,7 +46,8 @@
       <th style="width:120px;text-align:right;">计划发货数量</th>
       <th style="width:120px;text-align:right;">已发货数量</th>
       <th style="width:100px;">状态</th>
-      <th style="width:150px;">创建日期</th>
+      <th style="width:70px;">创建人</th>
+      <th style="width:120px;">创建日期</th>
       <th style="width:220px;">操作</th>
     </tr>
   </thead>
@@ -80,6 +81,7 @@
             {{ status_labels.get(r.status, r.status) }}
           </span>
         </td>
+        <td>{{ r.created_by_name or "-" }}</td>
         <td>{{ r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "-" }}</td>
         <td style="white-space:nowrap;">
           {# 编辑：仅草稿 #}
@@ -132,7 +134,7 @@
       </tr>
       {% endfor %}
     {% else %}
-      <tr><td colspan="9" style="text-align:center;color:#999;padding:24px;">
+      <tr><td colspan="10" style="text-align:center;color:#999;padding:24px;">
         暂无发货计划
       </td></tr>
     {% endif %}
