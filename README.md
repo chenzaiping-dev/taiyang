@@ -102,21 +102,14 @@ ON DUPLICATE KEY UPDATE data_scope = VALUES(data_scope);
 
 
 ### 2. 成品管理权限编码
-
-| 权限编码 | 作用 |
-| --- | --- |
-| `finished_goods.menu.view` | 成品菜单入口 |
-| `finished_goods.inventory.view` | 成品库存数量 |
-| `finished_goods.cost.view` | 查看成品单价、库存成本 |
-| `finished_goods.cost.edit` | 录入/修改成品成本 |
-| `finished_goods.inbound.create` | 创建入库单、搜索来源工艺单 |
-| `finished_goods.outbound.create` | 创建出库单 |
-| `finished_goods.documents.view` | 查看入库/出库单据 |
-| `finished_goods.documents.confirm` | 确认单据并产生库存变化 |
-| `finished_goods.documents.edit` | 编辑草稿单据 |
-| `finished_goods.documents.reverse` | 撤销已确认单据 |
-| `finished_goods.transactions.view` | 查看成品流水 |
-| `finished_goods.summary.view` | 查看出入库汇总 |
+| 模块编码 | 模块 | 主要权限 |
+|---|---|---|
+| `finished_goods` | 成品管理 | 入库、出库、单据、流水、成本 |
+| `inventory` | 原料管理 | 原料资料、供应商资料、库存、入库、出库、单据、流水、成本 |
+| `process_order` | 工艺单 | 查看、新建、编辑、下单、生产、入库、取消、配比调整 |
+| `production` | 生产计划 | 查看、新建、编辑、确认、执行、完成、取消、重新打开 |
+| `shipment` | 发货管理 | 查看、新建、编辑、确认、发货、取消、金额 |
+| `sales_performance` | 业绩表管理 | 查看、新建、编辑、状态流转、金额 |
 
 `role_permissions.data_scope` 可使用 `all / own / assigned / factory`。`PermissionService.get_data_scopes()` 已提供统一读取入口；当前成品查询尚未把 `own / assigned / factory` 自动转换成查询过滤条件，因为现有员工表没有 `factory_id`，也没有通用的员工-仓库/工厂授权关系表。**当前成品模块按权限编码鉴权，数据范围需在确定业务归属字段/关联表后再接入查询 Service；不能把读取到 data_scope 误认为数据已经隔离。**
 
@@ -129,6 +122,17 @@ ON DUPLICATE KEY UPDATE data_scope = VALUES(data_scope);
 开发阶段的 bootstrap 登录是独立的显式绕过：`.env` 中 `ALLOW_BOOTSTRAP_ADMIN_BYPASS=true` 才会在成品模块放行；生产环境必须保持 `false`，并清空 `BOOTSTRAP_ADMIN_PASSWORD`。bootstrap 账号使用占位员工 ID=1，仅供本地开发，不应用于真实库存业务。
 
 ### 4. 本次代码接入范围
+## 功能
+- 角色列表、创建、启用/停用
+- 按权限模块分组显示权限清单
+- 每项权限独立勾选和设置 `all / own / assigned / factory` 数据范围
+- 员工角色分配
+- 超级管理员自动拥有全部权限，权限清单不可编辑且不可停用
+- 页面路由服务端强制校验超级管理员身份
+
+## 重要边界
+`data_scope` 的配置与保存已经实现，但原业务查询仍需逐模块实现 `own / assigned / factory` 的 SQL 过滤，不能仅凭页面设置就视为数据隔离已生效。
+
 
 - `app/services/permission_service.py`：RBAC 查询、超级管理员判断、字段权限、数据范围读取。
 - `app/core/permission_hooks.py`：成品管理 Blueprint 的集中路由权限映射。

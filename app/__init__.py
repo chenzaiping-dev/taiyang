@@ -44,8 +44,6 @@ def create_app(test_config=None):
     app.register_blueprint(inventory_query_bp)
 
     from app.controllers.finished_goods_controller import bp as fg_bp
-    from app.core.permission_hooks import register_finished_goods_permission_hooks
-    register_finished_goods_permission_hooks(fg_bp)
     app.register_blueprint(fg_bp)
 
     from app.controllers.production_plan_controller import bp as pp_bp
@@ -67,8 +65,8 @@ def create_app(test_config=None):
     app.register_blueprint(admin_bp)
     app.register_blueprint(documents_bp)
 
-    from app.core.business_permission_hooks import register_business_permission_hooks
-    register_business_permission_hooks(app)
+    from app.core.permission_hooks import register_permission_hooks
+    register_permission_hooks(app)
 
     from app.services.permission_service import (
         has_permission, can_view_finished_goods_cost, is_super_admin,

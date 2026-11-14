@@ -39,6 +39,7 @@
       <div class="card-body"><div class="alert alert-info mb-0">超级管理员自动拥有系统全部权限，不需要逐项勾选。新增权限目录后也会自动生效。</div></div>
       {% else %}
       <form method="post">
+        <div class="card-footer d-flex justify-content-end"><button class="btn btn-primary" type="submit" {% if not permission_groups %}disabled{% endif %}>保存权限配置</button></div>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="save_permissions">
         <div class="card-body">
           <div class="d-flex flex-wrap gap-2 mb-3">

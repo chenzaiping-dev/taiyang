@@ -172,6 +172,8 @@ class FinishedGoodsService:
             if wh.warehouse_type not in ("finished_goods", "general"):
                 raise FinishedGoodsError(f"第 {idx} 行仓库不是成品仓")
 
+            #print(l)
+
             # 找/建批次
             batch = None
             if l.get("batch_id"):
@@ -203,7 +205,7 @@ class FinishedGoodsService:
                         product_name=l.get("product_name") or "未命名",
                         product_specification=l.get("product_specification"),
                         unit=l.get("unit") or "KG",
-                        unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else None,
+                        unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else 0,
                         batch_source=(batch_source_map[inbound_type]
                             if inbound_type in batch_source_map else "OTHER"),
                         quality_status=l.get("quality_status") or "QUALIFIED",
@@ -215,6 +217,9 @@ class FinishedGoodsService:
                 else:
                     # 批次已存在（按批次号找的），同样要做一致性校验
                     incoming_po_id = l.get("process_order_id")
+                    b_old_has_order_id = True
+                    if batch.process_order_id is None:
+                        b_old_has_order_id = False
                     if incoming_po_id is not None:
                         if (batch.process_order_id is not None
                                 and int(batch.process_order_id) != int(incoming_po_id)):
@@ -224,13 +229,19 @@ class FinishedGoodsService:
                             )
                         if batch.process_order_id is None:
                             batch.process_order_id = int(incoming_po_id)
-                    # 是否要做价格一致性检测, to be continued
-                    input_unit_cost = _q6(l.get("unit_cost"))
-                    if (input_unit_cost is not None and input_unit_cost != batch.unit_cost):
-                        raise FinishedGoodsError(
-                            f"第 {idx} 行批次 [{batch.batch_no}] 价格不一致，"
-                            f"当前: {batch.unit_cost}, 新输入: {input_unit_cost}"
-                        )
+                    # 做价格一致性检测, to be continued
+                    input_unit_cost_str = l.get("unit_cost")
+                    if input_unit_cost_str is not None:
+                        input_unit_cost = _q6(input_unit_cost_str)
+                        # 如果旧的产品批号有工艺单，则需要检查价格是否一致
+                        if (b_old_has_order_id and input_unit_cost != batch.unit_cost):
+                            raise FinishedGoodsError(
+                                f"第 {idx} 行批次 [{batch.batch_no}] 价格不一致，"
+                                f"当前: {batch.unit_cost}, 新输入: {input_unit_cost}"
+                            )
+                        # 如果旧的产品批号没有工艺单，则价格可以覆盖
+                        if b_old_has_order_id is False:
+                            batch.unit_cost = input_unit_cost
 
             line = FinishedGoodsDocumentLine(
                 document_id=document.id,
@@ -336,7 +347,7 @@ class FinishedGoodsService:
         """
         # 顶部仓库校验改为"按行取仓库后校验"
         # （删除原来的"必须先传 warehouse_id"的强校验，改到循环里做）
-        print(outbound_type, remark)
+        #print(outbound_type, remark)
         if outbound_type == 'IN_REVERSE':
             pass
         else:
