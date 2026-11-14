@@ -317,9 +317,16 @@ class FinishedGoodsService:
                     f"第 {idx} 行批次 [{batch.batch_no}] 价格不一致，"
                     f"当前: {batch.unit_cost}, 新输入: {input_unit_cost}"
                 )
-            # 如果旧的产品批号没有工艺单，则价格可以覆盖
+            # 如果旧的产品批号没有工艺单，则价格、来源、产品名可以覆盖
             if b_old_has_order_id is False:
                 batch.unit_cost = input_unit_cost
+                batch.batch_source = default_batch_source
+                # 若有新产品名，则覆盖
+                product_name = l.get("product_name")
+                if product_name is not None:
+                    batch.product_name = product_name
+                    batch.product_specification = l.get("product_specification")
+                    batch.remark = l.get("remark")
 
         return batch
 
