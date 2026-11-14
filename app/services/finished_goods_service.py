@@ -173,75 +173,13 @@ class FinishedGoodsService:
                 raise FinishedGoodsError(f"第 {idx} 行仓库不是成品仓")
 
             #print(l)
-
             # 找/建批次
-            batch = None
-            if l.get("batch_id"):
-                batch = db.session.get(FinishedGoodsBatch, int(l["batch_id"]))
-                if not batch:
-                    raise FinishedGoodsError(f"第 {idx} 行批次不存在")
-
-                # ⭐ 批次已存在时校验来源工艺单一致性
-                incoming_po_id = l.get("process_order_id")
-                if incoming_po_id is not None:
-                    if (batch.process_order_id is not None
-                            and int(batch.process_order_id) != int(incoming_po_id)):
-                        raise FinishedGoodsError(
-                            f"第 {idx} 行批次 [{batch.batch_no}] 已有来源工艺单，"
-                            f"不能改为其他工艺单"
-                        )
-                    # 原本为空则允许补写（例如先前手工入库未关联，现在补上）
-                    if batch.process_order_id is None:
-                        batch.process_order_id = int(incoming_po_id)
-            else:
-                batch_no = (l.get("batch_no") or "").strip()
-                if not batch_no:
-                    raise FinishedGoodsError(f"第 {idx} 行缺少批次号")
-                batch = FinishedGoodsBatch.query.filter_by(batch_no=batch_no).first()
-                if not batch:
-                    batch = FinishedGoodsBatch(
-                        batch_no=batch_no,
-                        process_order_id=l.get("process_order_id"),   # ⭐ 新建时写入
-                        product_name=l.get("product_name") or "未命名",
-                        product_specification=l.get("product_specification"),
-                        unit=l.get("unit") or "KG",
-                        unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else 0,
-                        batch_source=(batch_source_map[inbound_type]
-                            if inbound_type in batch_source_map else "OTHER"),
-                        quality_status=l.get("quality_status") or "QUALIFIED",
-                        remark=l.get("remark"),
-                        created_at=now_beijing_naive(),
-                    )
-                    db.session.add(batch)
-                    db.session.flush()
-                else:
-                    # 批次已存在（按批次号找的），同样要做一致性校验
-                    incoming_po_id = l.get("process_order_id")
-                    b_old_has_order_id = True
-                    if batch.process_order_id is None:
-                        b_old_has_order_id = False
-                    if incoming_po_id is not None:
-                        if (batch.process_order_id is not None
-                                and int(batch.process_order_id) != int(incoming_po_id)):
-                            raise FinishedGoodsError(
-                                f"第 {idx} 行批次 [{batch.batch_no}] 已有来源工艺单，"
-                                f"不能改为其他工艺单"
-                            )
-                        if batch.process_order_id is None:
-                            batch.process_order_id = int(incoming_po_id)
-                    # 做价格一致性检测, to be continued
-                    input_unit_cost_str = l.get("unit_cost")
-                    if input_unit_cost_str is not None:
-                        input_unit_cost = _q6(input_unit_cost_str)
-                        # 如果旧的产品批号有工艺单，则需要检查价格是否一致
-                        if (b_old_has_order_id and input_unit_cost != batch.unit_cost):
-                            raise FinishedGoodsError(
-                                f"第 {idx} 行批次 [{batch.batch_no}] 价格不一致，"
-                                f"当前: {batch.unit_cost}, 新输入: {input_unit_cost}"
-                            )
-                        # 如果旧的产品批号没有工艺单，则价格可以覆盖
-                        if b_old_has_order_id is False:
-                            batch.unit_cost = input_unit_cost
+            batch = FinishedGoodsService._get_or_create_batch(
+                l, idx,
+                default_batch_source=(
+                    batch_source_map[inbound_type] if inbound_type in batch_source_map else "OTHER"
+                ),
+            )
 
             line = FinishedGoodsDocumentLine(
                 document_id=document.id,
@@ -293,6 +231,97 @@ class FinishedGoodsService:
             "document_time": document.document_time.isoformat(),
             "lines": line_results,
         }
+
+    @staticmethod
+    def _get_or_create_batch(l: dict, idx: int, default_batch_source: str) -> FinishedGoodsBatch:
+        """
+        在入库场景下"找/建批次"，并做一致性校验。
+
+        - 若 l 带 batch_id：按 ID 找批次；已存在则校验/补写 process_order_id。
+        - 否则按 batch_no 找；找不到则新建，找到则做同样的
+        process_order_id 一致性校验 + 价格一致性校验/覆盖。
+
+        参数:
+            l: 行数据 dict
+            idx: 行号（从 1 开始，仅用于报错信息）
+            default_batch_source: 新建批次时使用的 batch_source
+                                （create_inbound 按 inbound_type 映射，
+                                update_inbound_draft 固定 "OTHER"）
+        返回:
+            FinishedGoodsBatch 实例（可能已 flush，拿到 id）
+        """
+        batch = None
+        if l.get("batch_id"):
+            batch = db.session.get(FinishedGoodsBatch, int(l["batch_id"]))
+            if not batch:
+                raise FinishedGoodsError(f"第 {idx} 行批次不存在")
+
+            # ⭐ 批次已存在时校验来源工艺单一致性
+            incoming_po_id = l.get("process_order_id")
+            if incoming_po_id is not None:
+                if (batch.process_order_id is not None
+                        and int(batch.process_order_id) != int(incoming_po_id)):
+                    raise FinishedGoodsError(
+                        f"第 {idx} 行批次 [{batch.batch_no}] 已有来源工艺单，"
+                        f"不能改为其他工艺单"
+                    )
+                # 原本为空则允许补写（例如先前手工入库未关联，现在补上）
+                if batch.process_order_id is None:
+                    batch.process_order_id = int(incoming_po_id)
+            return batch
+
+        batch_no = (l.get("batch_no") or "").strip()
+        if not batch_no:
+            raise FinishedGoodsError(f"第 {idx} 行缺少批次号")
+
+        batch = FinishedGoodsBatch.query.filter_by(batch_no=batch_no).first()
+        if not batch:
+            batch = FinishedGoodsBatch(
+                batch_no=batch_no,
+                process_order_id=l.get("process_order_id"),   # ⭐ 新建时写入
+                product_name=l.get("product_name") or "未命名",
+                product_specification=l.get("product_specification"),
+                unit=l.get("unit") or "KG",
+                unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else 0,
+                batch_source=default_batch_source,
+                quality_status=l.get("quality_status") or "QUALIFIED",
+                remark=l.get("remark"),
+                created_at=now_beijing_naive(),
+            )
+            db.session.add(batch)
+            db.session.flush()
+            return batch
+
+        # 批次已存在（按批次号找的），同样要做一致性校验
+        incoming_po_id = l.get("process_order_id")
+        b_old_has_order_id = True
+        if batch.process_order_id is None:
+            b_old_has_order_id = False
+        if incoming_po_id is not None:
+            if (batch.process_order_id is not None
+                    and int(batch.process_order_id) != int(incoming_po_id)):
+                raise FinishedGoodsError(
+                    f"第 {idx} 行批次 [{batch.batch_no}] 已有来源工艺单，"
+                    f"不能改为其他工艺单"
+                )
+            if batch.process_order_id is None:
+                batch.process_order_id = int(incoming_po_id)
+
+        # 做价格一致性检测
+        input_unit_cost_str = l.get("unit_cost")
+        if input_unit_cost_str is not None:
+            input_unit_cost = _q6(input_unit_cost_str)
+            # 如果旧的产品批号有工艺单，则需要检查价格是否一致
+            if (b_old_has_order_id and input_unit_cost != batch.unit_cost):
+                raise FinishedGoodsError(
+                    f"第 {idx} 行批次 [{batch.batch_no}] 价格不一致，"
+                    f"当前: {batch.unit_cost}, 新输入: {input_unit_cost}"
+                )
+            # 如果旧的产品批号没有工艺单，则价格可以覆盖
+            if b_old_has_order_id is False:
+                batch.unit_cost = input_unit_cost
+
+        return batch
 
     # ---------- 库存变动应用 ----------
     @staticmethod
@@ -588,16 +617,8 @@ class FinishedGoodsService:
         if not lines:
             raise FinishedGoodsError("单据无明细，无法确认")
 
-        # 从 document_type 反推 tx_type
-        type_to_tx = {
-            "PRODUCTION_IN": "PRODUCTION_IN",
-            "STOCKTAKE": "STOCKTAKE_GAIN",
-            "RETURN": "RETURN_IN",
-            "TRANSFER": "TRANSFER_IN",
-            "REVERSE": "OUT_REVERSE",   # ⭐ 红冲入库
-        }
-        tx_type = doc.business_type or type_to_tx.get(doc.document_type, "PRODUCTION_IN")
-
+        # ⭐ 从business_type来
+        tx_type = doc.business_type or "PRODUCTION_IN"
         doc_time = now_beijing()
 
         for line in lines:
@@ -667,72 +688,12 @@ class FinishedGoodsService:
                 raise FinishedGoodsError(f"第 {idx} 行数量必须 > 0")
 
             # 找/建批次（与 create_inbound 相同的批次逻辑）
-            batch = None
-            if l.get("batch_id"):
-                batch = db.session.get(FinishedGoodsBatch, int(l["batch_id"]))
-                if not batch:
-                    raise FinishedGoodsError(f"第 {idx} 行批次不存在")
-
-                # ⭐ 批次已存在时校验来源工艺单一致性
-                incoming_po_id = l.get("process_order_id")
-                if incoming_po_id is not None:
-                    if (batch.process_order_id is not None
-                            and int(batch.process_order_id) != int(incoming_po_id)):
-                        raise FinishedGoodsError(
-                            f"第 {idx} 行批次 [{batch.batch_no}] 已有来源工艺单，"
-                            f"不能改为其他工艺单"
-                        )
-                    # 原本为空则允许补写（例如先前手工入库未关联，现在补上）
-                    if batch.process_order_id is None:
-                        batch.process_order_id = int(incoming_po_id)
-            else:
-                batch_no = (l.get("batch_no") or "").strip()
-                if not batch_no:
-                    raise FinishedGoodsError(f"第 {idx} 行缺少批次号")
-                batch = FinishedGoodsBatch.query.filter_by(batch_no=batch_no).first()
-                if not batch:
-                    batch = FinishedGoodsBatch(
-                        batch_no=batch_no,
-                        process_order_id=l.get("process_order_id"),
-                        product_name=l.get("product_name") or "未命名",
-                        product_specification=l.get("product_specification"),
-                        unit=l.get("unit") or "KG",
-                        unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else 0,
-                        batch_source="OTHER",
-                        quality_status=l.get("quality_status") or "QUALIFIED",
-                        remark=l.get("remark"),
-                        created_at=now_beijing_naive(),
-                    )
-                    db.session.add(batch)
-                    db.session.flush()
-                else:
-                    # 批次已存在（按批次号找的），同样要做一致性校验
-                    incoming_po_id = l.get("process_order_id")
-                    b_old_has_order_id = True
-                    if batch.process_order_id is None:
-                        b_old_has_order_id = False
-                    if incoming_po_id is not None:
-                        if (batch.process_order_id is not None
-                                and int(batch.process_order_id) != int(incoming_po_id)):
-                            raise FinishedGoodsError(
-                                f"第 {idx} 行批次 [{batch.batch_no}] 已有来源工艺单，"
-                                f"不能改为其他工艺单"
-                            )
-                        if batch.process_order_id is None:
-                            batch.process_order_id = int(incoming_po_id)
-                    # 做价格一致性检测, to be continued
-                    input_unit_cost_str = l.get("unit_cost")
-                    if input_unit_cost_str is not None:
-                        input_unit_cost = _q6(input_unit_cost_str)
-                        # 如果旧的产品批号有工艺单，则需要检查价格是否一致
-                        if (b_old_has_order_id and input_unit_cost != batch.unit_cost):
-                            raise FinishedGoodsError(
-                                f"第 {idx} 行批次 [{batch.batch_no}] 价格不一致，"
-                                f"当前: {batch.unit_cost}, 新输入: {input_unit_cost}"
-                            )
-                        # 如果旧的产品批号没有工艺单，则价格可以覆盖
-                        if b_old_has_order_id is False:
-                            batch.unit_cost = input_unit_cost
+            batch = FinishedGoodsService._get_or_create_batch(
+                l, idx,
+                default_batch_source=(
+                    batch_source_map[business_type] if business_type in batch_source_map else "OTHER"
+                ),
+            )
 
             line = FinishedGoodsDocumentLine(
                 document_id=doc.id,
