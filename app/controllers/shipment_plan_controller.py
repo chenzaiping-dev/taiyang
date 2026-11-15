@@ -4,6 +4,7 @@ from flask import (
 )
 
 from app.extensions import db
+from app.services.draft_delete_service import DraftDeleteService, DraftDeleteError
 from app.generated.models.employees import Employee
 from app.generated.models.warehouses import Warehouse
 from app.generated.models.sales_performance import SalesPerformance
@@ -465,6 +466,20 @@ def mark_planned(plan_id):
         flash("已标记为【已计划】", "success")
     except ShipmentPlanError as e:
         flash(str(e), "error")
+    return redirect(url_for("shipment_plan.list_page"))
+
+
+@bp.post("/<int:plan_id>/delete")
+def delete_draft(plan_id):
+    try:
+        DraftDeleteService.delete_shipment_plan(plan_id)
+        flash("发货计划草稿已删除", "success")
+    except DraftDeleteError as e:
+        db.session.rollback()
+        flash(str(e), "error")
+    except Exception:
+        db.session.rollback()
+        flash("删除失败：存在未满足的关联约束或数据库异常，请检查关联业务单据", "error")
     return redirect(url_for("shipment_plan.list_page"))
 
 

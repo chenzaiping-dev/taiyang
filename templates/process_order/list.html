@@ -114,6 +114,14 @@
               <a class="btn btn-small"
               href="{{ url_for('process_order.edit_page', order_id=it.id) }}">编辑</a>
           {% endif %}
+          {% if it.status == 'DRAFT' and has_permission('process_order.delete') %}
+            <form method="post" style="display:inline;"
+                  action="{{ url_for('process_order.delete_draft', order_id=it.id) }}"
+                  onsubmit="return confirm('确定删除该工艺单草稿？删除后不可恢复。');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-small btn-danger">删除</button>
+            </form>
+          {% endif %}
 
           {% if has_permission('process_order.place') %}
           <!-- ===== 下单：仅 DRAFT ===== -->

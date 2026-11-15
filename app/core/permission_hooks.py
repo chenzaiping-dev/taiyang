@@ -16,6 +16,7 @@ ENDPOINT_REQUIREMENTS = {
     "inventory_query.material_transactions_page": ("inventory.transactions.view",),
     "inventory_query.document_list_page": ("inventory.documents.view",),
     "inventory_query.document_detail_page": ("inventory.documents.view",),
+    "inventory_query.document_delete": ("inventory.documents.delete",),
     "inventory_query.stock_out_confirm": ("inventory.stock_out.confirm",),
     "inventory_query.purchase_in_confirm": ("inventory.purchase_in.confirm",),
 
@@ -46,6 +47,7 @@ ENDPOINT_REQUIREMENTS = {
     "finished_goods.document_confirm": ("finished_goods.documents.confirm",),
     "finished_goods.document_edit_page": ("finished_goods.documents.edit",),
     "finished_goods.document_edit_submit": ("finished_goods.documents.edit",),
+    "finished_goods.document_delete": ("finished_goods.documents.delete",),
     "finished_goods.document_reverse": ("finished_goods.documents.reverse",),
 
     # Process orders
@@ -56,6 +58,7 @@ ENDPOINT_REQUIREMENTS = {
     "process_order.create_submit": ("process_order.create",),
     "process_order.edit_page": ("process_order.edit",),
     "process_order.update_submit": ("process_order.edit",),
+    "process_order.delete_draft": ("process_order.delete",),
     "process_order.place_order": ("process_order.place",),
     "process_order.produce": ("process_order.produce",),
     "process_order.receive": ("process_order.receive",),
@@ -84,6 +87,7 @@ ENDPOINT_REQUIREMENTS = {
     "shipment_plan.create_submit": ("shipment.create",),
     "shipment_plan.edit_page": ("shipment.edit",),
     "shipment_plan.update_submit": ("shipment.edit",),
+    "shipment_plan.delete_draft": ("shipment.delete",),
     "shipment_plan.list_page": ("shipment.view",),
     "shipment_plan.detail_page": ("shipment.view",),
     "shipment_plan.ship_submit": ("shipment.ship",),
@@ -97,6 +101,7 @@ ENDPOINT_REQUIREMENTS = {
     "sales_performance.create_submit": ("sales_performance.create",),
     "sales_performance.edit_page": ("sales_performance.edit",),
     "sales_performance.update_submit": ("sales_performance.edit",),
+    "sales_performance.delete_draft": ("sales_performance.delete",),
     "sales_performance.detail_page": ("sales_performance.view",),
     "sales_performance.change_status": ("sales_performance.status.change",),
     "sales_performance.reopen": ("sales_performance.reopen",),

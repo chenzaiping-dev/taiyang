@@ -8,6 +8,14 @@
      href="{{ url_for('process_order.edit_page', order_id=order.id) }}">
     编辑
   </a>
+  {% if order.status == 'DRAFT' and has_permission('process_order.delete') %}
+  <form method="post" style="display:inline;float:right;margin-right:8px;"
+        action="{{ url_for('process_order.delete_draft', order_id=order.id) }}"
+        onsubmit="return confirm('确定删除这张工艺单草稿？如有关联业务单据或库存记录，系统会阻止删除。');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-danger">删除草稿</button>
+  </form>
+  {% endif %}
 {% if order.status in ('ORDERED', 'PRODUCING', 'RECEIVED') %}
   <a class="btn btn-warn"
      href="{{ url_for('process_order.adjust_materials_page', order_id=order.id) }}">

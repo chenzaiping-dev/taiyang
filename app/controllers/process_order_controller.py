@@ -4,6 +4,7 @@ from marshmallow import ValidationError
 import re
 
 from app.extensions import db
+from app.services.draft_delete_service import DraftDeleteService, DraftDeleteError
 from app.generated.models.materials import Material
 from app.generated.models.warehouses import Warehouse
 from app.generated.models.factories import Factory
@@ -386,6 +387,20 @@ def update_submit(order_id: int):
 
 def _action_url(action: str, order_id: int) -> str:
     return url_for(f"process_order.{action}", order_id=order_id)
+
+@bp.post("/<int:order_id>/delete")
+def delete_draft(order_id: int):
+    try:
+        DraftDeleteService.delete_process_order(order_id)
+        flash("工艺单草稿已删除", "success")
+    except DraftDeleteError as e:
+        db.session.rollback()
+        flash(str(e), "error")
+    except Exception:
+        db.session.rollback()
+        flash("删除失败：存在未满足的关联约束或数据库异常，请检查关联业务单据", "error")
+    return redirect(url_for("process_order.list_page"))
+
 
 @bp.post("/<int:order_id>/place-order")
 def place_order(order_id: int):

@@ -3,6 +3,7 @@ from flask import (
     Blueprint, render_template, request, redirect, url_for, flash, abort, session
 )
 from app.extensions import db
+from app.services.draft_delete_service import DraftDeleteService, DraftDeleteError
 from app.generated.models.employees import Employee
 from app.generated.models.sales_performance import SalesPerformance
 from app.generated.models.production_plans import ProductionPlan
@@ -296,6 +297,20 @@ def change_status(perf_id, action):
     except SalesPerformanceError as e:
         flash(str(e), "error")
     return redirect(request.referrer or url_for("sales_performance.list_page"))
+
+@bp.post("/<int:perf_id>/delete")
+def delete_draft(perf_id):
+    try:
+        DraftDeleteService.delete_sales_performance(perf_id)
+        flash("业绩表草稿及其关联的草稿计划已删除", "success")
+    except DraftDeleteError as e:
+        db.session.rollback()
+        flash(str(e), "error")
+    except Exception:
+        db.session.rollback()
+        flash("删除失败：存在未满足的关联约束或数据库异常，请检查关联业务单据", "error")
+    return redirect(url_for("sales_performance.list_page"))
+
 
 @bp.post("/<int:perf_id>/reopen")
 def reopen(perf_id):

@@ -15,6 +15,14 @@
     <a class="btn" style="float:right;margin-right:8px;"
        href="{{ url_for('sales_performance.edit_page', perf_id=perf.id) }}">编辑</a>
   {% endif %}
+  {% if perf.status == 'DRAFT' and has_permission('sales_performance.delete') %}
+    <form method="post" style="display:inline;float:right;margin-right:8px;"
+          action="{{ url_for('sales_performance.delete_draft', perf_id=perf.id) }}"
+          onsubmit="return confirm('确定删除这张业绩表草稿？关联的草稿生产计划、发货计划及工艺单也会一并清理。');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-danger">删除草稿</button>
+    </form>
+  {% endif %}
   <a class="btn" style="float:right;margin-right:8px;"
      href="{{ url_for('sales_performance.list_page') }}">返回列表</a>
 </h2>

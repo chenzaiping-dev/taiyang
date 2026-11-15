@@ -10,6 +10,14 @@
     <a class="btn btn-primary" style="float:right;"
        href="{{ url_for('shipment_plan.edit_page', plan_id=plan.id) }}">编辑</a>
   {% endif %}
+  {% if plan.status == 'DRAFT' and has_permission('shipment.delete') %}
+    <form method="post" style="display:inline;float:right;margin-right:8px;"
+          action="{{ url_for('shipment_plan.delete_draft', plan_id=plan.id) }}"
+          onsubmit="return confirm('确定删除这张发货计划草稿？删除后不可恢复。');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-danger">删除草稿</button>
+    </form>
+  {% endif %}
   {% if plan.status != 'CANCELLED' %}
     {% if has_permission('shipment.cancel') %}
 <form method="post" action="{{ url_for('shipment_plan.cancel_plan', plan_id=plan.id) }}"

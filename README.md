@@ -285,3 +285,14 @@ python -m codegen.generator
 ```
 
 工艺单 `receive_to_finished_goods` 是直接确认的正式入库流程，会在同一事务中创建批次、库存和流水。`cancel_with_reversal` 通过原入库单明细中的正式 `batch_id` 生成反向库存单据；批次档案保留用于追溯，不做物理删除。
+
+
+## 草稿单据删除功能（2026-11-15）
+
+已有数据库请执行：
+
+```sql
+SOURCE migrations/20261115_draft_delete_permissions.sql;
+```
+
+该迁移只增加草稿删除权限目录，不会自动给角色授权。请在角色权限管理中按岗位分配 `inventory.documents.delete`、`finished_goods.documents.delete`、`process_order.delete`、`sales_performance.delete`、`shipment.delete`。列表只在 `DRAFT` 状态显示删除按钮，服务端仍会二次校验状态以及流水、批次、库存预留和下游关联。

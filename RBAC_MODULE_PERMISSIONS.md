@@ -4,10 +4,10 @@
 
 ## 1. 升级
 
-已有数据库执行：
+已有数据库执行对应迁移脚本：
 
 ```sql
-SOURCE migrations/20261113_business_module_permissions.sql;
+SOURCE migrations/20261115_draft_delete_permissions.sql;
 ```
 
 新建数据库使用 `user.sql`，本补丁已将新增权限目录一并写入 `user.sql`。
@@ -18,11 +18,14 @@ SOURCE migrations/20261113_business_module_permissions.sql;
 
 | 模块编码 | 模块 | 主要权限 |
 |---|---|---|
-| `inventory` | 原料管理 | 原料资料、供应商资料、库存、入库、出库、单据、流水、成本 |
-| `process_order` | 工艺单 | 查看、新建、编辑、下单、生产、入库、取消、配比调整 |
+| `inventory` | 原料管理 | 原料资料、供应商资料、库存、入库、出库、单据查看/草稿删除、流水、成本 |
+| `finished_goods` | 成品管理 | 库存、入库/出库单据查看/编辑/确认/草稿删除、流水、成本 |
+| `process_order` | 工艺单 | 查看、新建、编辑、草稿删除、下单、生产、入库、取消、配比调整 |
 | `production` | 生产计划 | 查看、新建、编辑、确认、执行、完成、取消、重新打开 |
-| `shipment` | 发货管理 | 查看、新建、编辑、确认、发货、取消、金额 |
-| `sales_performance` | 业绩表管理 | 查看、新建、编辑、状态流转、金额 |
+| `shipment` | 发货管理 | 查看、新建、编辑、草稿删除、确认、发货、取消、金额 |
+| `sales_performance` | 业绩表管理 | 查看、新建、编辑、草稿删除、状态流转、金额 |
+
+新增草稿删除权限：`inventory.documents.delete`、`finished_goods.documents.delete`、`process_order.delete`、`sales_performance.delete`、`shipment.delete`。这些权限需要在角色权限管理页面单独授予，不会自动分配。
 
 ## 3. 金额字段权限
 
@@ -51,6 +54,8 @@ SOURCE migrations/20261113_business_module_permissions.sql;
 - `production_plan`
 - `shipment_plan`
 - `sales_performance`
+
+新增的草稿删除 endpoint 同样纳入后端权限映射；按钮隐藏不代表安全边界，服务端会再次校验状态和关联流水/预留。
 
 受管 Blueprint 中未登记的新增 endpoint 会默认返回 403（fail closed）。新增路由时必须先在 `ENDPOINT_REQUIREMENTS` 中声明权限。
 

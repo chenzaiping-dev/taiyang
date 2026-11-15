@@ -7,6 +7,7 @@ from app.generated.models.materials import Material
 from app.generated.models.warehouses import Warehouse
 from app.generated.models.inventory_cost_layers import InventoryCostLayer
 from app.services.inventory_query_service import InventoryQueryService
+from app.services.draft_delete_service import DraftDeleteService, DraftDeleteError
 from app.services.inventory_service import (
     PurchaseInService, StockOutService, InventoryError, 
     INBOUND_TYPE_LABELS, OUTBOUND_TYPE_LABELS, _rm_warehouses
@@ -324,6 +325,22 @@ def document_list_page(direction):
             else "inventory_query.stock_out_confirm"
         ),
     )
+
+
+@bp.post("/documents/<direction>/<int:document_id>/delete")
+def document_delete(direction, document_id):
+    if direction not in ("in", "out"):
+        abort(404)
+    try:
+        DraftDeleteService.delete_inventory_document(document_id, direction)
+        flash("原料库存草稿已删除", "success")
+    except DraftDeleteError as e:
+        db.session.rollback()
+        flash(str(e), "error")
+    except Exception:
+        db.session.rollback()
+        flash("删除失败：存在未满足的关联约束或数据库异常，请检查关联业务单据", "error")
+    return redirect(url_for("inventory_query.document_list_page", direction=direction))
 
 
 # ==================== 通用详情 ====================

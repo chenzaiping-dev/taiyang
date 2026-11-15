@@ -70,7 +70,7 @@
       <th style="width:110px;">创建时间</th>
       <th style="width:50px;">确认人</th>
       <th style="width:110px;">确认时间</th>
-      <th style="width:100px;">操作</th>
+      <th style="width:120px;">操作</th>
     </tr>
   </thead>
   <tbody>
@@ -107,6 +107,14 @@
               <a class="btn btn-sm" href="{{ url_for('purchase_in.purchase_in_edit_page', document_id=r.id) }}">编辑</a>
             {% elif direction == 'out' and has_permission('inventory.stock_out.edit') %}
               <a class="btn btn-sm" href="{{ url_for('stock_out.stock_out_edit_page', document_id=r.id) }}">编辑</a>
+            {% endif %}
+            {% if has_permission('inventory.documents.delete') %}
+              <form method="post" style="display:inline;"
+                    action="{{ url_for('inventory_query.document_delete', direction=direction, document_id=r.id) }}"
+                    onsubmit="return confirm('确定删除这张原料库存草稿？删除后不可恢复。');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm btn-danger">删除</button>
+              </form>
             {% endif %}
             {% if direction == 'in' and has_permission('inventory.purchase_in.confirm') %}
               <form method="post" action="{{ url_for(confirm_endpoint, document_id=r.id) }}"

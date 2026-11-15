@@ -27,6 +27,14 @@
     {% if doc.status == 'DRAFT' and edit_url %}
       <a class="btn" style="float:right;margin-right:8px;" href="{{ edit_url }}">编辑草稿</a>
     {% endif %}
+    {% if doc.status == 'DRAFT' and has_permission('inventory.documents.delete') %}
+      <form method="post" style="display:inline;float:right;margin-right:8px;"
+            action="{{ url_for('inventory_query.document_delete', direction=direction, document_id=doc.id) }}"
+            onsubmit="return confirm('确定删除这张原料库存草稿？删除后不可恢复。');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-danger">删除草稿</button>
+      </form>
+    {% endif %}
     <a class="btn" style="float:right;margin-right:8px;"
        href="{{ list_url }}">返回列表</a>
   </h2>

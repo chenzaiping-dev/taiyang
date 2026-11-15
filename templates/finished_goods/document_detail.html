@@ -29,6 +29,14 @@
         href="{{ url_for('finished_goods.document_edit_page',
                   direction=direction, document_id=doc.id) }}">编辑草稿</a>
       {% endif %}
+      {% if has_permission('finished_goods.documents.delete') %}
+      <form method="post" style="display:inline;float:right;margin-right:8px;"
+            action="{{ url_for('finished_goods.document_delete', direction=direction, document_id=doc.id) }}"
+            onsubmit="return confirm('确定删除这张成品库存草稿？删除后不可恢复。');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-danger">删除草稿</button>
+      </form>
+      {% endif %}
 
     {% elif doc.status == 'CONFIRMED' %}
       {# ⭐ 三种情况：撤销单 / 已撤销 / 可撤销 #}

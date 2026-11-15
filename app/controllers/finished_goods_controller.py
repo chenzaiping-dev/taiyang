@@ -3,6 +3,7 @@ from decimal import Decimal
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, abort, session
 
 from app.extensions import db
+from app.services.draft_delete_service import DraftDeleteService, DraftDeleteError
 from app.services.permission_service import can_view_finished_goods_cost, can_edit_finished_goods_cost
 
 from app.generated.models.warehouses import Warehouse
@@ -811,6 +812,22 @@ def document_edit_submit(direction, document_id):
             return redirect(url_for(
                 "finished_goods.document_edit_page",
                 direction="out", document_id=document_id))
+
+@bp.post("/documents/<direction>/<int:document_id>/delete")
+def document_delete(direction, document_id):
+    if direction not in ("in", "out"):
+        abort(404)
+    try:
+        DraftDeleteService.delete_finished_goods_document(document_id, direction)
+        flash("成品库存草稿已删除", "success")
+    except DraftDeleteError as e:
+        db.session.rollback()
+        flash(str(e), "error")
+    except Exception:
+        db.session.rollback()
+        flash("删除失败：存在未满足的关联约束或数据库异常，请检查关联业务单据", "error")
+    return redirect(url_for("finished_goods.document_list_page", direction=direction))
+
 
 @bp.post("/documents/<direction>/<int:document_id>/reverse")
 def document_reverse(direction, document_id):
