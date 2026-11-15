@@ -2,14 +2,19 @@
 {% block title %}出库成功{% endblock %}
 
 {% block content %}
-<h2>✅ 出库成功</h2>
+<h2>✅ {{ '草稿保存' if result.status == 'DRAFT' else '出库' }}成功</h2>
 
-<div class="form-row"><label>单据号：</label>{{ result.document_no }}</div>
+<div class="form-row"><label>单据号：</label>
+  <a href="{{ url_for('inventory_query.document_detail_page',
+              direction='out', document_id=result.document_id) }}">
+  {{ result.document_no }}
+  </a>
+</div>
 <div class="form-row"><label>单据类型：</label>{{ result.document_type }}</div>
 <div class="form-row"><label>状态：</label>{{ result.status }}</div>
 <div class="form-row"><label>出库时间：</label>{{ result.document_time }}</div>
 
-<h3>FIFO 成本分配明细</h3>
+<h3>{{ '暂未生成' if result.status == 'DRAFT' else '生成的' }} FIFO 成本分配明细</h3>
 <table>
   <thead>
     <tr>
@@ -22,7 +27,7 @@
     </tr>
   </thead>
   <tbody>
-    {% for l in result.lines %}
+    {% for l in result.lines.lines_result %}
     <tr>
       <td>{{ l.material_id }}</td>
       <td>{{ l.quantity }}</td>

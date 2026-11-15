@@ -9,6 +9,7 @@ from app.generated.models.process_orders import ProcessOrder
 from app.generated.models.process_order_materials import ProcessOrderMaterial
 from app.generated.models.materials import Material
 from app.generated.models.inventory_documents import InventoryDocument
+from app.generated.models.inventory_document_lines import InventoryDocumentLine
 from app.generated.models.inventory_transactions import InventoryTransaction
 from app.generated.models.inventory_cost_layers import InventoryCostLayer
 from app.generated.models.inventory_cost_allocations import InventoryCostAllocation
@@ -344,6 +345,21 @@ class ProcessOrderAdjustmentService:
                 next_line_no += 1                  # ⭐ 每插一条 +1
                 db.session.add(new_tx)
                 db.session.flush()
+                # 配比红冲的业务明细必须先落在 document_lines；
+                # InventoryTransaction 仍然只代表已确认、真实生效的流水。
+                db.session.add(InventoryDocumentLine(
+                    document_id=doc.id,
+                    line_no=new_tx.line_no,
+                    material_id=mid,
+                    transaction_type=adjust_type,
+                    quantity=take_qty,
+                    unit_cost=None,
+                    supplier_id=None,
+                    process_order_id=order.id,
+                    warehouse_id=orig_tx.warehouse_id,
+                    remark=f"工艺单 {order.process_order_no} 配比减少红冲",
+                    created_at=doc_time,
+                ))
 
                 result = ProcessOrderAdjustmentService._reverse_allocation(
                     orig_tx.id, take_qty, new_tx.id

@@ -62,11 +62,17 @@
     </div>
     {% endif %}    
 
+    <div class="form-row"><label>创建人：</label>
+      {{ creator.real_name if creator else "-" }}
+    </div>
     <div class="form-row"><label>创建时间：</label>
       {{ doc.created_at.strftime("%Y-%m-%d %H:%M:%S")
          if doc.created_at else "-" }}
     </div>
     {% if doc.confirmed_at %}
+    <div class="form-row"><label>确认人：</label>
+      {{ confirmer.real_name if confirmer else "-" }}
+    </div>
     <div class="form-row"><label>确认时间：</label>
       {{ doc.confirmed_at.strftime("%Y-%m-%d %H:%M:%S") }}
     </div>

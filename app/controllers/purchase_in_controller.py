@@ -1,6 +1,6 @@
 from datetime import datetime
 from flask import (
-    Blueprint, request, jsonify, render_template, redirect, url_for, flash
+    Blueprint, request, jsonify, render_template, redirect, url_for, flash, session
 )
 from marshmallow import ValidationError
 
@@ -11,6 +11,7 @@ from app.generated.models.suppliers import Supplier
 
 from app.generated.models.inventory_documents import InventoryDocument
 from app.generated.models.inventory_transactions import InventoryTransaction
+from app.generated.models.inventory_document_lines import InventoryDocumentLine
 from app.generated.models.inventory_cost_layers import InventoryCostLayer
 
 from app.schemas.purchase_in_schema import PurchaseInRequestSchema
@@ -45,6 +46,7 @@ def api_purchase_in():
             document_no=data.get("document_no"),
             document_time=data.get("document_time"),
             remark=data.get("remark"),
+            created_by=session.get("employee_id"),
             auto_confirm=data.get("auto_confirm", True),
         )
     except InventoryError as e:
@@ -86,7 +88,6 @@ def purchase_in_page():
 def purchase_in_submit():
     try:
         data = parse_purchase_in_form(request.form)
-        print("data:", data)
         result = PurchaseInService.create_purchase_in(
             warehouse_id=data["warehouse_id"],
             supplier_id=data["supplier_id"],
@@ -96,6 +97,7 @@ def purchase_in_submit():
                 datetime.fromisoformat(data["document_time"])
                 if data["document_time"] else None
             ),
+            created_by=session.get("employee_id"),
             remark=data["remark"],
             auto_confirm=data["auto_confirm"],
         )
@@ -168,9 +170,9 @@ def purchase_in_edit_page(document_id):
         return redirect(url_for("inventory_query.document_detail_page",
                                 direction="in", document_id=document_id))
 
-    txs = (InventoryTransaction.query
+    txs = (InventoryDocumentLine.query
            .filter_by(document_id=doc.id)
-           .order_by(InventoryTransaction.line_no.asc()).all())
+           .order_by(InventoryDocumentLine.line_no.asc()).all())
     if not txs:
         flash("单据无明细", "error")
         return redirect(url_for("inventory_query.document_detail_page",
@@ -186,7 +188,7 @@ def purchase_in_edit_page(document_id):
 
     form_lines = [{
         "material_id": t.material_id,
-        "quantity": str(t.quantity_delta),
+        "quantity": str(t.quantity),
         "unit_cost": str(t.unit_cost) if t.unit_cost is not None else "",
     } for t in txs]
 

@@ -1,6 +1,6 @@
 from datetime import datetime
 from flask import (
-    Blueprint, request, jsonify, render_template, redirect, url_for, flash
+    Blueprint, request, jsonify, render_template, redirect, url_for, flash, session
 )
 from marshmallow import ValidationError
 
@@ -10,6 +10,7 @@ from app.generated.models.warehouses import Warehouse
 
 from app.generated.models.inventory_documents import InventoryDocument
 from app.generated.models.inventory_transactions import InventoryTransaction
+from app.generated.models.inventory_document_lines import InventoryDocumentLine
 
 from app.schemas.stock_out_schema import StockOutRequestSchema
 from app.services.form_parser import parse_stock_out_form, FormParseError
@@ -44,6 +45,7 @@ def api_stock_out():
             document_time=data.get("document_time"),
             process_order_id=data.get("process_order_id"),
             remark=data.get("remark"),
+            created_by=session.get("employee_id"),
             auto_confirm=data.get("auto_confirm", True),
             allow_partial=data.get("allow_partial", False),
         )
@@ -102,6 +104,7 @@ def stock_out_submit():
                 if data["document_time"] else None
             ),
             remark=data["remark"],
+            created_by=session.get("employee_id"),
             auto_confirm=data["auto_confirm"],
             allow_partial=data["allow_partial"],
         )
@@ -171,9 +174,9 @@ def stock_out_edit_page(document_id):
         ))
 
     txs = (
-        InventoryTransaction.query
+        InventoryDocumentLine.query
         .filter_by(document_id=doc.id)
-        .order_by(InventoryTransaction.line_no.asc())
+        .order_by(InventoryDocumentLine.line_no.asc())
         .all()
     )
     if not txs:
@@ -199,7 +202,7 @@ def stock_out_edit_page(document_id):
     form_lines = [
         {
             "material_id": t.material_id,
-            "quantity": str(-t.quantity_delta),   # 出库流水是负数，回显取正
+            "quantity": str(t.quantity),
         }
         for t in txs
     ]

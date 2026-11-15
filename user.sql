@@ -29,6 +29,7 @@ DROP TABLE IF EXISTS `finished_goods_documents`;
 DROP TABLE IF EXISTS `inventory_cost_allocations`;
 DROP TABLE IF EXISTS `inventory_cost_layers`;
 DROP TABLE IF EXISTS `inventory_transactions`;
+DROP TABLE IF EXISTS `inventory_document_lines`;
 DROP TABLE IF EXISTS `inventory_documents`;
 
 -- 7. 工艺单原料明细
@@ -428,13 +429,61 @@ CREATE TABLE inventory_documents (
     ) NOT NULL DEFAULT 'DRAFT' COMMENT '单据状态: DRAFT, CONFIRMED, CANCELLED',
 
     remark VARCHAR(500) COMMENT '备注',
+    created_by BIGINT UNSIGNED DEFAULT NULL COMMENT '制单人ID',
+    confirmed_by BIGINT UNSIGNED DEFAULT NULL COMMENT '确认人ID',
+
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    confirmed_at DATETIME,
+    confirmed_at DATETIME DEFAULT NULL,
 
     UNIQUE KEY uk_document_no (document_no),
-    KEY idx_document_time (document_time)
+    KEY idx_document_time (document_time),
+    CONSTRAINT fk_id_doc_created_by
+        FOREIGN KEY (created_by) REFERENCES employees(id),
+    CONSTRAINT fk_id_doc_confirmed_by
+            FOREIGN KEY (confirmed_by) REFERENCES employees(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 COMMENT='库存业务单据';
+
+CREATE TABLE inventory_document_lines (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    document_id BIGINT UNSIGNED NOT NULL COMMENT '库存业务单据ID',
+    line_no INT NOT NULL COMMENT '单据行号',
+    transaction_type ENUM(
+        'PURCHASE_IN', 'PRODUCTION_OUT', 'STOCKTAKE_GAIN',
+        'STOCKTAKE_LOSS', 'RETURN_IN', 'RETURN_OUT',
+        'ADJUSTMENT_RED', 'ADJUSTMENT_BLUE'
+    ) NOT NULL COMMENT '明细业务类型',
+
+    material_id BIGINT UNSIGNED NOT NULL COMMENT '原料ID',
+    quantity DECIMAL(16, 4) NOT NULL COMMENT '业务数量，始终为正数',
+    unit_cost DECIMAL(18, 4) DEFAULT NULL COMMENT '入库单价/调整成本单价',
+    supplier_id BIGINT UNSIGNED DEFAULT NULL COMMENT '供应商ID',
+    process_order_id BIGINT UNSIGNED DEFAULT NULL COMMENT '关联工艺单ID',
+    warehouse_id BIGINT UNSIGNED NOT NULL COMMENT '发生业务的仓库ID',
+    remark VARCHAR(500) DEFAULT NULL COMMENT '明细备注',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_inventory_document_line (document_id, line_no),
+
+    KEY idx_idl_material (material_id),
+    KEY idx_idl_warehouse_material (warehouse_id, material_id),
+    KEY idx_idl_type (transaction_type),
+
+    CONSTRAINT fk_idl_document FOREIGN KEY (document_id)
+        REFERENCES inventory_documents(id),
+    CONSTRAINT fk_idl_material FOREIGN KEY (material_id)
+        REFERENCES materials(id),
+    CONSTRAINT fk_idl_warehouse FOREIGN KEY (warehouse_id)
+        REFERENCES warehouses(id),
+    CONSTRAINT fk_idl_supplier FOREIGN KEY (supplier_id)
+        REFERENCES suppliers(id),
+    CONSTRAINT fk_idl_process_order FOREIGN KEY (process_order_id)
+        REFERENCES process_orders(id),
+    CHECK (quantity > 0),
+    CHECK (unit_cost IS NULL OR unit_cost >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+COMMENT='原料库存业务单据明细（草稿及确认前业务数据）';
 
 CREATE TABLE inventory_transactions (
     id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,

@@ -64,6 +64,13 @@ TABLES = {
         "search_fields": ["document_no", "document_type", "phone"],
         "can_create": True, "can_edit": True, "can_delete": False,
     },
+    "inventory_document_lines": {
+        "label": "原料库存单据明细", "module": "库存管理", "mode": "readonly",
+        "list_fields": ["id", "document_id", "line_no", "transaction_type",
+                        "material_id", "quantity", "warehouse_id", "supplier_id",
+                        "process_order_id"],
+        "search_fields": ["document_id", "material_id", "warehouse_id"],
+    },
     "inventory_transactions": {
         "label": "原料库存流水", "module": "库存管理", "mode": "crud",
         "list_fields": ["id", "document_id", "line_no", "material_id", "transaction_type", "warehouse_id", "quantity_delta", "transaction_time"],

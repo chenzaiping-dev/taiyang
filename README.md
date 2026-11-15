@@ -231,3 +231,37 @@ WHERE e.username = 'your_admin_username';
 新建数据库请使用更新后的 `user.sql`。迁移只增加权限字典，不会自动给角色授权；请在「角色权限管理」页面按岗位分配。
 
 详细权限编码、金额字段规则、路由映射及数据范围限制请见 [RBAC_MODULE_PERMISSIONS.md](RBAC_MODULE_PERMISSIONS.md)。
+
+
+## 原料库存单据明细与真实流水分离（2026-11-14）
+
+原料库存采用两阶段数据模型：
+
+- `inventory_documents`：单据头，保存草稿/已确认/已取消状态。
+- `inventory_document_lines`：业务单据明细。草稿创建、修改、编辑均只读写此表。
+- `inventory_transactions`：真实库存流水，只在单据确认时生成；不保存草稿行。
+- `inventory_cost_layers` / `inventory_cost_allocations`：仅在真实流水过账时维护 FIFO 成本层和分配。
+
+已有数据库升级：
+
+```sql
+SOURCE migrations/20261114_inventory_document_lines.sql;
+```
+
+升级后重新反射数据库并生成模型：
+
+```bash
+python -m codegen.introspect
+python -m codegen.generator
+```
+
+新建数据库则直接使用更新后的 `user.sql`。`inventory_document_lines` 已加入 `app/core/table_config.py` 的只读配置，以便代码生成器生成对应 ORM Model；它不会通过通用 CRUD 编辑，必须经由入库/出库业务服务维护。
+
+工艺单配比调整的红冲、蓝补同样遵循该模型：
+- 红冲：先写已确认的 `inventory_documents` 和 `inventory_document_lines`，再写正向数量的 `ADJUSTMENT_RED` 真实流水并回补原 FIFO 成本层。
+- 蓝补：复用 `StockOutService.create_stock_out()`，通过单据明细确认后生成负向流水并消耗 FIFO。
+- 工艺单取消的原料冲销也会同步保存单据明细。
+
+库存查询约定：
+- 单据列表/草稿详情读取 `inventory_document_lines`，因此草稿不需要也不应该出现在 `inventory_transactions`。
+- 库存汇总、FIFO 库存、库存流水查询只读取 `inventory_transactions` / 成本层，天然不包含草稿。

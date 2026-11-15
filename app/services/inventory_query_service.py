@@ -1,4 +1,4 @@
-from sqlalchemy import select, case, func, or_
+from sqlalchemy import select, case, func, or_, literal
 from decimal import Decimal
 from app.extensions import db
 from app.generated.models.employees import Employee
@@ -7,6 +7,7 @@ from app.generated.models.warehouses import Warehouse
 from app.generated.models.suppliers import Supplier
 
 from app.generated.models.inventory_documents import InventoryDocument
+from app.generated.models.inventory_document_lines import InventoryDocumentLine
 from app.generated.models.inventory_transactions import InventoryTransaction
 from app.generated.models.inventory_cost_layers import InventoryCostLayer
 from app.generated.models.inventory_cost_allocations import InventoryCostAllocation
@@ -296,8 +297,7 @@ class InventoryQueryService:
         if date_to:
             filters.append(InventoryTransaction.transaction_time < date_to)
 
-        # ⭐ 只统计已确认单据，排除 DRAFT / CANCELLED
-        filters.append(InventoryDocument.status == "CONFIRMED")
+        # inventory_transactions 只保存已确认过账流水；草稿只存在 document_lines。
 
         # 汇总列
         cols = [
@@ -354,8 +354,6 @@ class InventoryQueryService:
         stmt = (
             select(*cols)
             .join(Material, Material.id == InventoryTransaction.material_id)
-            .join(InventoryDocument,
-                  InventoryDocument.id == InventoryTransaction.document_id)   # ⭐ 新增
         )
         if warehouse_id:
             stmt = stmt.join(
@@ -438,8 +436,7 @@ class InventoryQueryService:
         )
 
         filters = []
-        # ⭐ 只统计已确认单据，排除 DRAFT / CANCELLED
-        filters.append(InventoryDocument.status == "CONFIRMED")
+        # inventory_transactions 只保存已确认过账流水；草稿只存在 document_lines。
         #filters.append(InventoryDocument.status != "DRAFT")
 
         if material_code:
@@ -475,59 +472,56 @@ class InventoryQueryService:
 
     @staticmethod
     def list_documents(
-        direction: str,           # 'IN' | 'OUT'
-        keyword=None, status=None,
-        inbound_type=None,        # 仅 IN 方向使用
-        outbound_type=None,       # 仅 OUT 方向使用
-        date_from=None, date_to=None,
+        direction: str, keyword=None, status=None, inbound_type=None,
+        outbound_type=None, date_from=None, date_to=None,
         page=1, page_size=50,
     ):
-        """
-        统一查询入库/出库单据。
-        direction='IN'  → PURCHASE_IN / STOCKTAKE (库存增加类流水)
-        direction='OUT' → PRODUCTION_OUT / STOCKTAKE / ADJUSTMENT (库存减少类流水)
-        """
+        """单据列表以 document_lines 为准，草稿也能显示；金额汇总仅来自已过账流水。"""
         if direction == "IN":
             doc_types = ["PURCHASE_IN", "STOCKTAKE", "RETURN"]
-            tx_types = ["PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN"]
-            qty_expr = func.coalesce(
-                func.sum(InventoryTransaction.quantity_delta), 0
-            ).label("total_qty")
+            line_types = ["PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN"]
         else:
-            doc_types = ["PRODUCTION_OUT", "STOCKTAKE", "RETURN", "ADJUSTMENT_RED", "ADJUSTMENT_BLUE"]
-            tx_types = ["PRODUCTION_OUT", "STOCKTAKE_LOSS", "RETURN_OUT", "ADJUSTMENT_RED", "ADJUSTMENT_BLUE"]
-            qty_expr = func.coalesce(
-                func.sum(-InventoryTransaction.quantity_delta), 0
-            ).label("total_qty")
+            doc_types = ["PRODUCTION_OUT", "STOCKTAKE", "RETURN",
+                         "ADJUSTMENT_RED", "ADJUSTMENT_BLUE"]
+            line_types = ["PRODUCTION_OUT", "STOCKTAKE_LOSS", "RETURN_OUT",
+                          "ADJUSTMENT_RED", "ADJUSTMENT_BLUE"]
 
+        creator = db.aliased(Employee)
+        confirmer = db.aliased(Employee)
+        line_stats = (
+            select(
+                InventoryDocumentLine.document_id.label("document_id"),
+                func.count(InventoryDocumentLine.id).label("line_count"),
+                func.sum(InventoryDocumentLine.quantity).label("total_qty"),
+            )
+            .where(InventoryDocumentLine.transaction_type.in_(line_types))
+            .group_by(InventoryDocumentLine.document_id)
+            .subquery()
+        )
+        tx_stats = (
+            select(
+                InventoryTransaction.document_id.label("document_id"),
+                func.sum(InventoryTransaction.total_cost).label("total_cost"),
+            )
+            .group_by(InventoryTransaction.document_id)
+            .subquery()
+        )
         stmt = (
             select(
-                InventoryDocument.id,
-                InventoryDocument.document_no,
-                InventoryDocument.document_type,
-                InventoryDocument.document_time,
-                InventoryDocument.status,
-                InventoryDocument.remark,
-                InventoryDocument.created_at,
-                InventoryDocument.confirmed_at,
-                func.count(InventoryTransaction.id).label("line_count"),
-                qty_expr,
-                func.coalesce(
-                    func.sum(InventoryTransaction.total_cost), 0
-                ).label("total_cost"),
-            )
-            .join(InventoryTransaction,
-                InventoryTransaction.document_id == InventoryDocument.id)
-            .where(
-                InventoryDocument.document_type.in_(doc_types),
-                InventoryTransaction.transaction_type.in_(tx_types),
-            )
-            .group_by(
                 InventoryDocument.id, InventoryDocument.document_no,
                 InventoryDocument.document_type, InventoryDocument.document_time,
                 InventoryDocument.status, InventoryDocument.remark,
                 InventoryDocument.created_at, InventoryDocument.confirmed_at,
+                creator.real_name.label("created_by_name"), confirmer.real_name.label("confirmed_by_name"),
+                func.coalesce(line_stats.c.line_count, 0).label("line_count"),
+                func.coalesce(line_stats.c.total_qty, 0).label("total_qty"),
+                func.coalesce(tx_stats.c.total_cost, 0).label("total_cost"),
             )
+            .join(creator, creator.id == InventoryDocument.created_by, isouter=True)
+            .join(confirmer, confirmer.id == InventoryDocument.confirmed_by, isouter=True)
+            .outerjoin(line_stats, line_stats.c.document_id == InventoryDocument.id)
+            .outerjoin(tx_stats, tx_stats.c.document_id == InventoryDocument.id)
+            .where(InventoryDocument.document_type.in_(doc_types))
             .order_by(InventoryDocument.id.desc())
         )
         if keyword:
@@ -538,26 +532,24 @@ class InventoryQueryService:
             stmt = stmt.where(InventoryDocument.document_time >= date_from)
         if date_to:
             stmt = stmt.where(InventoryDocument.document_time < date_to)
-        if direction == "IN" and inbound_type:
-            subq = (
-                select(InventoryTransaction.document_id)
-                .where(InventoryTransaction.transaction_type == inbound_type)
-                .subquery()
-            )
-            stmt = stmt.where(InventoryDocument.id.in_(select(subq.c.document_id)))
-        if direction == "OUT" and outbound_type:
-            subq = (
-                select(InventoryTransaction.document_id)
-                .where(InventoryTransaction.transaction_type == outbound_type)
-                .subquery()
-            )
-            stmt = stmt.where(InventoryDocument.id.in_(select(subq.c.document_id)))
-
+        if inbound_type:
+            stmt = stmt.where(InventoryDocument.id.in_(
+                select(InventoryDocumentLine.document_id).where(
+                    InventoryDocumentLine.transaction_type == inbound_type
+                )
+            ))
+        if outbound_type:
+            stmt = stmt.where(InventoryDocument.id.in_(
+                select(InventoryDocumentLine.document_id).where(
+                    InventoryDocumentLine.transaction_type == outbound_type
+                )
+            ))
         total = db.session.execute(
             select(func.count()).select_from(stmt.subquery())
         ).scalar() or 0
-        stmt = stmt.offset((page - 1) * page_size).limit(page_size)
-        rows = [dict(r) for r in db.session.execute(stmt).mappings().all()]
+        rows = [dict(r) for r in db.session.execute(
+            stmt.offset((page - 1) * page_size).limit(page_size)
+        ).mappings().all()]
         return rows, total
 
     @staticmethod
@@ -581,7 +573,69 @@ class InventoryQueryService:
         ):
             return None
 
-        # 明细行
+        creator = (
+            db.session.get(Employee, doc.created_by)
+            if doc.created_by else None
+        )
+        confirmer = (
+            db.session.get(Employee, doc.confirmed_by)
+            if doc.confirmed_by else None
+        )
+
+        # 草稿明细来自 inventory_document_lines；草稿绝不应在流水表中出现。
+        if doc.status == "DRAFT":
+            draft_stmt = (
+                select(
+                    InventoryDocumentLine.id.label("transaction_id"),
+                    InventoryDocumentLine.line_no,
+                    InventoryDocumentLine.transaction_type,
+                    InventoryDocument.document_time.label("transaction_time"),
+                    case(
+                        (InventoryDocumentLine.transaction_type.in_(
+                            ["PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN", "ADJUSTMENT_RED"]
+                        ), InventoryDocumentLine.quantity),
+                        else_=-InventoryDocumentLine.quantity,
+                    ).label("quantity_delta"),
+                    InventoryDocumentLine.unit_cost,
+                    literal(None).label("total_cost"),
+                    Material.id.label("material_id"), Material.material_code,
+                    Material.material_name, Material.unit,
+                    Warehouse.id.label("warehouse_id"), Warehouse.warehouse_code,
+                    Warehouse.warehouse_name,
+                    Supplier.id.label("supplier_id"), Supplier.name.label("supplier_name"),
+                    ProcessOrder.id.label("process_order_id"), ProcessOrder.process_order_no,
+                )
+                .join(Material, Material.id == InventoryDocumentLine.material_id)
+                .join(Warehouse, Warehouse.id == InventoryDocumentLine.warehouse_id)
+                .join(InventoryDocument, InventoryDocument.id == InventoryDocumentLine.document_id)
+                .outerjoin(Supplier, Supplier.id == InventoryDocumentLine.supplier_id)
+                .outerjoin(ProcessOrder, ProcessOrder.id == InventoryDocumentLine.process_order_id)
+                .where(InventoryDocumentLine.document_id == document_id)
+                .order_by(InventoryDocumentLine.line_no.asc())
+            )
+            lines = [dict(r) for r in db.session.execute(draft_stmt).mappings().all()]
+            total_qty = sum((abs(r["quantity_delta"]) for r in lines), Decimal("0"))
+            return {
+                "document": {
+                    "id": doc.id,
+                    "creator": creator,
+                    "confirmer": confirmer,
+                    "document_no": doc.document_no,
+                    "document_type": doc.document_type,
+                    "document_time": doc.document_time,
+                    "status": doc.status,
+                    "remark": doc.remark,
+                    "created_at": doc.created_at,
+                    "confirmed_at": doc.confirmed_at,
+                },
+                "lines": lines,
+                "allocations_map": {},
+                "layers_map": {},
+                "total_qty": total_qty,
+                "total_cost": Decimal("0"),
+            }
+
+        # 已确认单据的详情必须从真实库存流水读取。
         line_stmt = (
             select(
                 InventoryTransaction.id.label("transaction_id"),
@@ -665,6 +719,8 @@ class InventoryQueryService:
         return {
             "document": {
                 "id": doc.id,
+                "creator": creator,
+                "confirmer": confirmer,
                 "document_no": doc.document_no,
                 "document_type": doc.document_type,
                 "document_time": doc.document_time,

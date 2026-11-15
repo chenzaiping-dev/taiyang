@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, flash, redirect, abort, url_for
+from flask import Blueprint, render_template, request, flash, redirect, abort, url_for, session
 from sqlalchemy import distinct
 
 from app.extensions import db
@@ -332,6 +332,8 @@ def document_detail_page(direction, document_id):
     if direction not in ("in", "out"):
         abort(404)
 
+    # Service 按单据状态选择数据源：
+    # DRAFT 从 inventory_document_lines 读取；已确认单据从 inventory_transactions 读取。
     detail = InventoryQueryService.get_document_detail(document_id)
     if not detail:
         return render_template(
@@ -375,6 +377,8 @@ def document_detail_page(direction, document_id):
         "inventory/document_detail.html",
         direction=direction,
         detail=detail,
+        creator=detail["document"]["creator"],
+        confirmer=detail["document"]["confirmer"],
         doc_type_labels=DOC_TYPE_LABELS,
         status_labels=DOC_STATUS_LABELS,
         transaction_types=TRANSACTION_TYPE_LABELS,
@@ -389,7 +393,7 @@ def document_detail_page(direction, document_id):
 @bp.post("/stock-out/<int:document_id>/confirm")
 def stock_out_confirm(document_id):
     try:
-        StockOutService.confirm_document(document_id)
+        StockOutService.confirm_document(document_id, confirmed_by=session.get("employee_id"))
         flash("出库单已确认，FIFO 成本已分配", "success")
     except InventoryError as e:
         flash(str(e), "error")
@@ -403,7 +407,7 @@ def stock_out_confirm(document_id):
 @bp.post("/purchase-in/<int:document_id>/confirm")
 def purchase_in_confirm(document_id):
     try:
-        PurchaseInService.confirm_document(document_id)
+        PurchaseInService.confirm_document(document_id, confirmed_by=session.get("employee_id"))
         flash("入库单已确认，FIFO 成本层已生成", "success")
     except InventoryError as e:
         flash(str(e), "error")

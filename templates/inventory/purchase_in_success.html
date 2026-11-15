@@ -2,15 +2,19 @@
 {% block title %}入库成功{% endblock %}
 
 {% block content %}
-<h2>✅ 采购入库成功</h2>
+<h2>✅ {{ '草稿保存' if result.status == 'DRAFT' else '采购入库' }}成功</h2>
 
-<div class="form-row"><label>单据号：</label>{{ result.document_no }}</div>
+<div class="form-row"><label>单据号：</label>
+  <a href="{{ url_for('inventory_query.document_detail_page',
+              direction='in', document_id=result.document_id) }}">
+  {{ result.document_no }}
+</div>
 <div class="form-row"><label>状态：</label>{{ result.status }}</div>
 <div class="form-row"><label>入库时间：</label>{{ result.document_time }}</div>
 {% if can_view_inventory_cost() %}<div class="form-row"><label>总金额：</label>{{ result.total_cost }}</div>{% endif %}
 <div class="form-row"><label>明细行数：</label>{{ result.line_count }}</div>
 
-<h3>生成的 FIFO 成本层</h3>
+<h3>{{ '暂未生成' if result.status == 'DRAFT' else '生成的' }} FIFO 成本层</h3>
 <table>
   <thead>
     <tr>
@@ -19,7 +23,7 @@
     </tr>
   </thead>
   <tbody>
-    {% for l in result.layers %}
+    {% for l in result.lines_result.layers %}
     <tr>
       <td>{{ l.layer_id }}</td>
       <td>{{ l.material_id }}</td>
