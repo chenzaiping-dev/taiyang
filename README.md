@@ -265,3 +265,23 @@ python -m codegen.generator
 库存查询约定：
 - 单据列表/草稿详情读取 `inventory_document_lines`，因此草稿不需要也不应该出现在 `inventory_transactions`。
 - 库存汇总、FIFO 库存、库存流水查询只读取 `inventory_transactions` / 成本层，天然不包含草稿。
+
+
+## 成品库草稿与批次档案分离（2026-11-15）
+
+已有数据库升级时，先备份，再执行：
+
+```sql
+SOURCE migrations/20261115_finished_goods_draft_batch_snapshot.sql;
+```
+
+该迁移允许 `finished_goods_document_lines.batch_id` 在入库草稿阶段为空，并增加批次号、产品、规格、单位、工艺单来源、批次来源和质量状态快照字段。入库草稿只写明细快照；确认时才创建/更新 `finished_goods_batches`，并生成 `finished_goods_inventory` 与 `finished_goods_transactions`。
+
+迁移后重新执行项目的 ORM 反射/代码生成流程：
+
+```bash
+python -m codegen.introspect
+python -m codegen.generator
+```
+
+工艺单 `receive_to_finished_goods` 是直接确认的正式入库流程，会在同一事务中创建批次、库存和流水。`cancel_with_reversal` 通过原入库单明细中的正式 `batch_id` 生成反向库存单据；批次档案保留用于追溯，不做物理删除。

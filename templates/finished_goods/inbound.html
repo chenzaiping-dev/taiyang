@@ -74,7 +74,8 @@
       {% for l in form_data.lines %}
       <tr>
         <td>{{ loop.index }}</td>
-        <td><input type="text" name="lines[{{ loop.index0 }}][batch_no]"
+        <td><input type="hidden" name="lines[{{ loop.index0 }}][batch_id]" value="{{ l.batch_id or '' }}">
+            <input type="text" name="lines[{{ loop.index0 }}][batch_no]"
                    value="{{ l.batch_no or '' }}" required></td>
         <td><input type="text" name="lines[{{ loop.index0 }}][product_name]"
                    value="{{ l.product_name or '' }}" required></td>
@@ -128,7 +129,8 @@
 <template id="fg-line-tpl">
   <tr>
     <td class="row-no"></td>
-    <td><input type="text" name="lines[__IDX__][batch_no]" required></td>
+    <td><input type="hidden" name="lines[__IDX__][batch_id]" value="">
+        <input type="text" name="lines[__IDX__][batch_no]" required></td>
     <td><input type="text" name="lines[__IDX__][product_name]" required></td>
     <td><input type="text" name="lines[__IDX__][product_specification]"></td>
     <td><input type="text" name="lines[__IDX__][unit]" value="KG"></td>

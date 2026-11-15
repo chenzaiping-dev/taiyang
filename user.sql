@@ -453,7 +453,6 @@ CREATE TABLE inventory_document_lines (
         'STOCKTAKE_LOSS', 'RETURN_IN', 'RETURN_OUT',
         'ADJUSTMENT_RED', 'ADJUSTMENT_BLUE'
     ) NOT NULL COMMENT '明细业务类型',
-
     material_id BIGINT UNSIGNED NOT NULL COMMENT '原料ID',
     quantity DECIMAL(16, 4) NOT NULL COMMENT '业务数量，始终为正数',
     unit_cost DECIMAL(18, 4) DEFAULT NULL COMMENT '入库单价/调整成本单价',
@@ -462,14 +461,11 @@ CREATE TABLE inventory_document_lines (
     warehouse_id BIGINT UNSIGNED NOT NULL COMMENT '发生业务的仓库ID',
     remark VARCHAR(500) DEFAULT NULL COMMENT '明细备注',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-
     PRIMARY KEY (id),
     UNIQUE KEY uk_inventory_document_line (document_id, line_no),
-
     KEY idx_idl_material (material_id),
     KEY idx_idl_warehouse_material (warehouse_id, material_id),
     KEY idx_idl_type (transaction_type),
-
     CONSTRAINT fk_idl_document FOREIGN KEY (document_id)
         REFERENCES inventory_documents(id),
     CONSTRAINT fk_idl_material FOREIGN KEY (material_id)
@@ -729,7 +725,14 @@ CREATE TABLE finished_goods_document_lines (
 
     document_id BIGINT UNSIGNED NOT NULL COMMENT '单据ID',
     line_no INT NOT NULL DEFAULT 1 COMMENT '单据行号',
-    batch_id BIGINT UNSIGNED NOT NULL COMMENT '成品批次ID',
+    batch_id BIGINT UNSIGNED DEFAULT NULL COMMENT '成品批次ID；入库草稿未确认时允许为空',
+    batch_no VARCHAR(100) DEFAULT NULL COMMENT '批次号快照，确认前用于保存拟创建批次信息',
+    product_name VARCHAR(200) DEFAULT NULL COMMENT '产品名称快照',
+    product_specification VARCHAR(500) DEFAULT NULL COMMENT '产品规格快照',
+    unit VARCHAR(20) DEFAULT 'KG' COMMENT '计量单位快照',
+    process_order_id BIGINT UNSIGNED DEFAULT NULL COMMENT '来源工艺单快照',
+    batch_source ENUM('PRODUCTION','STOCKTAKE','RETURN','OTHER') DEFAULT 'OTHER' COMMENT '批次来源快照',
+    quality_status ENUM('PENDING','QUALIFIED','REJECTED') DEFAULT 'QUALIFIED' COMMENT '质量状态快照',
     from_warehouse_id BIGINT UNSIGNED DEFAULT NULL COMMENT '调出仓库；入库时可为空',
     to_warehouse_id BIGINT UNSIGNED DEFAULT NULL COMMENT '调入仓库；出库时可为空',
     quantity DECIMAL(16, 4) NOT NULL COMMENT '本行业务数量，始终为正数',

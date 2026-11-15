@@ -623,7 +623,9 @@ class ProcessOrderService:
         remark: str = None,
     ) -> dict:
         """
-        工艺单入库到成品库：
+        工艺单入库到成品库（直接确认入库）：
+        - 此流程 auto_confirm=True，因此只在这里正式创建/更新 FinishedGoodsBatch；
+          不经过成品入库草稿，不会提前生成空批次。
         - 状态：ORDERED -> RECEIVED
         - 批次号 = order.batch_no
         - 成本单价 = actual_total_cost / completed_quantity
@@ -789,7 +791,8 @@ class ProcessOrderService:
         取消工艺单，并按当前状态冲销库存：
         - DRAFT                      → 只改状态
         - ORDERED / PRODUCING        → 冲销原料出库
-        - RECEIVED                   → 冲销成品入库 + 冲销原料出库
+        - RECEIVED                   → 按原成品入库单的 batch_id 冲销成品库存 + 冲销原料出库；
+                                        保留 FinishedGoodsBatch 档案，不物理删除批次
         - COMPLETED / CANCELLED      → 拒绝
         整体单事务：任一冲销失败全部回滚。
         """

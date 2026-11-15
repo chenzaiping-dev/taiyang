@@ -121,6 +121,8 @@
                 <button type="submit" class="btn btn-sm btn-primary">确认</button>
               </form>
             {% endif %}
+          {% elif r.status == 'CONFIRMED' %}
+            <span class="btn btn-sm disabled">确认</span>
           {% endif %}
         </td>
       </tr>

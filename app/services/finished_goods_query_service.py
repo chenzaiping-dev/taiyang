@@ -221,11 +221,11 @@ class FinishedGoodsQueryService:
         rows = (
             db.session.query(
                 FinishedGoodsBatch.id,
-                FinishedGoodsBatch.batch_no,
-                FinishedGoodsBatch.product_name,
-                FinishedGoodsBatch.product_specification,
-                FinishedGoodsBatch.unit,
-                FinishedGoodsBatch.quality_status,
+                func.coalesce(FinishedGoodsBatch.batch_no, FinishedGoodsDocumentLine.batch_no).label("batch_no"),
+                func.coalesce(FinishedGoodsBatch.product_name, FinishedGoodsDocumentLine.product_name).label("product_name"),
+                func.coalesce(FinishedGoodsBatch.product_specification, FinishedGoodsDocumentLine.product_specification).label("product_specification"),
+                func.coalesce(FinishedGoodsBatch.unit, FinishedGoodsDocumentLine.unit).label("unit"),
+                func.coalesce(FinishedGoodsBatch.quality_status, FinishedGoodsDocumentLine.quality_status).label("quality_status"),
                 FinishedGoodsInventory.quantity.label("total_qty"),
                 locked.label("locked_qty"),
                 available.label("available_qty"),
@@ -749,11 +749,11 @@ class FinishedGoodsQueryService:
                 FinishedGoodsDocumentLine.id.label("line_id"),
                 FinishedGoodsDocumentLine.line_no,
                 FinishedGoodsDocumentLine.batch_id,
-                FinishedGoodsBatch.batch_no,
-                FinishedGoodsBatch.product_name,
-                FinishedGoodsBatch.product_specification,
-                FinishedGoodsBatch.unit,
-                FinishedGoodsBatch.quality_status,
+                func.coalesce(FinishedGoodsBatch.batch_no, FinishedGoodsDocumentLine.batch_no).label("batch_no"),
+                func.coalesce(FinishedGoodsBatch.product_name, FinishedGoodsDocumentLine.product_name).label("product_name"),
+                func.coalesce(FinishedGoodsBatch.product_specification, FinishedGoodsDocumentLine.product_specification).label("product_specification"),
+                func.coalesce(FinishedGoodsBatch.unit, FinishedGoodsDocumentLine.unit).label("unit"),
+                func.coalesce(FinishedGoodsBatch.quality_status, FinishedGoodsDocumentLine.quality_status).label("quality_status"),
 
                 FinishedGoodsDocumentLine.from_warehouse_id,
                 from_wh.warehouse_code.label("from_warehouse_code"),
@@ -778,9 +778,9 @@ class FinishedGoodsQueryService:
                 Warehouse.warehouse_code.label("tx_warehouse_code"),
                 Warehouse.warehouse_name.label("tx_warehouse_name"),
             )
-            .join(FinishedGoodsBatch,
+            .outerjoin(FinishedGoodsBatch,
                 FinishedGoodsBatch.id == FinishedGoodsDocumentLine.batch_id)
-            .outerjoin(                                       # ⭐ 改为 outerjoin
+            .outerjoin(
                 FinishedGoodsTransaction,
                 FinishedGoodsTransaction.document_line_id
                 == FinishedGoodsDocumentLine.id,

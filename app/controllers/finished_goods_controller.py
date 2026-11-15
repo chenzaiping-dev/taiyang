@@ -584,7 +584,12 @@ def document_edit_page(direction, document_id):
                 batch_map[b.id] = b
 
         # 在批量取批次后，再批量取工艺单号
-        po_ids = list({b.process_order_id for b in batch_map.values() if b.process_order_id})
+        po_ids = list({
+            pid for pid in (
+                [b.process_order_id for b in batch_map.values()]
+                + [l.process_order_id for l in lines]
+            ) if pid
+        })
         po_map = {}
         if po_ids:
             for po in ProcessOrder.query.filter(ProcessOrder.id.in_(po_ids)).all():
@@ -593,17 +598,17 @@ def document_edit_page(direction, document_id):
         form_lines = []
         for l in lines:
             b = batch_map.get(l.batch_id)
+            process_order_id = (b.process_order_id if b else l.process_order_id)
             form_lines.append({
                 "batch_id": l.batch_id,
-                "batch_no": b.batch_no if b else "",
-                "product_name": b.product_name if b else "",
-                "product_specification": b.product_specification if b else "",
-                "unit": b.unit if b else "KG",
-                "quality_status": b.quality_status if b else "QUALIFIED",
-                "process_order_id": b.process_order_id if b else None,
-                "process_order_id": b.process_order_id if b else None,
-                "process_order_no": po_map[b.process_order_id].process_order_no
-                                    if (b and b.process_order_id in po_map) else "",
+                "batch_no": b.batch_no if b else (l.batch_no or ""),
+                "product_name": b.product_name if b else (l.product_name or ""),
+                "product_specification": b.product_specification if b else (l.product_specification or ""),
+                "unit": b.unit if b else (l.unit or "KG"),
+                "quality_status": b.quality_status if b else (l.quality_status or "QUALIFIED"),
+                "process_order_id": process_order_id,
+                "process_order_no": po_map[process_order_id].process_order_no
+                                    if process_order_id in po_map else "",
                 "quantity": str(l.quantity),
                 "unit_cost": str(l.unit_cost) if l.unit_cost is not None else "",
                 "remark": l.remark or "",
@@ -624,7 +629,7 @@ def document_edit_page(direction, document_id):
             ),
             form_data={
                 "warehouse_id": lines[0].to_warehouse_id if lines else "",
-                "inbound_type": "PRODUCTION_IN",
+                "inbound_type": doc.business_type or "PRODUCTION_IN",
                 "document_time": doc.document_time.strftime("%Y-%m-%dT%H:%M") if doc.document_time else "",
                 "remark": doc.remark or "",
                 "lines": form_lines,
@@ -665,11 +670,11 @@ def document_edit_page(direction, document_id):
                 "warehouse_code": w.warehouse_code if w else "",
                 "warehouse_name": w.warehouse_name if w else "",
                 "batch_id": l.batch_id,
-                "batch_no": b.batch_no if b else "",
-                "product_name": b.product_name if b else "",
-                "product_specification": b.product_specification if b else "",
-                "unit": b.unit if b else "",
-                "quality_status": b.quality_status if b else "",
+                "batch_no": b.batch_no if b else (l.batch_no or ""),
+                "product_name": b.product_name if b else (l.product_name or ""),
+                "product_specification": b.product_specification if b else (l.product_specification or ""),
+                "unit": b.unit if b else (l.unit or ""),
+                "quality_status": b.quality_status if b else (l.quality_status or ""),
                 "total_qty": total_qty,
                 "locked_qty": locked_qty,
                 "available_qty": available_qty,
@@ -690,7 +695,7 @@ def document_edit_page(direction, document_id):
             batch_keyword="",
             warehouses=_fg_warehouses(),
             form_data={
-                "outbound_type": "OUTBOUND",
+                "outbound_type": doc.business_type or "OUTBOUND",
                 "document_time": doc.document_time.strftime("%Y-%m-%dT%H:%M") if doc.document_time else "",
                 "remark": doc.remark or "",
             },
@@ -707,8 +712,20 @@ def document_edit_submit(direction, document_id):
         return redirect(url_for(
             "finished_goods.document_list_page", direction=direction))
 
-    inbound_type = request.args.get("inbound_type", "").strip() or None
-    outbound_type = request.args.get("outbound_type", "").strip() or None
+    #inbound_type = request.args.get("inbound_type", "").strip() or None
+    #outbound_type = request.args.get("outbound_type", "").strip() or None
+    inbound_type = (
+        request.form.get("inbound_type", "").strip()
+        or doc.business_type
+        or "PRODUCTION_IN"
+    )
+
+    outbound_type = (
+        request.form.get("outbound_type", "").strip()
+        or doc.business_type
+        or "OUTBOUND"
+    )
+
     if direction == "in":
         wh_raw = request.form.get("warehouse_id", "").strip()
         warehouse_id = int(wh_raw) if wh_raw.isdigit() else None

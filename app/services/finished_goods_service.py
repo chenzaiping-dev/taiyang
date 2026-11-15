@@ -172,23 +172,49 @@ class FinishedGoodsService:
             if wh.warehouse_type not in ("finished_goods", "general"):
                 raise FinishedGoodsError(f"第 {idx} 行仓库不是成品仓")
 
-            #print(l)
-            # 找/建批次
-            batch = FinishedGoodsService._get_or_create_batch(
-                l, idx,
-                default_batch_source=(
-                    batch_source_map[inbound_type] if inbound_type in batch_source_map else "OTHER"
-                ),
-            )
+            default_source = batch_source_map.get(inbound_type, "OTHER")
+            # 草稿只解析/校验批次，不创建或修改 FinishedGoodsBatch。
+            # 确认入库时才真正创建/更新批次档案。
+            if auto_confirm:
+                batch = FinishedGoodsService._get_or_create_batch(
+                    l, idx, default_batch_source=default_source
+                )
+                batch_id = batch.id
+                batch_snapshot = {
+                    "batch_no": batch.batch_no,
+                    "product_name": batch.product_name,
+                    "product_specification": batch.product_specification,
+                    "unit": batch.unit,
+                    "process_order_id": batch.process_order_id,
+                    "batch_source": batch.batch_source,
+                    "quality_status": batch.quality_status,
+                }
+            else:
+                batch_id, batch_snapshot = FinishedGoodsService._prepare_inbound_draft_batch(
+                    l, idx, default_batch_source=default_source
+                )
+                batch = db.session.get(FinishedGoodsBatch, batch_id) if batch_id else None
+                print("[create_inbound] batch_snapshot:", batch_snapshot)
+                print("[create_inbound] db batch", batch)
 
             line = FinishedGoodsDocumentLine(
                 document_id=document.id,
                 line_no=idx,
-                batch_id=batch.id,
-                from_warehouse_id=None,       # ⭐ 每行的仓库
+                batch_id=batch_id,
+                batch_no=batch_snapshot["batch_no"],
+                product_name=batch_snapshot["product_name"],
+                product_specification=batch_snapshot["product_specification"],
+                unit=batch_snapshot["unit"],
+                process_order_id=batch_snapshot["process_order_id"],
+                batch_source=batch_snapshot["batch_source"],
+                quality_status=batch_snapshot["quality_status"],
+                from_warehouse_id=None,
                 to_warehouse_id=wh_id,
                 quantity=qty,
-                unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else 0,
+                unit_cost=(
+                    _q6(l.get("unit_cost")) if l.get("unit_cost") is not None
+                    else (Decimal("0") if auto_confirm else None)
+                ),
                 remark=l.get("remark"),
                 created_at=now_beijing_naive(),
             )
@@ -197,15 +223,15 @@ class FinishedGoodsService:
 
             if auto_confirm:
                 FinishedGoodsService._apply_delta(
-                    warehouse_id=wh_id, batch_id=batch.id,
+                    warehouse_id=wh_id, batch_id=batch_id,
                     delta=qty, document=document, line=line,
                     tx_type=inbound_type, tx_time=doc_time,
                 )
 
             line_results.append({
                 "line_id": line.id,
-                "batch_id": batch.id,
-                "batch_no": batch.batch_no,
+                "batch_id": batch_id,
+                "batch_no": batch_snapshot["batch_no"],
                 "warehouse_id": wh_id,
                 "quantity": str(qty),
             })
@@ -231,6 +257,49 @@ class FinishedGoodsService:
             "document_time": document.document_time.isoformat(),
             "lines": line_results,
         }
+
+    @staticmethod
+    def _prepare_inbound_draft_batch(l: dict, idx: int, default_batch_source: str):
+        """只校验并生成草稿批次快照，不写入/修改 finished_goods_batches。"""
+        batch = None
+        if l.get("batch_id"):
+            batch = db.session.get(FinishedGoodsBatch, int(l["batch_id"]))
+            if not batch:
+                raise FinishedGoodsError(f"第 {idx} 行批次不存在")
+        else:
+            batch_no = (l.get("batch_no") or "").strip()
+            if not batch_no:
+                raise FinishedGoodsError(f"第 {idx} 行缺少批次号")
+            batch = FinishedGoodsBatch.query.filter_by(batch_no=batch_no).first()
+
+        incoming_po_id = l.get("process_order_id")
+        if batch and incoming_po_id is not None and batch.process_order_id is not None:
+            if int(batch.process_order_id) != int(incoming_po_id):
+                raise FinishedGoodsError(
+                    f"第 {idx} 行批次 [{batch.batch_no}] 已关联其他工艺单"
+                )
+        if batch and l.get("unit_cost") is not None and batch.process_order_id is not None:
+            if _q6(l["unit_cost"]) != _q6(batch.unit_cost or 0):
+                raise FinishedGoodsError(
+                    f"第 {idx} 行批次 [{batch.batch_no}] 成本单价不一致"
+                )
+
+        snapshot = {
+            "batch_no": (batch.batch_no if batch else (l.get("batch_no") or "").strip()),
+            "product_name": (batch.product_name if batch else (l.get("product_name") or "未命名")),
+            "product_specification": (batch.product_specification if batch else l.get("product_specification")),
+            "unit": (batch.unit if batch else (l.get("unit") or "KG")),
+            "process_order_id": (batch.process_order_id if batch and batch.process_order_id is not None
+                                 else incoming_po_id),
+            "batch_source": (batch.batch_source if batch else default_batch_source),
+            "quality_status": (batch.quality_status if batch else (l.get("quality_status") or "QUALIFIED")),
+        }
+        if not snapshot["batch_no"]:
+            raise FinishedGoodsError(f"第 {idx} 行缺少批次号")
+        # 只有用户明确选择 batch_id 时才把 ID 固化到草稿；
+        # 仅按 batch_no 匹配到的批次，确认时仍按批次号重新解析，
+        # 以保留原有“未关联工艺单的批次可在确认时补充档案信息”的规则。
+        return (batch.id if batch and l.get("batch_id") else None), snapshot
 
     @staticmethod
     def _get_or_create_batch(l: dict, idx: int, default_batch_source: str) -> FinishedGoodsBatch:
@@ -522,7 +591,8 @@ class FinishedGoodsService:
         3. 应用 _apply_delta（扣库存、写流水）
         4. 状态置 CONFIRMED
         """
-        doc = db.session.get(FinishedGoodsDocument, document_id)
+        doc = (FinishedGoodsDocument.query.filter_by(id=document_id)
+               .with_for_update().first())
         if not doc:
             raise FinishedGoodsError("单据不存在")
         if doc.document_type not in (
@@ -549,6 +619,8 @@ class FinishedGoodsService:
                 raise FinishedGoodsError(f"行 {line.line_no}: 数量必须 > 0")
 
             batch_id = line.batch_id
+            if not batch_id:
+                raise FinishedGoodsError(f"行 {line.line_no}: 出库明细缺少批次")
             wh_id = line.from_warehouse_id
             if not wh_id:
                 raise FinishedGoodsError(f"行 {line.line_no}: 缺少调出仓库")
@@ -607,7 +679,8 @@ class FinishedGoodsService:
         """
         确认草稿入库单：校验批次、逐行写 _apply_delta（加库存、写流水）。
         """
-        doc = db.session.get(FinishedGoodsDocument, document_id)
+        doc = (FinishedGoodsDocument.query.filter_by(id=document_id)
+               .with_for_update().first())
         if not doc:
             raise FinishedGoodsError("单据不存在")
         if doc.document_type not in (
@@ -636,8 +709,35 @@ class FinishedGoodsService:
             if not wh_id:
                 raise FinishedGoodsError(f"行 {line.line_no}: 缺少调入仓库")
 
+            # 旧草稿可能已有 batch_id；新草稿 batch_id 允许为空。
+            batch_payload = {
+                "batch_id": line.batch_id,
+                "batch_no": line.batch_no,
+                "product_name": line.product_name,
+                "product_specification": line.product_specification,
+                "unit": line.unit,
+                "process_order_id": line.process_order_id,
+                "batch_source": line.batch_source,
+                "quality_status": line.quality_status,
+                "unit_cost": line.unit_cost,
+                "remark": line.remark,
+            }
+            batch = FinishedGoodsService._get_or_create_batch(
+                batch_payload, line.line_no,
+                default_batch_source=(line.batch_source or batch_source_map.get(tx_type, "OTHER")),
+            )
+            line.batch_id = batch.id
+            # 快照以确认时正式批次档案为准
+            line.batch_no = batch.batch_no
+            line.product_name = batch.product_name
+            line.product_specification = batch.product_specification
+            line.unit = batch.unit
+            line.process_order_id = batch.process_order_id
+            line.batch_source = batch.batch_source
+            line.quality_status = batch.quality_status
+
             FinishedGoodsService._apply_delta(
-                warehouse_id=wh_id, batch_id=line.batch_id,
+                warehouse_id=wh_id, batch_id=batch.id,
                 delta=qty, document=doc, line=line,
                 tx_type=tx_type, tx_time=doc_time,
             )
@@ -679,9 +779,15 @@ class FinishedGoodsService:
         if not lines:
             raise FinishedGoodsError("入库明细不能为空")
 
+        print("update_inbound_draft, business_type:", business_type)
         doc.document_time = document_time or doc.document_time
         doc.remark = remark
-        doc.business_type = business_type
+        doc.business_type = (
+            business_type
+            or doc.business_type
+            or "PRODUCTION_IN"
+        )
+        doc.document_type = fg_doc_type_map[doc.business_type]
 
         # 删旧明细（DRAFT 未产生流水，可以整批删）
         FinishedGoodsDocumentLine.query.filter_by(document_id=doc.id).delete(
@@ -694,22 +800,33 @@ class FinishedGoodsService:
             if qty <= 0:
                 raise FinishedGoodsError(f"第 {idx} 行数量必须 > 0")
 
-            # 找/建批次（与 create_inbound 相同的批次逻辑）
-            batch = FinishedGoodsService._get_or_create_batch(
-                l, idx,
-                default_batch_source=(
-                    batch_source_map[business_type] if business_type in batch_source_map else "OTHER"
-                ),
-            )
+            wh_id = int(l.get("warehouse_id") or warehouse_id or 0)
+            if not wh_id:
+                raise FinishedGoodsError(f"第 {idx} 行缺少仓库ID")
+            wh = db.session.get(Warehouse, wh_id)
+            if not wh or wh.status != 1 or wh.warehouse_type not in ("finished_goods", "general"):
+                raise FinishedGoodsError(f"第 {idx} 行仓库不存在、停用或不是成品仓")
 
+            batch_id, snapshot = FinishedGoodsService._prepare_inbound_draft_batch(
+                l, idx, default_batch_source=batch_source_map.get(business_type, "OTHER")
+            )
+            print("[update_inbound_draft] snapshot:", snapshot)
+            print("[update_inbound_draft] batch_id", batch_id)
             line = FinishedGoodsDocumentLine(
                 document_id=doc.id,
                 line_no=idx,
-                batch_id=batch.id,
+                batch_id=batch_id,
+                batch_no=snapshot["batch_no"],
+                product_name=snapshot["product_name"],
+                product_specification=snapshot["product_specification"],
+                unit=snapshot["unit"],
+                process_order_id=snapshot["process_order_id"],
+                batch_source=snapshot["batch_source"],
+                quality_status=snapshot["quality_status"],
                 from_warehouse_id=None,
-                to_warehouse_id=warehouse_id,
+                to_warehouse_id=wh_id,
                 quantity=qty,
-                unit_cost=_q6(l.get("unit_cost") or 0) if l.get("unit_cost") else 0,
+                unit_cost=_q6(l.get("unit_cost")) if l.get("unit_cost") is not None else None,
                 remark=l.get("remark"),
                 created_at=now_beijing_naive(),
             )
@@ -749,7 +866,12 @@ class FinishedGoodsService:
 
         doc.document_time = document_time or doc.document_time
         doc.remark = remark
-        doc.business_type = business_type
+        doc.business_type = (
+            business_type
+            or doc.business_type
+            or "OUTBOUND"
+        )
+        doc.document_type = fg_doc_type_map[doc.business_type]
 
         FinishedGoodsDocumentLine.query.filter_by(document_id=doc.id).delete(
             synchronize_session=False
@@ -841,6 +963,10 @@ class FinishedGoodsService:
         ).order_by(FinishedGoodsDocumentLine.line_no.asc()).all()
         if not lines:
             raise FinishedGoodsError("单据无明细")
+        if any(not line.batch_id for line in lines):
+            raise FinishedGoodsError(
+                "原单存在未关联正式成品批次的明细，不能执行库存冲销；请先核查单据数据"
+            )
 
         # 判断方向：看第一行的 to_warehouse 是否为空
         first = lines[0]
