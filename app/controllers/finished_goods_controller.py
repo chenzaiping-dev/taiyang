@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, abort, session
 
 from app.extensions import db
@@ -639,57 +640,40 @@ def document_edit_page(direction, document_id):
             can_edit_cost=can_edit_finished_goods_cost(),
         )
     else:
-        # 批量取仓库
-        wh_ids = list({l.from_warehouse_id for l in lines if l.from_warehouse_id})
-        wh_map = {}
-        if wh_ids:
-            for w in Warehouse.query.filter(Warehouse.id.in_(wh_ids)).all():
-                wh_map[w.id] = w
-
-        # 批量取批次
-        batch_ids = [l.batch_id for l in lines if l.batch_id]
-        batch_map = {}
-        if batch_ids:
-            for b in FinishedGoodsBatch.query.filter(
-                    FinishedGoodsBatch.id.in_(batch_ids)).all():
-                batch_map[b.id] = b
-
-        rows = []
-        for l in lines:
-            w = wh_map.get(l.from_warehouse_id)
-            b = batch_map.get(l.batch_id)
-            total_qty, locked_qty, available_qty = (
-                FinishedGoodsQueryService.get_batch_available_qty(
-                    l.from_warehouse_id, l.batch_id
-                )
-            )
-
-            rows.append({
-                "id": l.id,
-                "warehouse_id": l.from_warehouse_id,
-                "warehouse_code": w.warehouse_code if w else "",
-                "warehouse_name": w.warehouse_name if w else "",
-                "batch_id": l.batch_id,
-                "batch_no": b.batch_no if b else (l.batch_no or ""),
-                "product_name": b.product_name if b else (l.product_name or ""),
-                "product_specification": b.product_specification if b else (l.product_specification or ""),
-                "unit": b.unit if b else (l.unit or ""),
-                "quality_status": b.quality_status if b else (l.quality_status or ""),
-                "total_qty": total_qty,
-                "locked_qty": locked_qty,
-                "available_qty": available_qty,
-                "edit_quantity": str(l.quantity),
-                "edit_remark": l.remark or "",
+        # 先建立原草稿数量映射，再加载当前全部可用库存。
+        # 使用 (warehouse_id, batch_id) 匹配，避免同一批次在不同仓库串行。
+        draft_values = {}
+        for line in lines:
+            key = (line.from_warehouse_id, line.batch_id)
+            current = draft_values.setdefault(key, {
+                "quantity": Decimal("0"),
+                "remark": line.remark or "",
             })
-        if not rows:
-            rows = []
+            current["quantity"] += Decimal(str(line.quantity or 0))
+            if line.remark:
+                current["remark"] = line.remark
+
+        rows, total = FinishedGoodsQueryService.list_all_stock_for_outbound(
+            batch_keyword=None,
+            warehouse_id=None,
+            page=1,
+            page_size=None,  # 编辑页不分页，完整展示所有可用库存
+        )
+
+        # 仅回填原草稿中对应库存行的数量和备注；其他行保持空白。
+        for row in rows:
+            draft_value = draft_values.get((row["warehouse_id"], row["batch_id"]))
+            row["edit_quantity"] = (
+                str(draft_value["quantity"]) if draft_value else ""
+            )
+            row["edit_remark"] = draft_value["remark"] if draft_value else ""
 
         return render_template(
             "finished_goods/outbound.html",
             edit_mode=True,
             document_id=doc.id,
             rows=rows,
-            total=len(lines), page=1, page_size=200, total_pages=1,
+            total=total, page=1, page_size=total or 1, total_pages=1,
             warehouse_id=lines[0].from_warehouse_id if lines else "",
             outbound_types=FG_OUTBOUND_TYPE_LABELS,
             batch_keyword="",

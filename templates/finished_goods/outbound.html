@@ -56,7 +56,7 @@
            value="{{ form_data.remark }}">
   </div>
 
-  <h3>{{ '出库明细（草稿）' if edit_mode else '全部可用库存（' ~ total ~ ' 条）' }}</h3>
+  <h3>{{ '全部可用库存（' ~ total ~ ' 条，已回填草稿数量）' if edit_mode else '全部可用库存（' ~ total ~ ' 条）' }}</h3>
   {% if rows %}
   <table style="width:100%;border-collapse:collapse;font-size:13px;">
     <thead>
@@ -100,7 +100,7 @@
                  value="{{ r.batch_id }}">
           <input type="number" step="0.0001" min="0"
                name="lines[{{ loop.index0 }}][quantity]"
-               {% if not edit_mode %}max="{{ r.available_qty }}"{% endif %}
+               max="{{ r.available_qty }}"
                value="{{ r.edit_quantity if edit_mode else '' }}">
         </td>
         <td>
@@ -123,6 +123,7 @@
   {% endif %}
 </form>
 
+{% if not edit_mode %}
 <div style="margin-top:16px;display:flex;gap:8px;align-items:center;">
   <span>共 {{ total }} 条，第 {{ page }}/{{ total_pages }} 页</span>
   {% if page > 1 %}
@@ -134,4 +135,5 @@
          batch_keyword=batch_keyword, warehouse_id=warehouse_id, page=page+1) }}">下一页</a>
   {% endif %}
 </div>
+{% endif %}
 {% endblock %}

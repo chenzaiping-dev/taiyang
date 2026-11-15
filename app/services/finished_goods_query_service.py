@@ -544,7 +544,9 @@ class FinishedGoodsQueryService:
             select(func.count()).select_from(stmt.subquery())
         ).scalar() or 0
 
-        stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+        # page_size=None 表示调用方需要完整库存清单（例如编辑出库草稿）。
+        if page_size is not None:
+            stmt = stmt.offset((page - 1) * page_size).limit(page_size)
         rows = [dict(r) for r in db.session.execute(stmt).mappings().all()]
         return rows, total
 
