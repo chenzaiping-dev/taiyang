@@ -416,9 +416,11 @@ CREATE TABLE inventory_documents (
         'STOCKTAKE',
         'RETURN',
         'ADJUSTMENT_RED',
-        'ADJUSTMENT_BLUE'
+        'ADJUSTMENT_BLUE',
+        'REVERSE'
     ) NOT NULL COMMENT '单据类型: PURCHASE_IN采购入库, PRODUCTION_OUT生产出库,
-        STOCKTAKE库存盘点, RETURN退货, ADJUSTMENT_RED红冲出库, ADJUSTMENT_BLUE蓝补出库',
+        STOCKTAKE库存盘点, RETURN退货, ADJUSTMENT_RED红冲出库, ADJUSTMENT_BLUE蓝补出库, REVERSE撤销单',
+    related_document_id BIGINT UNSIGNED DEFAULT NULL COMMENT '撤销单关联的原单ID；原单为空',
 
     document_time DATETIME NOT NULL COMMENT '业务发生时间',
 
@@ -436,11 +438,14 @@ CREATE TABLE inventory_documents (
     confirmed_at DATETIME DEFAULT NULL,
 
     UNIQUE KEY uk_document_no (document_no),
+    UNIQUE KEY uk_inventory_doc_related (related_document_id),
     KEY idx_document_time (document_time),
     CONSTRAINT fk_id_doc_created_by
         FOREIGN KEY (created_by) REFERENCES employees(id),
     CONSTRAINT fk_id_doc_confirmed_by
-            FOREIGN KEY (confirmed_by) REFERENCES employees(id)
+            FOREIGN KEY (confirmed_by) REFERENCES employees(id),
+    CONSTRAINT fk_inventory_doc_related
+        FOREIGN KEY (related_document_id) REFERENCES inventory_documents(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 COMMENT='库存业务单据';
 
@@ -451,8 +456,8 @@ CREATE TABLE inventory_document_lines (
     transaction_type ENUM(
         'PURCHASE_IN', 'PRODUCTION_OUT', 'STOCKTAKE_GAIN',
         'STOCKTAKE_LOSS', 'RETURN_IN', 'RETURN_OUT',
-        'ADJUSTMENT_RED', 'ADJUSTMENT_BLUE'
-    ) NOT NULL COMMENT '明细业务类型',
+        'ADJUSTMENT_RED', 'ADJUSTMENT_BLUE', 'IN_REVERSE', 'OUT_REVERSE'
+    ) NOT NULL COMMENT '明细业务类型；IN_REVERSE撤销原入库，OUT_REVERSE撤销原出库',
     material_id BIGINT UNSIGNED NOT NULL COMMENT '原料ID',
     quantity DECIMAL(16, 4) NOT NULL COMMENT '业务数量，始终为正数',
     unit_cost DECIMAL(18, 4) DEFAULT NULL COMMENT '入库单价/调整成本单价',
@@ -496,12 +501,16 @@ CREATE TABLE inventory_transactions (
         'RETURN_IN',
         'RETURN_OUT',
         'ADJUSTMENT_RED',
-        'ADJUSTMENT_BLUE'
+        'ADJUSTMENT_BLUE',
+        'IN_REVERSE',
+        'OUT_REVERSE'
     ) NOT NULL COMMENT '业务类型: PURCHASE_IN:采购入库, PRODUCTION_OUT:生产出库, 
         STOCKTAKE_GAIN:库存盘点-入库, STOCKTAKE_LOSS:库存盘点-出库,
         RETURN_IN:退货入库, RETURN_OUT:退货出库,
         ADJUSTMENT_RED红冲(delta正,total_cost负),
-        ADJUSTMENT_BLUE蓝补(delta负,total_cost正)',
+        ADJUSTMENT_BLUE蓝补(delta负,total_cost正),
+        IN_REVERSE撤销原入库(delta负,total_cost负),
+        OUT_REVERSE撤销原出库(delta正,total_cost负)',
 
     transaction_time DATETIME NOT NULL COMMENT '业务生效时间',
 
@@ -1172,6 +1181,7 @@ VALUES
 ('inventory.transactions.view','查看原料库存流水','inventory','查看原料库存流水'),
 ('inventory.documents.view','查看原料库存单据','inventory','查看原料入库/出库单据及详情'),
 ('inventory.documents.delete','删除原料草稿单据','inventory','仅允许删除尚未确认、未产生库存流水的原料库存草稿单据'),
+('inventory.documents.reverse','撤销已确认原料单据','inventory','撤销已确认原料入库/出库单；入库成本层已被消耗或调整红冲蓝补单不可撤销'),
 ('inventory.purchase_in.create','创建原料入库单','inventory','创建采购入库草稿；需要同时具备原料成本维护权限'),
 ('inventory.purchase_in.edit','编辑原料入库草稿','inventory','编辑采购入库草稿'),
 ('inventory.purchase_in.confirm','确认原料入库单','inventory','确认原料入库并生成FIFO成本层'),

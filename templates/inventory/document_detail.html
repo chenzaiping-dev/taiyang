@@ -35,6 +35,25 @@
         <button type="submit" class="btn btn-danger">删除草稿</button>
       </form>
     {% endif %}
+    {% if doc.status == 'CONFIRMED' %}
+      {% if detail.is_reverse_document %}
+        <!--span style="float:right;margin-right:8px;color:#888;font-size:12px;">撤销单不可再次撤销</span-->
+        <span style="color:#f60606;font-size:14px;">撤销单不可再次撤销</span>
+      {% elif detail.is_reversed %}
+        <span style="color:#f60606;font-size:14px;">该单已撤销</span>
+      {% elif can_reverse and has_permission('inventory.documents.reverse') %}
+        <form method="post" style="display:inline;float:right;margin-right:8px;"
+              action="{{ url_for('inventory_query.document_reverse', direction=direction, document_id=doc.id) }}"
+              onsubmit="return confirm('确定撤销该原料库存单据？系统将生成反向单据并保留原成本层/成本分配记录。');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="text" name="reason" placeholder="撤销原因（可选）"
+                 style="width:150px;margin-right:4px;">
+          <button type="submit" class="btn btn-danger">撤销</button>
+        </form>
+      {% elif has_permission('inventory.documents.reverse') and reverse_block_reason %}
+        <span style="color:#f60606;font-size:14px;" title="{{ reverse_block_reason }}">不可撤销</span>
+      {% endif %}
+    {% endif %}
     <a class="btn" style="float:right;margin-right:8px;"
        href="{{ list_url }}">返回列表</a>
   </h2>
@@ -56,19 +75,31 @@
       </span>
       {% if detail.is_reversed %}
         <span class="status-badge status-reversed" style="margin-left:4px;">已撤销</span>
+      {% elif detail.is_reverse_document %}
+        <span class="status-badge status-reversed" style="margin-left:4px;">撤销单</span>
       {% endif %}
     </div>
 
     {% if detail.is_reversed %}
     <div class="form-row">
       <label style="color:#c62828;">撤销单：</label>
-      <a href="{{ url_for('finished_goods.document_detail_page',
-                    direction=related_direction or direction,
+      <a href="{{ url_for('inventory_query.document_detail_page',
+                    direction=('out' if direction == 'in' else 'in'),
                     document_id=detail.reverse_document_id) }}">
         {{ detail.reverse_document_no }}
       </a>
     </div>
-    {% endif %}    
+    {% endif %}
+    {% if detail.is_reverse_document and parent_document %}
+    <div class="form-row">
+      <label>原单：</label>
+      <a href="{{ url_for('inventory_query.document_detail_page',
+                    direction=parent_direction,
+                    document_id=parent_document.id) }}">
+        {{ parent_document.document_no }}
+      </a>
+    </div>
+    {% endif %}
 
     <div class="form-row"><label>创建人：</label>
       {{ creator.real_name if creator else "-" }}
@@ -87,8 +118,13 @@
     {% endif %}
     <div class="form-row"><label>备注：</label>{{ doc.remark or "-" }}</div>
     <div class="form-row"><label>合计：</label>
-      {{ '入库' if direction == 'in' else '出库' }}数量 {{ detail.total_qty }}，
+      {% if doc.status == 'DRAFT' %}
+      草稿数量 {{ detail.total_qty }}, 成本待计算
+      {% else %}
+      {% if detail.total_in_qty > 0 %}数量 +{{ detail.total_in_qty }},{% endif %}
+      {% if detail.total_out_qty > 0 %}数量 -{{ detail.total_out_qty }},{% endif %}
       {% if can_view_inventory_cost() %}成本 {{ detail.total_cost }}{% endif %}
+      {% endif %}
     </div>
   </fieldset>
 
@@ -104,11 +140,9 @@
           <th style="width:50px;">行号</th>
           <th>原料</th>
           <th>仓库</th>
-          <th style="width:110px;text-align:right;">
-            {{ '入库数量' if direction == 'in' else '出库数量' }}
-          </th>
+          <th style="width:110px;text-align:right;">净变动数量</th>
           <th style="width:110px;text-align:right;">{{ "单位成本" if can_view_inventory_cost() else "" }}</th>
-          <th style="width:120px;text-align:right;">{{ "成本金额" if can_view_inventory_cost() else "" }}</th>
+          <th style="width:120px;text-align:right;">{{ "相对成本金额" if can_view_inventory_cost() else "" }}</th>
           <th style="width:130px;">业务类型</th>
           <th>关联（供应商/工艺单）</th>
         </tr>
@@ -122,8 +156,14 @@
             <span style="color:#999;">({{ l.unit }})</span>
           </td>
           <td>{{ l.warehouse_code }} - {{ l.warehouse_name }}</td>
-          <td style="text-align:right;">
-            {{ l.quantity_delta if direction == 'in' else -l.quantity_delta }}
+          <td style="text-align:right;font-weight:600;
+                    color:{{ '#999' if l.quantity_delta is none
+                            else ('#2e7d32' if l.quantity_delta > 0 else '#c62828') }};">
+            {% if l.quantity_delta is none %}
+              <span style="color:#999;">—</span>
+            {% else %}
+              {{ '+' if l.quantity_delta > 0 }}{{ l.quantity_delta }}
+            {% endif %}
           </td>
           <td style="text-align:right;">{% if can_view_inventory_cost() %}{{ l.unit_cost or "-" }}{% else %}—{% endif %}</td>
           <td style="text-align:right;">{% if can_view_inventory_cost() %}{{ l.total_cost or "-" }}{% else %}—{% endif %}</td>
@@ -148,7 +188,7 @@
           <tr>
             <td></td>
             <td colspan="7" style="padding:4px 12px;background:#fafafa;font-size:12px;">
-              <strong>成本分配：</strong>
+              <strong>{{ '原成本层回补：' if l.transaction_type == 'OUT_REVERSE' else '成本分配：' }}</strong>
               {% for a in allocs %}
                 <div style="margin:2px 0;color:#555;">
                   层#{{ a.cost_layer_id }}
@@ -156,8 +196,8 @@
                        .get(a.layer_type, a.layer_type) }}，
                   {{ a.effective_time.strftime("%Y-%m-%d")
                      if a.effective_time else "-" }}）：
-                  {% if can_view_inventory_cost() %}{{ a.quantity }} × {{ a.unit_cost }}
-                  = <strong>{{ a.cost_amount }}</strong>{% endif %}
+                  {% if can_view_inventory_cost() %}{{ a.quantity|abs }} × {{ a.unit_cost }}
+                  = <strong>{{ a.cost_amount|abs }}</strong>{% endif %}
                 </div>
               {% endfor %}
             </td>

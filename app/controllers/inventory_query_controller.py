@@ -6,11 +6,12 @@ from app.generated.models.employees import Employee
 from app.generated.models.materials import Material
 from app.generated.models.warehouses import Warehouse
 from app.generated.models.inventory_cost_layers import InventoryCostLayer
+from app.generated.models.inventory_documents import InventoryDocument
 from app.services.inventory_query_service import InventoryQueryService
 from app.services.draft_delete_service import DraftDeleteService, DraftDeleteError
 from app.services.inventory_service import (
-    PurchaseInService, StockOutService, InventoryError, 
-    INBOUND_TYPE_LABELS, OUTBOUND_TYPE_LABELS, _rm_warehouses
+    PurchaseInService, StockOutService, InventoryDocumentReverseService,
+    InventoryError, INBOUND_TYPE_LABELS, OUTBOUND_TYPE_LABELS, _rm_warehouses
 )
 from app.utils.datetime_utils import util_parse_date
 
@@ -193,7 +194,9 @@ TRANSACTION_TYPE_LABELS = {
     "RETURN_IN":     "退货入库",
     "RETURN_OUT":    "退货出库",
     "ADJUSTMENT_RED": "红冲出库",
-    "ADJUSTMENT_BLUE": "蓝补出库"
+    "ADJUSTMENT_BLUE": "蓝补出库",
+    "IN_REVERSE": "入库撤销",
+    "OUT_REVERSE": "出库撤销",
 }
 
 TRANSACTION_TYPE_DIRECTION = {
@@ -204,7 +207,9 @@ TRANSACTION_TYPE_DIRECTION = {
     "RETURN_IN":     "in",
     "RETURN_OUT":    "out",
     "ADJUSTMENT_RED": "out",
-    "ADJUSTMENT_BLUE": "out"
+    "ADJUSTMENT_BLUE": "out",
+    "IN_REVERSE": "in",
+    "OUT_REVERSE": "out",
 }
 
 DOC_STATUS_LABELS = {
@@ -218,8 +223,9 @@ DOC_TYPE_LABELS = {
     "PRODUCTION_OUT": "生产出库单",
     "STOCKTAKE": "盘点单",
     "RETURN": "退货单",
-    "ADJUSTMENT_RED": "红冲出库单",
-    "ADJUSTMENT_BLUE": "蓝补出库单",
+    "ADJUSTMENT_RED": "配比调整红冲单",
+    "ADJUSTMENT_BLUE": "配比调整蓝补单",
+    "REVERSE": "原料库存撤销单",
 }
 
 
@@ -368,10 +374,16 @@ def document_detail_page(direction, document_id):
 
     # 校验方向匹配：入库单不能在出库视图里打开
     doc_type = detail["document"]["document_type"]
-    is_inbound = doc_type in ("PURCHASE_IN", "STOCKTAKE", "RETURN") and all(
-        l["transaction_type"] in ("PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN")
-        for l in detail["lines"]
-    )
+    if doc_type == "REVERSE":
+        # OUT_REVERSE 为正向库存回补；IN_REVERSE 为负向库存冲减。
+        is_inbound = bool(detail["lines"]) and all(
+            l["quantity_delta"] < 0 for l in detail["lines"]
+        )
+    else:
+        is_inbound = doc_type in ("PURCHASE_IN", "STOCKTAKE", "RETURN") and all(
+            l["transaction_type"] in ("PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN")
+            for l in detail["lines"]
+        )
     if direction == "in" and not is_inbound:
         abort(404)
     if direction == "out" and is_inbound:
@@ -390,10 +402,29 @@ def document_detail_page(direction, document_id):
             else url_for("stock_out.stock_out_edit_page", document_id=document_id)
         )
 
+    related_reverse = InventoryDocument.query.filter_by(
+        related_document_id=document_id, status="CONFIRMED"
+    ).first()
+    parent_document = (
+        db.session.get(InventoryDocument, detail["document"].get("related_document_id"))
+        if detail["document"].get("related_document_id") else None
+    )
+    can_reverse, reverse_block_reason, _ = InventoryDocumentReverseService.can_reverse(
+        document_id
+    )
+    detail["is_reversed"] = bool(related_reverse)
+    detail["reverse_document_id"] = related_reverse.id if related_reverse else None
+    detail["reverse_document_no"] = related_reverse.document_no if related_reverse else None
+    detail["is_reverse_document"] = doc_type == "REVERSE"
     return render_template(
         "inventory/document_detail.html",
         direction=direction,
         detail=detail,
+        can_reverse=can_reverse,
+        reverse_block_reason=reverse_block_reason,
+        related_reverse=related_reverse,
+        parent_document=parent_document,
+        parent_direction=("out" if direction == "in" else "in"),
         creator=detail["document"]["creator"],
         confirmer=detail["document"]["confirmer"],
         doc_type_labels=DOC_TYPE_LABELS,
@@ -433,3 +464,29 @@ def purchase_in_confirm(document_id):
         or url_for("inventory_query.document_detail_page",
                    direction="in", document_id=document_id)
     )
+
+
+@bp.post("/documents/<direction>/<int:document_id>/reverse")
+def document_reverse(direction, document_id):
+    if direction not in ("in", "out"):
+        abort(404)
+    try:
+        result = InventoryDocumentReverseService.reverse_document(
+            document_id=document_id,
+            reason=request.form.get("reason", "").strip() or None,
+            operator_id=session.get("employee_id"),
+        )
+        flash(
+            f"原料库存单据已撤销，生成撤销单 {result['document_no']}，"
+            f"回补/冲减数量 {result['reversed_qty']}，成本 {result['reversed_cost']}",
+            "success",
+        )
+        #target_direction = "in" if result["direction"] == "OUT" else "out"
+    except InventoryError as exc:
+        flash(str(exc), "error")
+        #target_direction = direction
+    return redirect(url_for(
+        "inventory_query.document_detail_page",
+        direction=direction,
+        document_id=document_id if "result" not in locals() else result["document_id"],
+    ))

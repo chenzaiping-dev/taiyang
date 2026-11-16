@@ -258,8 +258,8 @@
         {% if has_permission('finished_goods.inbound.create') %}<a href="{{ url_for('finished_goods.inbound_page') }}">成品入库</a>{% endif %}
         {% if has_permission('finished_goods.outbound.create') %}<a href="{{ url_for('finished_goods.outbound_page') }}">成品出库</a>{% endif %}
         {% if has_permission('finished_goods.documents.view') %}
-          <a href="{{ url_for('finished_goods.document_list_page', direction='in') }}">入库单据</a>
-          <a href="{{ url_for('finished_goods.document_list_page', direction='out') }}">出库单据</a>
+          <a href="{{ url_for('finished_goods.document_list_page', direction='in') }}">成品入库单据</a>
+          <a href="{{ url_for('finished_goods.document_list_page', direction='out') }}">成品出库单据</a>
         {% endif %}
         {% if has_permission('finished_goods.inventory.view') %}<div class="divider"></div><a href="{{ url_for('finished_goods.warehouses_page') }}">成品库存</a>{% endif %}
         {% if has_permission('finished_goods.summary.view') %}<a href="{{ url_for('finished_goods.io_summary_page') }}">成品出入库汇总</a>{% endif %}

@@ -296,3 +296,20 @@ SOURCE migrations/20261115_draft_delete_permissions.sql;
 ```
 
 该迁移只增加草稿删除权限目录，不会自动给角色授权。请在角色权限管理中按岗位分配 `inventory.documents.delete`、`finished_goods.documents.delete`、`process_order.delete`、`sales_performance.delete`、`shipment.delete`。列表只在 `DRAFT` 状态显示删除按钮，服务端仍会二次校验状态以及流水、批次、库存预留和下游关联。
+
+
+## 原料 FIFO 单据撤销
+
+已有数据库升级时执行：
+
+```sql
+SOURCE migrations/20261116_inventory_document_reverse.sql;
+```
+
+然后重新生成数据库模型：
+
+```bash
+python -m codegen.introspect
+```
+
+并在角色权限管理中按需授予 `inventory.documents.reverse`。入库成本层只要已被部分或全部消耗就不允许撤销；出库撤销会依据原成本分配回补原成本层。工艺单配比红冲/蓝补单及工艺单取消产生的红冲单禁止撤销。

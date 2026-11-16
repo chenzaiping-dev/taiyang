@@ -929,3 +929,318 @@ class StockOutService:
             "document_no": doc.document_no,
             "reversed_qty": str(reversed_qty),
         }
+
+class InventoryDocumentReverseService:
+    """原料 FIFO 单据撤销：通过反向流水保留审计轨迹，不物理删除原单。"""
+
+    INBOUND_LINE_TYPES = {"PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN"}
+    OUTBOUND_LINE_TYPES = {"PRODUCTION_OUT", "STOCKTAKE_LOSS", "RETURN_OUT"}
+
+    @staticmethod
+    def _load_original(document_id: int, lock: bool = False):
+        q = db.session.query(InventoryDocument).filter_by(id=document_id)
+        if lock:
+            q = q.with_for_update()
+        doc = q.first()
+        if not doc:
+            raise InventoryError("原料库存单据不存在")
+        return doc
+
+    @staticmethod
+    def _validate_reverseable(doc, lock: bool = False):
+        if doc.status != "CONFIRMED":
+            raise InventoryError("只有已确认的原料库存单据才允许撤销")
+        if doc.document_type == "REVERSE":
+            raise InventoryError("撤销单不能再次撤销")
+        remark_text = (doc.remark or "")
+        if (
+            doc.document_type in ("ADJUSTMENT_RED", "ADJUSTMENT_BLUE")
+            or "[MATERIAL_ADJUST_RED]" in remark_text
+            or "[MATERIAL_ADJUST_ADD]" in remark_text
+            or "[PROCESS_ORDER_CANCEL]" in remark_text
+        ):
+            raise InventoryError("工艺单配比红冲/蓝补单及工艺单取消产生的红冲单不允许撤销")
+        if doc.document_type not in ("PURCHASE_IN", "STOCKTAKE", "RETURN", "PRODUCTION_OUT"):
+            raise InventoryError("该类型原料单据不支持撤销")
+
+        if getattr(doc, "related_document_id", None):
+            raise InventoryError("该单据本身是撤销单，不能再次撤销")
+
+        existing = InventoryDocument.query.filter_by(
+            related_document_id=doc.id
+        ).first()
+        if existing:
+            raise InventoryError(
+                f"该单据已撤销，撤销单号：{existing.document_no}"
+            )
+
+        tx_q = InventoryTransaction.query.filter_by(document_id=doc.id)
+        if lock:
+            tx_q = tx_q.with_for_update()
+        txs = tx_q.order_by(InventoryTransaction.line_no.asc()).all()
+        if not txs:
+            raise InventoryError("该单据没有已生效的库存流水，不能撤销")
+
+        types = {tx.transaction_type for tx in txs}
+        if types & {"ADJUSTMENT_RED", "ADJUSTMENT_BLUE"}:
+            raise InventoryError("工艺单配比红冲/蓝补流水不允许撤销")
+
+        if types.issubset(InventoryDocumentReverseService.INBOUND_LINE_TYPES):
+            direction = "IN"
+            for tx in txs:
+                layer_q = InventoryCostLayer.query.filter_by(
+                    source_transaction_id=tx.id
+                )
+                if lock:
+                    layer_q = layer_q.with_for_update()
+                layer = layer_q.first()
+                if not layer:
+                    raise InventoryError(
+                        f"入库流水 #{tx.id} 未找到对应 FIFO 成本层，不能撤销"
+                    )
+                original_qty = _q6(layer.original_qty)
+                remaining_qty = _q6(layer.remaining_qty)
+                if remaining_qty != original_qty:
+                    consumed = original_qty - remaining_qty
+                    raise InventoryError(
+                        f"入库单已生成的成本层 #{layer.id} 已被消耗（初始 {original_qty}，"
+                        f"剩余 {remaining_qty}，已消耗 {consumed}），不允许撤销入库单"
+                    )
+            return direction, txs
+
+        if types.issubset(InventoryDocumentReverseService.OUTBOUND_LINE_TYPES):
+            direction = "OUT"
+            for tx in txs:
+                alloc_q = InventoryCostAllocation.query.filter_by(
+                    out_transaction_id=tx.id
+                )
+                if lock:
+                    alloc_q = alloc_q.with_for_update()
+                allocs = alloc_q.all()
+                if not any(_q6(a.quantity) > 0 for a in allocs):
+                    raise InventoryError(
+                        f"出库流水 #{tx.id} 没有可回补的 FIFO 成本分配，不能撤销"
+                    )
+            return direction, txs
+
+        raise InventoryError(
+            "该单据包含不支持撤销的业务类型；工艺单调整红冲/蓝补及上游冲销单不可撤销"
+        )
+
+    @staticmethod
+    def can_reverse(document_id: int):
+        try:
+            doc = InventoryDocumentReverseService._load_original(document_id)
+            direction, _ = InventoryDocumentReverseService._validate_reverseable(
+                doc, lock=False
+            )
+            return True, None, direction
+        except InventoryError as exc:
+            return False, str(exc), None
+
+    @staticmethod
+    def reverse_document(
+        document_id: int,
+        reason: str = None,
+        operator_id: int = None,
+        commit: bool = True,
+    ) -> dict:
+        """整单撤销。出库按原 allocation 回补原成本层；入库要求成本层完全未消耗。"""
+        try:
+            doc = InventoryDocumentReverseService._load_original(
+                document_id, lock=True
+            )
+            direction, txs = InventoryDocumentReverseService._validate_reverseable(
+                doc, lock=True
+            )
+
+            now = now_beijing_naive()
+            if direction == "IN":
+                reverse_no=f"INREV-{doc.document_no}"
+            else:
+                reverse_no=f"OUTREV-{doc.document_no}"
+            #reverse_no = generate_document_no("IR")
+            reverse_doc = InventoryDocument(
+                document_no=reverse_no,
+                document_type="REVERSE",
+                related_document_id=doc.id,
+                document_time=now,
+                status="CONFIRMED",
+                remark=(
+                    f"[INVENTORY_REVERSE] 撤销原单 {doc.document_no}"
+                    + (f"；原因：{reason.strip()}" if reason and reason.strip() else "")
+                ),
+                created_by=operator_id,
+                confirmed_by=operator_id,
+                created_at=now,
+                confirmed_at=now,
+            )
+            db.session.add(reverse_doc)
+            db.session.flush()
+
+            total_reversed_qty = Decimal("0")
+            total_reversed_cost = Decimal("0")
+            next_line_no = 1
+
+            if direction == "IN":
+                # 撤销原入库：成本层必须完全未被消耗；将剩余量归零，保留层及原流水。
+                for source_tx in txs:
+                    layer = (
+                        InventoryCostLayer.query
+                        .filter_by(source_transaction_id=source_tx.id)
+                        .with_for_update()
+                        .first()
+                    )
+                    if not layer:
+                        raise InventoryError(
+                            f"入库流水 #{source_tx.id} 对应成本层不存在，不能撤销"
+                        )
+                    if _q6(layer.remaining_qty) != _q6(layer.original_qty):
+                        raise InventoryError(
+                            f"成本层 #{layer.id} 已被消耗，不能撤销入库单"
+                        )
+
+                    qty = _q6(source_tx.quantity_delta)
+                    unit_cost = _q6_amount(layer.unit_cost)
+                    cost = _q6_amount(qty * unit_cost)
+
+                    reverse_tx = InventoryTransaction(
+                        document_id=reverse_doc.id,
+                        line_no=next_line_no,
+                        material_id=source_tx.material_id,
+                        transaction_type="IN_REVERSE",
+                        transaction_time=now,
+                        quantity_delta=-qty,
+                        unit_cost=unit_cost,
+                        total_cost=-cost,
+                        supplier_id=source_tx.supplier_id,
+                        process_order_id=source_tx.process_order_id,
+                        warehouse_id=source_tx.warehouse_id,
+                        created_at=now,
+                    )
+                    db.session.add(reverse_tx)
+                    db.session.flush()
+                    _save_document_line(
+                        reverse_doc.id, next_line_no, source_tx.material_id,
+                        qty, "IN_REVERSE", source_tx.warehouse_id,
+                        supplier_id=source_tx.supplier_id,
+                        process_order_id=source_tx.process_order_id,
+                        unit_cost=unit_cost,
+                        remark=f"撤销入库流水 #{source_tx.id}",
+                    )
+                    next_line_no += 1
+
+                    # 不删除成本层/源流水，避免破坏历史关联；剩余量归零表示该层已被撤销。
+                    layer.remaining_qty = Decimal("0")
+                    total_reversed_qty += qty
+                    total_reversed_cost += cost
+
+            else:
+                # 撤销原出库：按原出库的正向 allocation 回补到原成本层，绝不重新 FIFO。
+                for source_tx in txs:
+                    allocs = (
+                        InventoryCostAllocation.query
+                        .filter_by(out_transaction_id=source_tx.id)
+                        .order_by(InventoryCostAllocation.id.desc())
+                        .with_for_update()
+                        .all()
+                    )
+                    positive_allocs = [a for a in allocs if _q6(a.quantity) > 0]
+                    qty = sum((_q6(a.quantity) for a in positive_allocs), Decimal("0"))
+                    if qty <= 0:
+                        raise InventoryError(
+                            f"出库流水 #{source_tx.id} 没有可回补的成本层数量"
+                        )
+
+                    recovered_cost = Decimal("0")
+                    reverse_tx = InventoryTransaction(
+                        document_id=reverse_doc.id,
+                        line_no=next_line_no,
+                        material_id=source_tx.material_id,
+                        transaction_type="OUT_REVERSE",
+                        transaction_time=now,
+                        quantity_delta=qty,
+                        unit_cost=None,
+                        total_cost=None,
+                        supplier_id=source_tx.supplier_id,
+                        process_order_id=source_tx.process_order_id,
+                        warehouse_id=source_tx.warehouse_id,
+                        created_at=now,
+                    )
+                    db.session.add(reverse_tx)
+                    db.session.flush()
+                    _save_document_line(
+                        reverse_doc.id, next_line_no, source_tx.material_id,
+                        qty, "OUT_REVERSE", source_tx.warehouse_id,
+                        supplier_id=source_tx.supplier_id,
+                        process_order_id=source_tx.process_order_id,
+                        remark=f"撤销出库流水 #{source_tx.id}，按原成本层回补",
+                    )
+                    next_line_no += 1
+
+                    for alloc in positive_allocs:
+                        layer = (
+                            db.session.query(InventoryCostLayer)
+                            .filter_by(id=alloc.cost_layer_id)
+                            .with_for_update()
+                            .first()
+                        )
+                        if not layer:
+                            raise InventoryError(
+                                f"原成本层 #{alloc.cost_layer_id} 不存在，无法回补"
+                            )
+                        give = _q6(alloc.quantity)
+                        cost = _q6_amount(alloc.cost_amount)
+
+                        # 恢复原成本层剩余数量，不重新走 FIFO。
+                        restored_qty = _q6(layer.remaining_qty + give)
+                        if restored_qty > _q6(layer.original_qty):
+                            raise InventoryError(
+                                f"成本层 #{layer.id} 回补后数量将超过初始数量，已停止撤销"
+                            )
+                        layer.remaining_qty = restored_qty
+
+                        # 原 allocation 减少；撤销流水写入负 allocation，保留可审计的回补关系。
+                        allocation_unit_cost = _q6_amount(alloc.unit_cost)
+                        alloc.quantity = _q6(alloc.quantity - give)
+                        alloc.cost_amount = _q6_amount(alloc.quantity * allocation_unit_cost)
+                        if alloc.quantity <= 0:
+                            db.session.delete(alloc)
+
+                        db.session.add(InventoryCostAllocation(
+                            out_transaction_id=reverse_tx.id,
+                            cost_layer_id=layer.id,
+                            quantity=-give,
+                            unit_cost=allocation_unit_cost,
+                            cost_amount=-cost,
+                            created_at=now,
+                        ))
+                        recovered_cost += cost
+
+                    reverse_tx.unit_cost = (
+                        _q6_amount(recovered_cost / qty) if qty > 0 else None
+                    )
+                    reverse_tx.total_cost = -_q6_amount(recovered_cost)
+                    total_reversed_qty += qty
+                    total_reversed_cost += recovered_cost
+
+            if commit:
+                db.session.commit()
+            else:
+                db.session.flush()
+
+            return {
+                "document_id": reverse_doc.id,
+                "document_no": reverse_doc.document_no,
+                "original_document_id": doc.id,
+                "original_document_no": doc.document_no,
+                "direction": direction,
+                "reversed_qty": str(total_reversed_qty),
+                "reversed_cost": str(_q6_amount(total_reversed_cost)),
+            }
+        except Exception as exc:
+            if commit:
+                db.session.rollback()
+            if isinstance(exc, InventoryError):
+                raise
+            raise InventoryError(f"撤销原料库存单据失败：{exc}")

@@ -79,3 +79,13 @@ SOURCE migrations/20261115_draft_delete_permissions.sql;
 ## 7. 检查
 
 本次静态检查包括 Python AST 语法解析、Jinja 模板解析，以及业务 Blueprint 路由与权限映射覆盖检查。由于附件没有 `app/generated/` 反射生成产物，且执行环境没有连接项目 MySQL，未进行真实 Flask 启动、数据库读写或浏览器端到端测试。
+
+
+### 原料库存单据撤销
+
+- `inventory.documents.reverse`：撤销已确认的原料入库/出库单。
+- 入库撤销要求原入库产生的每一个 FIFO 成本层均未被消耗（`remaining_qty == original_qty`）；只要部分或全部消耗，整单拒绝撤销。
+- 出库撤销按原出库流水的 `inventory_cost_allocations` 回补原成本层，不重新按当前 FIFO 价格分配。
+- `ADJUSTMENT_RED` / `ADJUSTMENT_BLUE` 不允许撤销，包含工艺单配比调整及工艺单取消产生的红冲单。
+- 撤销通过 `REVERSE` 反向单据及 `IN_REVERSE` / `OUT_REVERSE` 流水实现，原单和原成本层均保留。
+- 新权限不会自动授予普通角色；需在角色权限管理中按需授权。

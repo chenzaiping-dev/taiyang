@@ -50,7 +50,7 @@
   </a>
   {% endif %}
 </form>
-
+{% set ns = namespace(total_signed=0) %}
 <table style="width:100%;border-collapse:collapse;font-size:13px;">
   <thead>
     <tr style="background:#f5f5f5;">
@@ -88,7 +88,9 @@
         <td>{{ r.document_time.strftime("%Y-%m-%d %H:%M")
                if r.document_time else "-" }}</td>
         <td style="text-align:right;">{{ r.line_count }}</td>
-        <td style="text-align:right;">{{ r.total_qty }}</td>
+        {% set signed_qty = (r.total_qty if direction == 'in' else -r.total_qty) %}
+        {% set ns.total_signed = ns.total_signed + (signed_qty or 0) %}
+        <td style="text-align:right;">{{ signed_qty }}</td>
         <td style="text-align:right;">{% if can_view_inventory_cost() %}{{ r.total_cost }}{% else %}—{% endif %}</td>
         <td>
           <span class="status-badge status-{{ r.status|lower }}">
@@ -131,6 +133,15 @@
             {% endif %}
           {% elif r.status == 'CONFIRMED' %}
             <span class="btn btn-sm disabled">确认</span>
+            {% if r.document_type != 'REVERSE' and  r.is_reversed == false  %}
+            <form method="post" style="display:inline;"
+                  action="{{ url_for('inventory_query.document_reverse',
+                          direction=direction, document_id=r.id) }}"
+                  onsubmit="return confirm('撤销该单据？');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-danger">撤销</button>
+            </form>
+            {% endif %}
           {% endif %}
         </td>
       </tr>
@@ -144,7 +155,7 @@
   <tfoot>
     <tr style="background:#fafafa;font-weight:600;">
       <td colspan="5" style="text-align:right;">本页合计：</td>
-      <td style="text-align:right;color:#2440b3;">{{ rows|sum(attribute='total_qty') }}</td>
+      <td style="text-align:right;color:#2440b3;">{{ ns.total_signed }}</td>
       <td style="text-align:right;color:#ef6c00;">
         {% if can_view_inventory_cost() %}{{ rows|sum(attribute='total_cost') }}{% else %}—{% endif %}
       </td>

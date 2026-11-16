@@ -41,9 +41,9 @@
     {% elif doc.status == 'CONFIRMED' %}
       {# ⭐ 三种情况：撤销单 / 已撤销 / 可撤销 #}
       {% if doc.document_type in ('REVERSE') %}
-        <span style="color:#888;font-size:12px;">撤销单不可再次撤销</span>
+        <span style="color:#f60606;font-size:14px;">撤销单不可再次撤销</span>
       {% elif detail.is_reversed %}
-        <span style="color:#888;font-size:12px;">该单已撤销</span>
+        <span style="color:#f60606;font-size:14px;">该单已撤销</span>
       {% elif has_permission('finished_goods.documents.reverse') %}
         <form method="post" style="float:right;margin-right:8px;"
               action="{{ url_for('finished_goods.document_reverse',

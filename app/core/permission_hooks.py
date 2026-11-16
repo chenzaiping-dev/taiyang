@@ -17,6 +17,7 @@ ENDPOINT_REQUIREMENTS = {
     "inventory_query.document_list_page": ("inventory.documents.view",),
     "inventory_query.document_detail_page": ("inventory.documents.view",),
     "inventory_query.document_delete": ("inventory.documents.delete",),
+    "inventory_query.document_reverse": ("inventory.documents.reverse",),
     "inventory_query.stock_out_confirm": ("inventory.stock_out.confirm",),
     "inventory_query.purchase_in_confirm": ("inventory.purchase_in.confirm",),
 

@@ -50,17 +50,20 @@
       <th>原料名称</th>
       <th style="width:30px;">单位</th>
       {% if warehouse_id %}<th>仓库</th>{% endif %}
-      <th style="width:120px;text-align:right;background:#e8f5e9;">累计入库</th>
-      <th style="width:120px;text-align:right;background:#fff3e0;">累计出库</th>
-      <th style="width:100px;text-align:right;">净库存</th>
-      <th style="width:100px;text-align:right;">采购入</th>
-      <th style="width:100px;text-align:right;">盘盈入</th>
-      <th style="width:100px;text-align:right;">退货入</th>
-      <th style="width:100px;text-align:right;">领料出</th>
-      <th style="width:100px;text-align:right;">盘亏出</th>
-      <th style="width:100px;text-align:right;">退货出</th>
-      <th style="width:100px;text-align:right;">调整红冲出</th>
-      <th style="width:100px;text-align:right;">调整蓝补出</th>
+      <th style="width:110px;text-align:right;background:#e8f5e9;">累计入库</th>
+      <th style="width:110px;text-align:right;background:#fff3e0;">累计出库</th>
+      <th style="width:60px;text-align:right;">净库存</th>
+      <th style="width:60px;text-align:right;">采购入</th>
+      <th style="width:60px;text-align:right;">盘盈入</th>
+      <th style="width:60px;text-align:right;">退货入</th>
+      <th style="width:100px;text-align:right;">撤销入库-冲减出</th>
+      <th></th>
+      <th style="width:60px;text-align:right;">领料出</th>
+      <th style="width:60px;text-align:right;">盘亏出</th>
+      <th style="width:60px;text-align:right;">退货出</th>
+      <th style="width:100px;text-align:right;">配比调整红冲</th>
+      <th style="width:100px;text-align:right;">配比调整蓝补</th>
+      <th style="width:100px;text-align:right;">撤销出库-回补入</th>
     </tr>
   </thead>
   <tbody>
@@ -84,16 +87,19 @@
         <td style="text-align:right;color:#666;">{{ r.in_purchase }}</td>
         <td style="text-align:right;color:#666;">{{ r.in_gain }}</td>
         <td style="text-align:right;color:#666;">{{ r.in_return }}</td>
+        <td style="text-align:right;color:#666;">{{ r.out_in_reverse }}</td>
+        <td style="text-align:right;color:#666;"></td>
         <td style="text-align:right;color:#666;">{{ r.out_production }}</td>
         <td style="text-align:right;color:#666;">{{ r.out_loss }}</td>
         <td style="text-align:right;color:#666;">{{ r.out_return }}</td>
         <td style="text-align:right;color:#666;">{{ r.out_adjust_red }}</td>
         <td style="text-align:right;color:#666;">{{ r.out_adjust_blue }}</td>
+        <td style="text-align:right;color:#666;">{{ r.in_out_reverse }}</td>
       </tr>
       {% endfor %}
     {% else %}
       <tr>
-        <td colspan="{{ 15 if warehouse_id else 14 }}"
+        <td colspan="{{ 19 if warehouse_id else 18 }}"
             style="text-align:center;color:#999;padding:24px;">
           没有符合条件的流水记录
         </td>
@@ -109,11 +115,14 @@
       <td style="text-align:right;">{{ rows|sum(attribute='in_purchase') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='in_gain') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='in_return') }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='out_in_reverse') }}</td>
+      <td></td>
       <td style="text-align:right;">{{ rows|sum(attribute='out_production') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='out_loss') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='out_return') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='out_adjust_red') }}</td>
       <td style="text-align:right;">{{ rows|sum(attribute='out_adjust_blue') }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='in_out_reverse') }}</td>
     </tr>
   </tfoot>
 </table>

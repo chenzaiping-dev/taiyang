@@ -282,6 +282,17 @@ class InventoryQueryService:
              -InventoryTransaction.quantity_delta),
             else_=0,
         )
+        # 撤销方向与原业务相反：OUT_REVERSE 回补入库，IN_REVERSE 冲减入库。
+        in_out_reverse = case(
+            (InventoryTransaction.transaction_type == "OUT_REVERSE",
+             -InventoryTransaction.quantity_delta),
+            else_=0,
+        )
+        out_in_reverse = case(
+            (InventoryTransaction.transaction_type == "IN_REVERSE",
+             InventoryTransaction.quantity_delta),
+            else_=0,
+        )
 
         filters = []
         if material_code:
@@ -308,25 +319,29 @@ class InventoryQueryService:
             func.sum(in_purchase).label("in_purchase"),
             func.sum(in_return).label("in_return"),
             func.sum(in_gain).label("in_gain"),
+            func.sum(in_out_reverse).label("in_out_reverse"),
             func.sum(out_production).label("out_production"),
             func.sum(out_loss).label("out_loss"),
             func.sum(out_return).label("out_return"),
             func.sum(out_adjust_red).label("out_adjust_red"),
             func.sum(out_adjust_blue).label("out_adjust_blue"),
-            # total_in = 采购 + 退货回 + 盘盈（不含红冲）
+            func.sum(out_in_reverse).label("out_in_reverse"),
+            # total_in = 采购 + 退货回 + 盘盈 + 入库撤销(-)
             (
                 func.sum(in_purchase)
                 + func.sum(in_return)
                 + func.sum(in_gain)
+                + func.sum(out_in_reverse)
             ).label("total_in"),
 
-            # total_out = 领料 + 盘亏 + 退货出 + 蓝补 - 红冲
+            # total_out = 领料 + 盘亏 + 退货出 + 蓝补 + 红冲(-) + 出库撤销回补(-)
             (
                 func.sum(out_production)
                 + func.sum(out_loss)
                 + func.sum(out_return)
                 + func.sum(out_adjust_blue)
                 + func.sum(out_adjust_red)
+                + func.sum(in_out_reverse)
             ).label("total_out"),
             func.sum(InventoryTransaction.quantity_delta).label("net_qty"),
         ]
@@ -373,8 +388,9 @@ class InventoryQueryService:
         rows = []
         for r in raw:
             d = dict(r)
-            for k in ("in_purchase", "in_return", "in_gain", "out_production",
-                      "out_loss", "out_return", "out_adjust_red", "out_adjust_blue", "total_in", "total_out", "net_qty"):
+            for k in ("in_purchase", "in_return", "in_gain", "in_out_reverse",
+                      "out_production", "out_loss", "out_return", "out_adjust_red",
+                      "out_adjust_blue", "out_in_reverse", "total_in", "total_out", "net_qty"):
                 d[k] = d.get(k) or 0
             rows.append(d)
         return rows, total
@@ -476,42 +492,50 @@ class InventoryQueryService:
         outbound_type=None, date_from=None, date_to=None,
         page=1, page_size=50,
     ):
-        """单据列表以 document_lines 为准，方向由明细行 transaction_type 决定。"""
+        """
+        单据列表以 document_lines 判定方向（覆盖 DRAFT），
+        数量统计来自 inventory_transactions（带正负原样输出，仅 CONFIRMED 有值）。
+        """
         from sqlalchemy import exists
+        from sqlalchemy.orm import aliased
 
         if direction == "IN":
-            doc_types = ["PURCHASE_IN", "STOCKTAKE", "RETURN"]
-            line_types = ["PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN"]
+            doc_types = ["PURCHASE_IN", "STOCKTAKE", "RETURN", "REVERSE"]
+            line_types = ["PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN", "IN_REVERSE"]
         else:
             doc_types = ["PRODUCTION_OUT", "STOCKTAKE", "RETURN",
-                         "ADJUSTMENT_RED", "ADJUSTMENT_BLUE"]
+                         "ADJUSTMENT_RED", "ADJUSTMENT_BLUE", "REVERSE"]
             line_types = ["PRODUCTION_OUT", "STOCKTAKE_LOSS", "RETURN_OUT",
-                          "ADJUSTMENT_RED", "ADJUSTMENT_BLUE"]
+                          "ADJUSTMENT_RED", "ADJUSTMENT_BLUE", "OUT_REVERSE"]
 
+        reverse_doc = aliased(InventoryDocument)
+        reversed_exists = (
+            exists()
+            .where(
+                reverse_doc.related_document_id == InventoryDocument.id,
+                reverse_doc.status == "CONFIRMED",
+            )
+        )
         creator = db.aliased(Employee)
         confirmer = db.aliased(Employee)
 
-        # ⭐ 方向判定：只作为 exists 过滤，不参与 join，避免一张多行单据被放大
+        # 方向判定：用明细行，覆盖 DRAFT（草稿无流水）
         dir_exists = exists().where(
             InventoryDocumentLine.document_id == InventoryDocument.id,
             InventoryDocumentLine.transaction_type.in_(line_types),
         )
 
-        # 按单据聚合的统计子查询，1 行/单，join 不会放大
-        line_stats = (
-            select(
-                InventoryDocumentLine.document_id.label("document_id"),
-                func.count(InventoryDocumentLine.id).label("line_count"),
-                func.sum(InventoryDocumentLine.quantity).label("total_qty"),
-            )
-            .where(InventoryDocumentLine.transaction_type.in_(line_types))
-            .group_by(InventoryDocumentLine.document_id)
-            .subquery()
-        )
+        # ⭐ 数量统计改为来自流水，带正负原样
         tx_stats = (
             select(
                 InventoryTransaction.document_id.label("document_id"),
-                func.sum(InventoryTransaction.total_cost).label("total_cost"),
+                func.count(InventoryTransaction.id).label("line_count"),
+                func.coalesce(
+                    func.sum(InventoryTransaction.quantity_delta), 0
+                ).label("total_qty"),
+                func.coalesce(
+                    func.sum(InventoryTransaction.total_cost), 0
+                ).label("total_cost"),
             )
             .group_by(InventoryTransaction.document_id)
             .subquery()
@@ -523,19 +547,19 @@ class InventoryQueryService:
                 InventoryDocument.document_type, InventoryDocument.document_time,
                 InventoryDocument.status, InventoryDocument.remark,
                 InventoryDocument.created_at, InventoryDocument.confirmed_at,
+                reversed_exists.label("is_reversed"),
                 creator.real_name.label("created_by_name"),
                 confirmer.real_name.label("confirmed_by_name"),
-                func.coalesce(line_stats.c.line_count, 0).label("line_count"),
-                func.coalesce(line_stats.c.total_qty, 0).label("total_qty"),
+                func.coalesce(tx_stats.c.line_count, 0).label("line_count"),
+                func.coalesce(tx_stats.c.total_qty, 0).label("total_qty"),
                 func.coalesce(tx_stats.c.total_cost, 0).label("total_cost"),
             )
             .join(creator, creator.id == InventoryDocument.created_by, isouter=True)
             .join(confirmer, confirmer.id == InventoryDocument.confirmed_by, isouter=True)
-            .join(line_stats, line_stats.c.document_id == InventoryDocument.id)
             .outerjoin(tx_stats, tx_stats.c.document_id == InventoryDocument.id)
             .where(
                 InventoryDocument.document_type.in_(doc_types),
-                dir_exists,              # ⭐ 方向过滤
+                dir_exists,
             )
             .order_by(InventoryDocument.id.desc())
         )
@@ -567,7 +591,6 @@ class InventoryQueryService:
         ).mappings().all()]
         return rows, total
 
-
     @staticmethod
     def get_document_detail(document_id: int):
         """
@@ -585,7 +608,8 @@ class InventoryQueryService:
         if not doc:
             return None
         if doc.document_type not in (
-            "PURCHASE_IN", "STOCKTAKE", "PRODUCTION_OUT", "RETURN", "ADJUSTMENT_RED", "ADJUSTMENT_BLUE"
+            "PURCHASE_IN", "STOCKTAKE", "PRODUCTION_OUT", "RETURN",
+            "ADJUSTMENT_RED", "ADJUSTMENT_BLUE", "REVERSE"
         ):
             return None
 
@@ -608,7 +632,7 @@ class InventoryQueryService:
                     InventoryDocument.document_time.label("transaction_time"),
                     case(
                         (InventoryDocumentLine.transaction_type.in_(
-                            ["PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN", "ADJUSTMENT_RED"]
+                            ["PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN", "ADJUSTMENT_RED", "OUT_REVERSE"]
                         ), InventoryDocumentLine.quantity),
                         else_=-InventoryDocumentLine.quantity,
                     ).label("quantity_delta"),
@@ -638,6 +662,7 @@ class InventoryQueryService:
                     "confirmer": confirmer,
                     "document_no": doc.document_no,
                     "document_type": doc.document_type,
+                    "related_document_id": getattr(doc, "related_document_id", None),
                     "document_time": doc.document_time,
                     "status": doc.status,
                     "remark": doc.remark,
@@ -684,6 +709,18 @@ class InventoryQueryService:
             .order_by(InventoryTransaction.line_no.asc())
         )
         lines = [dict(r) for r in db.session.execute(line_stmt).mappings().all()]
+
+        total_in_qty = sum(
+            (l["quantity_delta"] for l in lines
+            if l["quantity_delta"] is not None and l["quantity_delta"] > 0),
+            Decimal("0"),
+        )
+        total_out_qty = sum(
+            (-l["quantity_delta"] for l in lines
+            if l["quantity_delta"] is not None and l["quantity_delta"] < 0),
+            Decimal("0"),
+        )
+
         tx_ids = [l["transaction_id"] for l in lines]
 
         # 出库：成本分配明细
@@ -739,6 +776,7 @@ class InventoryQueryService:
                 "confirmer": confirmer,
                 "document_no": doc.document_no,
                 "document_type": doc.document_type,
+                "related_document_id": getattr(doc, "related_document_id", None),
                 "document_time": doc.document_time,
                 "status": doc.status,
                 "remark": doc.remark,
@@ -750,4 +788,6 @@ class InventoryQueryService:
             "layers_map": layers_map,
             "total_qty": total_qty,
             "total_cost": _q6(total_cost),
+            "total_in_qty": total_in_qty,
+            "total_out_qty": total_out_qty,
         }
