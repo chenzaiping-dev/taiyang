@@ -75,8 +75,6 @@
       </span>
       {% if detail.is_reversed %}
         <span class="status-badge status-reversed" style="margin-left:4px;">已撤销</span>
-      {% elif detail.is_reverse_document %}
-        <span class="status-badge status-reversed" style="margin-left:4px;">撤销单</span>
       {% endif %}
     </div>
 
@@ -84,7 +82,7 @@
     <div class="form-row">
       <label style="color:#c62828;">撤销单：</label>
       <a href="{{ url_for('inventory_query.document_detail_page',
-                    direction=('out' if direction == 'in' else 'in'),
+                    direction=direction,
                     document_id=detail.reverse_document_id) }}">
         {{ detail.reverse_document_no }}
       </a>
@@ -94,7 +92,7 @@
     <div class="form-row">
       <label>原单：</label>
       <a href="{{ url_for('inventory_query.document_detail_page',
-                    direction=parent_direction,
+                    direction=direction,
                     document_id=parent_document.id) }}">
         {{ parent_document.document_no }}
       </a>

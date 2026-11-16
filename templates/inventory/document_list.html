@@ -96,6 +96,9 @@
           <span class="status-badge status-{{ r.status|lower }}">
             {{ status_labels.get(r.status, r.status) }}
           </span>
+          {% if r.is_reversed %}
+            <span class="status-badge status-reversed" title="该单已被撤销">已撤销</span>
+          {% endif %}
         </td>
         <td>{{ r.created_by_name or "-" }}</td>
         <td>{{ r.created_at.strftime("%Y-%m-%d %H:%M")
