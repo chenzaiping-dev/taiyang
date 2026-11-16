@@ -476,7 +476,9 @@ class InventoryQueryService:
         outbound_type=None, date_from=None, date_to=None,
         page=1, page_size=50,
     ):
-        """单据列表以 document_lines 为准，草稿也能显示；金额汇总仅来自已过账流水。"""
+        """单据列表以 document_lines 为准，方向由明细行 transaction_type 决定。"""
+        from sqlalchemy import exists
+
         if direction == "IN":
             doc_types = ["PURCHASE_IN", "STOCKTAKE", "RETURN"]
             line_types = ["PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN"]
@@ -488,6 +490,14 @@ class InventoryQueryService:
 
         creator = db.aliased(Employee)
         confirmer = db.aliased(Employee)
+
+        # ⭐ 方向判定：只作为 exists 过滤，不参与 join，避免一张多行单据被放大
+        dir_exists = exists().where(
+            InventoryDocumentLine.document_id == InventoryDocument.id,
+            InventoryDocumentLine.transaction_type.in_(line_types),
+        )
+
+        # 按单据聚合的统计子查询，1 行/单，join 不会放大
         line_stats = (
             select(
                 InventoryDocumentLine.document_id.label("document_id"),
@@ -506,22 +516,27 @@ class InventoryQueryService:
             .group_by(InventoryTransaction.document_id)
             .subquery()
         )
+
         stmt = (
             select(
                 InventoryDocument.id, InventoryDocument.document_no,
                 InventoryDocument.document_type, InventoryDocument.document_time,
                 InventoryDocument.status, InventoryDocument.remark,
                 InventoryDocument.created_at, InventoryDocument.confirmed_at,
-                creator.real_name.label("created_by_name"), confirmer.real_name.label("confirmed_by_name"),
+                creator.real_name.label("created_by_name"),
+                confirmer.real_name.label("confirmed_by_name"),
                 func.coalesce(line_stats.c.line_count, 0).label("line_count"),
                 func.coalesce(line_stats.c.total_qty, 0).label("total_qty"),
                 func.coalesce(tx_stats.c.total_cost, 0).label("total_cost"),
             )
             .join(creator, creator.id == InventoryDocument.created_by, isouter=True)
             .join(confirmer, confirmer.id == InventoryDocument.confirmed_by, isouter=True)
-            .outerjoin(line_stats, line_stats.c.document_id == InventoryDocument.id)
+            .join(line_stats, line_stats.c.document_id == InventoryDocument.id)
             .outerjoin(tx_stats, tx_stats.c.document_id == InventoryDocument.id)
-            .where(InventoryDocument.document_type.in_(doc_types))
+            .where(
+                InventoryDocument.document_type.in_(doc_types),
+                dir_exists,              # ⭐ 方向过滤
+            )
             .order_by(InventoryDocument.id.desc())
         )
         if keyword:
@@ -532,13 +547,13 @@ class InventoryQueryService:
             stmt = stmt.where(InventoryDocument.document_time >= date_from)
         if date_to:
             stmt = stmt.where(InventoryDocument.document_time < date_to)
-        if inbound_type:
+        if direction == "IN" and inbound_type:
             stmt = stmt.where(InventoryDocument.id.in_(
                 select(InventoryDocumentLine.document_id).where(
                     InventoryDocumentLine.transaction_type == inbound_type
                 )
             ))
-        if outbound_type:
+        if direction == "OUT" and outbound_type:
             stmt = stmt.where(InventoryDocument.id.in_(
                 select(InventoryDocumentLine.document_id).where(
                     InventoryDocumentLine.transaction_type == outbound_type
@@ -551,6 +566,7 @@ class InventoryQueryService:
             stmt.offset((page - 1) * page_size).limit(page_size)
         ).mappings().all()]
         return rows, total
+
 
     @staticmethod
     def get_document_detail(document_id: int):
