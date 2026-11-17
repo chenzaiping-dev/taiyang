@@ -1,15 +1,10 @@
 """Business query layer shared by HTML list pages and XLSX exports."""
-from sqlalchemy import select, func
 
-from app.extensions import db
 from app.utils.datetime_utils import util_parse_date, util_parse_date_end
 from app.services.inventory_query_service import InventoryQueryService
 from app.services.finished_goods_query_service import FinishedGoodsQueryService
 from app.services.sales_performance_service import SalesPerformanceService
-from app.generated.models.shipment_plans import ShipmentPlan
-from app.generated.models.shipment_plan_lines import ShipmentPlanLine
-from app.generated.models.sales_performance import SalesPerformance
-from app.generated.models.employees import Employee
+from app.services.shipment_plan_service import ShipmentPlanService
 
 
 EXPORT_PAGE_SIZE = 2_000
@@ -119,64 +114,12 @@ def finished_goods_transactions(params):
 
 
 def shipment_plans(params):
-    creator = db.aliased(Employee)
-    keyword = (params.get("keyword") or "").strip() or None
-    status = (params.get("status") or "").strip() or None
-    perf_raw = (params.get("performance_id") or "").strip()
-    company_name = (params.get("company_name") or "").strip() or None
-    product_name = (params.get("product_name") or "").strip() or None
-    performance_id = None
-    if perf_raw:
-        if perf_raw.isdigit():
-            performance_id = int(perf_raw)
-        else:
-            perf = SalesPerformance.query.filter_by(performance_no=perf_raw).first()
-            performance_id = perf.id if perf else None
-
-    date_from = util_parse_date(params.get("ship_time_from"))
-    date_to = util_parse_date_end(params.get("ship_time_to"))
-    shipped_subq = (
-        select(
-            ShipmentPlanLine.shipment_plan_id.label("pid"),
-            func.coalesce(func.sum(ShipmentPlanLine.shipped_quantity), 0).label("total_shipped"),
-            func.coalesce(func.sum(ShipmentPlanLine.quantity), 0).label("total_planned"),
-        ).group_by(ShipmentPlanLine.shipment_plan_id).subquery()
-    )
-    stmt = (
-        select(
-            ShipmentPlan.id, ShipmentPlan.shipment_plan_no,
-            ShipmentPlan.performance_id, SalesPerformance.performance_no,
-            SalesPerformance.company_name, SalesPerformance.product_name.label("product_name"),
-            ShipmentPlan.destination, ShipmentPlan.planned_ship_time, ShipmentPlan.status,
-            ShipmentPlan.created_by, creator.real_name.label("created_by_name"),
-            ShipmentPlan.created_at,
-            func.coalesce(shipped_subq.c.total_planned, 0).label("planned_qty"),
-            func.coalesce(shipped_subq.c.total_shipped, 0).label("shipped_qty"),
-        )
-        .join(creator, creator.id == ShipmentPlan.created_by, isouter=True)
-        .join(SalesPerformance, SalesPerformance.id == ShipmentPlan.performance_id, isouter=True)
-        .join(shipped_subq, shipped_subq.c.pid == ShipmentPlan.id, isouter=True)
-        .order_by(ShipmentPlan.id.desc())
-    )
-    if keyword:
-        stmt = stmt.where(ShipmentPlan.shipment_plan_no.like(f"%{keyword}%"))
-    if status:
-        stmt = stmt.where(ShipmentPlan.status == status)
-    if performance_id is not None:
-        stmt = stmt.where(ShipmentPlan.performance_id == performance_id)
-    if company_name:
-        stmt = stmt.where(SalesPerformance.company_name.like(f"%{company_name}%"))
-    if product_name:
-        stmt = stmt.where(SalesPerformance.product_name.like(f"%{product_name}%"))
-    if date_from:
-        stmt = stmt.where(ShipmentPlan.planned_ship_time >= date_from)
-    if date_to:
-        stmt = stmt.where(ShipmentPlan.planned_ship_time < date_to)
     page, page_size = _pagination(params)
-    total = db.session.execute(select(func.count()).select_from(stmt.subquery())).scalar() or 0
-    stmt = stmt.offset((page - 1) * page_size).limit(page_size)
-    rows = [dict(r) for r in db.session.execute(stmt).mappings().all()]
-    return rows, total
+    return ShipmentPlanService.list_plans_query(
+        params=params,
+        page=page,
+        page_size=page_size,
+    )
 
 
 def sales_performances(params):

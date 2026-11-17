@@ -20,6 +20,7 @@ from app.services.finished_goods_service import FinishedGoodsError, FinishedGood
 
 from app.utils.datetime_utils import now_beijing, now_beijing_naive
 from app.utils.decimal_utils import _q3, _q6
+from app.utils.datetime_utils import util_parse_date, util_parse_date_end
 
 # ==================== 状态流转 ====================
 
@@ -47,6 +48,218 @@ class ShipmentPlanError(Exception):
 
 
 class ShipmentPlanService:
+
+    @staticmethod
+    def get_plan(plan_id: int):
+        """按 ID 读取发货计划；未找到时返回 None。"""
+        return db.session.get(ShipmentPlan, plan_id)
+
+    @staticmethod
+    def get_plan_edit_context(plan_id: int):
+        """读取编辑页所需数据，控制器不直接查询计划/业绩/分配表。"""
+        plan = db.session.get(ShipmentPlan, plan_id)
+        if not plan:
+            return None
+        performance = db.session.get(SalesPerformance, plan.performance_id)
+        reservations = ShipmentPlanService.get_available_reservations(
+            plan.performance_id
+        )
+        existing_rows = (
+            db.session.query(
+                ShipmentPlanAllocation.warehouse_id,
+                ShipmentPlanAllocation.batch_id,
+                ShipmentPlanAllocation.planned_quantity,
+                ShipmentPlanLine.product_name,
+                ShipmentPlanLine.product_specification,
+                ShipmentPlanLine.unit,
+                ShipmentPlanLine.unit_price,
+            )
+            .join(
+                ShipmentPlanLine,
+                ShipmentPlanLine.id == ShipmentPlanAllocation.shipment_line_id,
+            )
+            .filter(ShipmentPlanLine.shipment_plan_id == plan.id)
+            .all()
+        )
+        existing_map = {
+            (row.warehouse_id, row.batch_id): dict(row._mapping)
+            for row in existing_rows
+        }
+        return {
+            "plan": plan,
+            "performance": performance,
+            "reservations": reservations,
+            "existing_map": existing_map,
+        }
+
+    @staticmethod
+    def get_existing_allocation_prices(plan_id: int):
+        """返回编辑计划已有分配的单价映射，供无金额编辑权限时保留原值。"""
+        rows = (
+            db.session.query(
+                ShipmentPlanAllocation.warehouse_id,
+                ShipmentPlanAllocation.batch_id,
+                ShipmentPlanLine.unit_price,
+            )
+            .join(
+                ShipmentPlanLine,
+                ShipmentPlanLine.id == ShipmentPlanAllocation.shipment_line_id,
+            )
+            .filter(ShipmentPlanLine.shipment_plan_id == plan_id)
+            .all()
+        )
+        return {
+            (row.warehouse_id, row.batch_id): row.unit_price
+            for row in rows
+        }
+
+    @staticmethod
+    def get_update_error_context(plan_id: int):
+        """更新失败后重新取得模板所需的持久化上下文。"""
+        plan = db.session.get(ShipmentPlan, plan_id)
+        if not plan:
+            return None
+        return {
+            "plan": plan,
+            "performance": db.session.get(SalesPerformance, plan.performance_id),
+            "reservations": ShipmentPlanService.get_available_reservations(
+                plan.performance_id
+            ),
+        }
+
+    @staticmethod
+    def get_detail_context(plan_id: int):
+        """读取发货计划详情页全部数据。"""
+        plan = db.session.get(ShipmentPlan, plan_id)
+        if not plan:
+            return None
+        performance = db.session.get(SalesPerformance, plan.performance_id)
+        creator = (
+            db.session.get(Employee, plan.created_by)
+            if plan.created_by else None
+        )
+        lines = (
+            ShipmentPlanLine.query
+            .filter_by(shipment_plan_id=plan.id)
+            .order_by(ShipmentPlanLine.id.asc())
+            .all()
+        )
+        document = FinishedGoodsDocument.query.filter_by(
+            document_no=f"FG-OUT-{plan.shipment_plan_no}"
+        ).first()
+
+        allocations_map = {}
+        for line in lines:
+            allocations_map[line.id] = (
+                db.session.query(
+                    ShipmentPlanAllocation.id,
+                    ShipmentPlanAllocation.warehouse_id,
+                    Warehouse.warehouse_code,
+                    Warehouse.warehouse_name,
+                    ShipmentPlanAllocation.batch_id,
+                    FinishedGoodsBatch.batch_no,
+                    ShipmentPlanAllocation.planned_quantity,
+                    ShipmentPlanAllocation.shipped_quantity,
+                )
+                .join(Warehouse, Warehouse.id == ShipmentPlanAllocation.warehouse_id)
+                .join(
+                    FinishedGoodsBatch,
+                    FinishedGoodsBatch.id == ShipmentPlanAllocation.batch_id,
+                )
+                .filter(ShipmentPlanAllocation.shipment_line_id == line.id)
+                .all()
+            )
+        return {
+            "plan": plan,
+            "performance": performance,
+            "creator": creator,
+            "document": document,
+            "lines": lines,
+            "allocations_map": allocations_map,
+        }
+
+    @staticmethod
+    def list_plans_query(params=None, page: int = 1, page_size: int = 20):
+        """发货计划列表查询；HTML 列表和 Excel 导出共用此查询入口。"""
+        params = params or {}
+        creator = db.aliased(Employee)
+        keyword = (params.get("keyword") or "").strip() or None
+        status = (params.get("status") or "").strip() or None
+        performance_no = (params.get("performance_no") or "").strip() or None
+        company_name = (params.get("company_name") or "").strip() or None
+        product_name = (params.get("product_name") or "").strip() or None
+
+        date_from = util_parse_date(params.get("ship_time_from"))
+        date_to = util_parse_date_end(params.get("ship_time_to"))
+        shipped_subq = (
+            select(
+                ShipmentPlanLine.shipment_plan_id.label("pid"),
+                func.coalesce(
+                    func.sum(ShipmentPlanLine.shipped_quantity), 0
+                ).label("total_shipped"),
+                func.coalesce(
+                    func.sum(ShipmentPlanLine.quantity), 0
+                ).label("total_planned"),
+            )
+            .group_by(ShipmentPlanLine.shipment_plan_id)
+            .subquery()
+        )
+        stmt = (
+            select(
+                ShipmentPlan.id,
+                ShipmentPlan.shipment_plan_no,
+                ShipmentPlan.performance_id,
+                SalesPerformance.performance_no,
+                SalesPerformance.company_name,
+                SalesPerformance.product_name.label("product_name"),
+                ShipmentPlan.destination,
+                ShipmentPlan.planned_ship_time,
+                ShipmentPlan.status,
+                ShipmentPlan.created_by,
+                creator.real_name.label("created_by_name"),
+                ShipmentPlan.created_at,
+                func.coalesce(shipped_subq.c.total_planned, 0).label("planned_qty"),
+                func.coalesce(shipped_subq.c.total_shipped, 0).label("shipped_qty"),
+            )
+            .join(creator, creator.id == ShipmentPlan.created_by, isouter=True)
+            .join(
+                SalesPerformance,
+                SalesPerformance.id == ShipmentPlan.performance_id,
+                isouter=True,
+            )
+            .join(shipped_subq, shipped_subq.c.pid == ShipmentPlan.id, isouter=True)
+            .order_by(ShipmentPlan.id.desc())
+        )
+        if keyword:
+            stmt = stmt.where(
+                ShipmentPlan.shipment_plan_no.like(f"%{keyword}%")
+            )
+        if status:
+            stmt = stmt.where(ShipmentPlan.status == status)
+        if performance_no:
+            stmt = stmt.where(SalesPerformance.performance_no.like(f"%{performance_no}%"))
+        if company_name:
+            stmt = stmt.where(SalesPerformance.company_name.like(f"%{company_name}%"))
+        if company_name:
+            stmt = stmt.where(SalesPerformance.company_name.like(f"%{company_name}%"))
+        if product_name:
+            stmt = stmt.where(SalesPerformance.product_name.like(f"%{product_name}%"))
+        if date_from:
+            stmt = stmt.where(ShipmentPlan.planned_ship_time >= date_from)
+        if date_to:
+            stmt = stmt.where(ShipmentPlan.planned_ship_time < date_to)
+
+        page = max(int(page or 1), 1)
+        page_size = max(int(page_size or 20), 1)
+        total = db.session.execute(
+            select(func.count()).select_from(stmt.subquery())
+        ).scalar() or 0
+        stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+        rows = [
+            dict(row)
+            for row in db.session.execute(stmt).mappings().all()
+        ]
+        return rows, total
 
     @staticmethod
     def get_available_reservations(performance_id: int):

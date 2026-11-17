@@ -5,19 +5,10 @@ from flask import (
 
 from app.extensions import db
 from app.services.draft_delete_service import DraftDeleteService, DraftDeleteError
-from app.generated.models.employees import Employee
-from app.generated.models.warehouses import Warehouse
 from app.generated.models.sales_performance import SalesPerformance
 
-from app.generated.models.finished_goods_batches import FinishedGoodsBatch
-from app.generated.models.finished_goods_inventory import FinishedGoodsInventory
-from app.generated.models.finished_goods_reservations import FinishedGoodsReservation
-from app.generated.models.finished_goods_documents import FinishedGoodsDocument
-from app.generated.models.shipment_plans import ShipmentPlan
-from app.generated.models.shipment_plan_lines import ShipmentPlanLine
-from app.generated.models.shipment_plan_allocations import ShipmentPlanAllocation
 from app.services.shipment_plan_service import ShipmentPlanService, ShipmentPlanError
-from app.services.permission_service import can_view_shipment_money, can_edit_shipment_money
+from app.services.permission_service import can_edit_shipment_money
 from app.exports.queries import run_query
 
 bp = Blueprint("shipment_plan", __name__, url_prefix="/shipment-plans")
@@ -157,45 +148,18 @@ def create_submit():
 # ==================== 编辑 ====================
 @bp.get("/<int:plan_id>/edit")
 def edit_page(plan_id):
-    plan = db.session.get(ShipmentPlan, plan_id)
-    if not plan:
+    context = ShipmentPlanService.get_plan_edit_context(plan_id)
+    if not context:
         abort(404)
-    #if plan.status not in ("DRAFT", "CONFIRMED"):
-    if plan.status != "DRAFT":          # 仅草稿可编辑
+    plan = context["plan"]
+    if plan.status != "DRAFT":
         flash("只有草稿状态的发货计划可编辑", "error")
         return redirect(url_for("shipment_plan.detail_page", plan_id=plan_id))
 
-    perf = db.session.get(SalesPerformance, plan.performance_id)
-    reservations = ShipmentPlanService.get_available_reservations(
-        plan.performance_id)
-
-    # 现有 allocations → 按 (warehouse, batch) 回填数量
-    existing = (
-        db.session.query(
-            ShipmentPlanAllocation.warehouse_id,
-            ShipmentPlanAllocation.batch_id,
-            ShipmentPlanAllocation.planned_quantity,
-            ShipmentPlanLine.product_name,
-            ShipmentPlanLine.product_specification,
-            ShipmentPlanLine.unit,
-            ShipmentPlanLine.unit_price,
-        )
-        .join(ShipmentPlanLine,
-              ShipmentPlanLine.id == ShipmentPlanAllocation.shipment_line_id)
-        .filter(ShipmentPlanLine.shipment_plan_id == plan.id)
-        .all()
-    )
-    existing_map = {
-        (r.warehouse_id, r.batch_id): dict(r._mapping)
-        for r in existing
-    }
-
     return render_template(
         "shipment_plan/form.html",
-        mode="edit",
-        plan=plan,
-        performance=perf,
-        reservations=reservations,
+        mode="edit", plan=plan, performance=context["performance"],
+        reservations=context["reservations"],
         form_data={
             "performance_id": plan.performance_id,
             "destination": plan.destination,
@@ -205,38 +169,23 @@ def edit_page(plan_id):
                 if plan.planned_ship_time else ""
             ),
             "remark": plan.remark or "",
-            "lines": [],   # 模板会从 existing_map 回填
+            "lines": [],
         },
-        existing_map=existing_map,
+        existing_map=context["existing_map"],
         errors=[],
     )
 
 
 @bp.post("/<int:plan_id>/edit")
 def update_submit(plan_id):
-    plan = db.session.get(ShipmentPlan, plan_id)
+    plan = ShipmentPlanService.get_plan(plan_id)
     if not plan:
         abort(404)
 
     try:
         data = _parse_form(request.form)
         if not can_edit_shipment_money():
-            existing_prices = {}
-            existing_rows = (
-                db.session.query(
-                    ShipmentPlanAllocation.warehouse_id,
-                    ShipmentPlanAllocation.batch_id,
-                    ShipmentPlanLine.unit_price,
-                )
-                .join(ShipmentPlanLine,
-                      ShipmentPlanLine.id == ShipmentPlanAllocation.shipment_line_id)
-                .filter(ShipmentPlanLine.shipment_plan_id == plan_id)
-                .all()
-            )
-            existing_prices = {
-                (row.warehouse_id, row.batch_id): row.unit_price
-                for row in existing_rows
-            }
+            existing_prices = ShipmentPlanService.get_existing_allocation_prices(plan_id)
             for line in data.get("lines", []):
                 line["unit_price"] = existing_prices.get(
                     (line["warehouse_id"], line["batch_id"]), 0
@@ -245,20 +194,22 @@ def update_submit(plan_id):
         flash("发货计划已更新", "success")
         return redirect(url_for("shipment_plan.detail_page", plan_id=plan_id))
     except ShipmentPlanError as e:
-        perf = db.session.get(SalesPerformance, plan.performance_id)
+        error_context = ShipmentPlanService.get_update_error_context(plan_id)
+        if not error_context:
+            abort(404)
         return (
             render_template(
                 "shipment_plan/form.html",
-                mode="edit", plan=plan, performance=perf,
-                reservations=ShipmentPlanService.get_available_reservations(
-                    plan.performance_id),
+                mode="edit", plan=error_context["plan"],
+                performance=error_context["performance"],
+                reservations=error_context["reservations"],
                 form_data={
-                    "performance_id": plan.performance_id,
+                    "performance_id": error_context["plan"].performance_id,
                     "destination": request.form.get("destination", ""),
                     "transport_method": request.form.get("transport_method", ""),
                     "planned_ship_time": request.form.get("planned_ship_time", ""),
                     "remark": request.form.get("remark", ""),
-                    "lines": data["lines"] if 'data' in locals() else [],
+                    "lines": data["lines"] if "data" in locals() else [],
                 },
                 existing_map={},
                 errors=[str(e)],
@@ -272,19 +223,11 @@ def update_submit(plan_id):
 def list_page():
     keyword = request.args.get("keyword", "").strip() or None
     status = request.args.get("status", "").strip() or None
-    perf_raw = request.args.get("performance_id", "").strip()
+    performance_no = request.args.get("performance_no", "").strip() or None
     company_name = request.args.get("company_name", "").strip() or None
     product_name = request.args.get("product_name", "").strip() or None
     ship_time_from_raw = request.args.get("ship_time_from", "").strip() or None
     ship_time_to_raw = request.args.get("ship_time_to", "").strip() or None
-
-    performance_id = None
-    if perf_raw:
-        if perf_raw.isdigit():
-            performance_id = int(perf_raw)
-        else:
-            perf = SalesPerformance.query.filter_by(performance_no=perf_raw).first()
-            performance_id = perf.id if perf else None
 
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 20
@@ -297,8 +240,7 @@ def list_page():
         page_size=page_size, total_pages=total_pages,
         keyword=keyword or "",
         status=status or "",
-        performance_id=performance_id or "",
-        performance_id_raw=perf_raw or "",
+        performance_no=performance_no or "",
         company_name=company_name or "",
         product_name=product_name or "",
         ship_time_from=ship_time_from_raw or "",
@@ -310,62 +252,24 @@ def list_page():
 # ==================== 详情 ====================
 @bp.get("/<int:plan_id>")
 def detail_page(plan_id):
-    plan = db.session.get(ShipmentPlan, plan_id)
-    if not plan:
+    context = ShipmentPlanService.get_detail_context(plan_id)
+    if not context:
         abort(404)
-
-    perf = db.session.get(SalesPerformance, plan.performance_id)
-    creator = (
-        db.session.get(Employee, plan.created_by)
-        if plan.created_by else None
-    )
-    lines = (
-        ShipmentPlanLine.query
-        .filter_by(shipment_plan_id=plan.id)
-        .order_by(ShipmentPlanLine.id.asc())
-        .all()
-    )
-
-    document_no = "FG-OUT-" + plan.shipment_plan_no
-    document = FinishedGoodsDocument.query.filter_by(document_no=document_no).first()
-
-    # 每个 line 的 allocations
-    allocations_map = {}
-    for line in lines:
-        allocations_map[line.id] = (
-            db.session.query(
-                ShipmentPlanAllocation.id,
-                ShipmentPlanAllocation.warehouse_id,
-                Warehouse.warehouse_code,
-                Warehouse.warehouse_name,
-                ShipmentPlanAllocation.batch_id,
-                FinishedGoodsBatch.batch_no,
-                ShipmentPlanAllocation.planned_quantity,
-                ShipmentPlanAllocation.shipped_quantity,
-            )
-            .join(Warehouse, Warehouse.id == ShipmentPlanAllocation.warehouse_id)
-            .join(FinishedGoodsBatch,
-                  FinishedGoodsBatch.id == ShipmentPlanAllocation.batch_id)
-            .filter(ShipmentPlanAllocation.shipment_line_id == line.id)
-            .all()
-        )
 
     return render_template(
         "shipment_plan/detail.html",
-        plan=plan,
-        creator=creator,
-        performance=perf,
-        document=document,
-        lines=lines,
-        allocations_map=allocations_map,
+        plan=context["plan"],
+        creator=context["creator"],
+        performance=context["performance"],
+        document=context["document"],
+        lines=context["lines"],
+        allocations_map=context["allocations_map"],
         status_labels=SP_STATUS_LABELS,
     )
 
-# app/controllers/shipment_plan_controller.py 追加
 
 @bp.post("/<int:plan_id>/old_ship")
 def ship_submit(plan_id):
-    from app.services.shipment_plan_service import ShipmentPlanService
     allocations = []
     idx = 0
     while True:
