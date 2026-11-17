@@ -28,6 +28,7 @@ from app.generated.models.inventory_documents import InventoryDocument
 from app.generated.models.process_order_material_adjustments import ProcessOrderMaterialAdjustment
 from app.services.permission_service import can_view_production_cost, can_edit_production_cost
 from app.core.money_redaction import redact_money_fields
+from app.utils.datetime_utils import util_parse_date, util_parse_date_end
 
 
 bp = Blueprint("process_order", __name__, url_prefix="/process-orders")
@@ -58,23 +59,27 @@ def _load_options(exclude_order_id=None):
         "copy_from_orders": copy_from_orders,   # ⭐
     }
 
-
 @bp.get("/")
 def list_page():
-    """
-    工艺单列表页。
-    支持 ?keyword=&status=&factory_id=&page=
-    """
-    keyword = request.args.get("keyword", "").strip() or None
+    order_no = request.args.get("order_no", "").strip() or None
+    batch_keyword = request.args.get("batch_keyword", "").strip() or None
+    performance_plan_no = request.args.get("performance_plan_no", "").strip() or None
     status = request.args.get("status", "").strip() or None
     factory_id_raw = request.args.get("factory_id", "").strip()
     factory_id = int(factory_id_raw) if factory_id_raw.isdigit() else None
+    date_from_raw = request.args.get("date_from", "").strip() or None
+    date_to_raw = request.args.get("date_to", "").strip() or None
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 20
 
     items, total = ProcessOrderService.list_orders(
-        keyword=keyword, status=status,
+        order_no=order_no,
+        batch_keyword=batch_keyword,
+        performance_plan_no=performance_plan_no,
+        status=status,
         factory_id=factory_id,
+        date_from=util_parse_date(date_from_raw),
+        date_to=util_parse_date_end(date_to_raw),
         page=page, page_size=page_size,
     )
 
@@ -84,14 +89,18 @@ def list_page():
         "process_order/list.html",
         items=items, total=total, page=page, page_size=page_size,
         total_pages=total_pages,
-        keyword=keyword or "", status=status or "",
+        order_no=order_no or "",
+        batch_keyword=batch_keyword or "",
+        performance_plan_no=performance_plan_no or "",
+        status=status or "",
         factory_id=factory_id or "",
+        date_from=date_from_raw or "",
+        date_to=date_to_raw or "",
         factories=Factory.query.filter_by(status=1).order_by(Factory.id).all(),
         status_labels=PO_STATUS_LABELS,
-        plan_status_labels=PLAN_STATUS_LABELS,   # ⭐
+        plan_status_labels=PLAN_STATUS_LABELS,
         warehouses=_rm_warehouses(),
-        # ⭐ 新增：成品仓列表
-        fg_warehouses=_fg_warehouses()
+        fg_warehouses=_fg_warehouses(),
     )
 
 

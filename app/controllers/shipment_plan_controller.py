@@ -16,9 +16,9 @@ from app.generated.models.finished_goods_documents import FinishedGoodsDocument
 from app.generated.models.shipment_plans import ShipmentPlan
 from app.generated.models.shipment_plan_lines import ShipmentPlanLine
 from app.generated.models.shipment_plan_allocations import ShipmentPlanAllocation
-from app.utils.datetime_utils import util_parse_date
 from app.services.shipment_plan_service import ShipmentPlanService, ShipmentPlanError
 from app.services.permission_service import can_view_shipment_money, can_edit_shipment_money
+from app.exports.queries import run_query
 
 bp = Blueprint("shipment_plan", __name__, url_prefix="/shipment-plans")
 
@@ -270,7 +270,6 @@ def update_submit(plan_id):
 # ==================== 列表 ====================
 @bp.get("/")
 def list_page():
-    creator = db.aliased(Employee)
     keyword = request.args.get("keyword", "").strip() or None
     status = request.args.get("status", "").strip() or None
     perf_raw = request.args.get("performance_id", "").strip()
@@ -279,83 +278,19 @@ def list_page():
     ship_time_from_raw = request.args.get("ship_time_from", "").strip() or None
     ship_time_to_raw = request.args.get("ship_time_to", "").strip() or None
 
-    # ⭐ 支持两种输入：数字 → 直接当 ID；非数字 → 按业绩单号反查
     performance_id = None
     if perf_raw:
         if perf_raw.isdigit():
             performance_id = int(perf_raw)
         else:
-            perf = SalesPerformance.query.filter_by(
-                performance_no=perf_raw
-            ).first()
-            if perf:
-                performance_id = perf.id
+            perf = SalesPerformance.query.filter_by(performance_no=perf_raw).first()
+            performance_id = perf.id if perf else None
 
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 20
+    rows, total = run_query("shipment_plans", request.args, page=page, page_size=page_size)
 
-    from sqlalchemy import func, select, or_
-    date_from = util_parse_date(ship_time_from_raw)
-    date_to = util_parse_date(ship_time_to_raw)   # 含结束日
-
-    # 已发货数量：每个计划的总和
-    shipped_subq = (
-        select(
-            ShipmentPlanLine.shipment_plan_id.label("pid"),
-            func.coalesce(func.sum(ShipmentPlanLine.shipped_quantity), 0).label("total_shipped"),
-            func.coalesce(func.sum(ShipmentPlanLine.quantity), 0).label("total_planned"),
-        )
-        .group_by(ShipmentPlanLine.shipment_plan_id)
-        .subquery()
-    )
-
-    base = (
-        select(
-            ShipmentPlan.id,
-            ShipmentPlan.shipment_plan_no,
-            ShipmentPlan.performance_id,
-            SalesPerformance.performance_no,
-            SalesPerformance.company_name,                 # ⭐ 公司名
-            SalesPerformance.product_name.label("product_name"),
-            ShipmentPlan.destination,
-            ShipmentPlan.planned_ship_time,                # ⭐ 计划发货时间
-            ShipmentPlan.status,
-            ShipmentPlan.created_by,
-            creator.real_name.label("created_by_name"),
-            ShipmentPlan.created_at,
-            func.coalesce(shipped_subq.c.total_planned, 0).label("planned_qty"),
-            func.coalesce(shipped_subq.c.total_shipped, 0).label("shipped_qty"),
-        )
-        .join(creator, creator.id == ShipmentPlan.created_by, isouter=True)
-        .join(SalesPerformance,
-              SalesPerformance.id == ShipmentPlan.performance_id, isouter=True)
-        .join(shipped_subq,
-              shipped_subq.c.pid == ShipmentPlan.id, isouter=True)
-        .order_by(ShipmentPlan.id.desc())
-    )
-    if keyword:
-        like = f"%{keyword}%"
-        base = base.where(ShipmentPlan.shipment_plan_no.like(like))
-    if status:
-        base = base.where(ShipmentPlan.status == status)
-    if performance_id:
-        base = base.where(ShipmentPlan.performance_id == performance_id)
-    if company_name:
-        base = base.where(SalesPerformance.company_name.like(f"%{company_name}%"))
-    if product_name:
-        base = base.where(SalesPerformance.product_name.like(f"%{product_name}%"))
-    if date_from:
-        base = base.where(ShipmentPlan.planned_ship_time >= date_from)
-    if date_to:
-        base = base.where(ShipmentPlan.planned_ship_time < date_to)
-
-    total = db.session.execute(
-        select(func.count()).select_from(base.subquery())
-    ).scalar() or 0
     total_pages = max((total + page_size - 1) // page_size, 1)
-    base = base.offset((page - 1) * page_size).limit(page_size)
-    rows = [dict(r) for r in db.session.execute(base).mappings().all()]
-
     return render_template(
         "shipment_plan/list.html",
         rows=rows, total=total, page=page,

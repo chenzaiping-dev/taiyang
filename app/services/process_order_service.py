@@ -351,6 +351,101 @@ class ProcessOrderService:
 
     @staticmethod
     def list_orders(
+        order_no: str = None,
+        batch_keyword: str = None,
+        performance_plan_no: str = None,
+        status: str = None,
+        factory_id: int = None,
+        date_from=None,
+        date_to=None,
+        page: int = 1,
+        page_size: int = 20,
+    ):
+        """
+        列表查询：一次 JOIN 出加工厂/业绩单/跟单人/创建人/生产计划。
+        支持按 工艺单号/生产批号/产品名称/业绩单号/生产计划单号 分字段过滤，
+        以及按下单时间区间过滤。
+        """
+        creator = db.aliased(Employee)
+        follow  = db.aliased(Employee)
+
+        stmt = (
+            select(
+                ProcessOrder.id,
+                ProcessOrder.process_order_no,
+                ProcessOrder.factory_id,
+                Factory.factory_name.label("factory_name"),
+                ProcessOrder.batch_no,
+                ProcessOrder.product_name,
+                ProcessOrder.planned_quantity,
+                ProcessOrder.unit,
+                ProcessOrder.performance_id,
+                SalesPerformance.performance_no.label("performance_no"),
+                ProcessOrder.order_time,
+                follow.real_name.label("followup_employee_name"),
+                creator.real_name.label("created_by_name"),
+                ProcessOrder.planned_cost_price,
+                ProcessOrder.actual_total_cost,
+                ProcessOrder.completed_quantity,
+                ProcessOrder.status,
+                ProductionPlan.id.label("plan_id"),
+                ProductionPlan.plan_no.label("plan_no"),
+                ProductionPlan.status.label("plan_status"),
+            )
+            .join(Factory, Factory.id == ProcessOrder.factory_id, isouter=True)
+            .join(SalesPerformance,
+                  SalesPerformance.id == ProcessOrder.performance_id, isouter=True)
+            .join(follow, follow.id == ProcessOrder.followup_employee_id, isouter=True)
+            .join(creator, creator.id == ProcessOrder.created_by, isouter=True)
+            .join(ProductionPlanProcessOrder,
+                  ProductionPlanProcessOrder.process_order_id == ProcessOrder.id,
+                  isouter=True)
+            .join(ProductionPlan,
+                  ProductionPlan.id == ProductionPlanProcessOrder.production_plan_id,
+                  isouter=True)
+            .order_by(ProcessOrder.id.desc())
+        )
+
+        # 分字段过滤
+        if order_no:
+            stmt = stmt.where(ProcessOrder.process_order_no.like(f"%{order_no}%"))
+        if batch_keyword:
+            like = f"%{batch_keyword}%"
+            stmt = stmt.where(
+                db.or_(
+                    ProcessOrder.product_name.like(like),
+                    ProcessOrder.batch_no.like(like),
+                )
+            )
+        if performance_plan_no:
+            like = f"%{performance_plan_no}%"
+            stmt = stmt.where(
+                db.or_(
+                    SalesPerformance.performance_no.like(like),
+                    ProductionPlan.plan_no.like(like),
+                )
+            )
+
+        if status:
+            stmt = stmt.where(ProcessOrder.status == status)
+        if factory_id:
+            stmt = stmt.where(ProcessOrder.factory_id == factory_id)
+        if date_from:
+            stmt = stmt.where(ProcessOrder.order_time >= date_from)
+        if date_to:
+            # 含结束日：控制器传入次日 0 点，用 < 比较
+            stmt = stmt.where(ProcessOrder.order_time < date_to)
+
+        from sqlalchemy import func
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total = db.session.execute(count_stmt).scalar() or 0
+
+        stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+        rows = db.session.execute(stmt).mappings().all()
+        return [dict(r) for r in rows], total
+
+    @staticmethod
+    def old_list_orders(
         keyword: str = None,
         status: str = None,
         factory_id: int = None,

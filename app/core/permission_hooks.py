@@ -110,7 +110,7 @@ ENDPOINT_REQUIREMENTS = {
 
 MANAGED_BLUEPRINTS = {
     "inventory_query", "purchase_in", "stock_out", "finished_goods", "process_order",
-    "production_plan", "shipment_plan", "sales_performance",
+    "production_plan", "shipment_plan", "sales_performance", "exports",
 }
 
 
@@ -134,6 +134,16 @@ def register_permission_hooks(app):
             return redirect(url_for("auth.change_password"))
 
         requirements = ENDPOINT_REQUIREMENTS.get(endpoint)
+        if endpoint == "exports.download":
+            export_name = (request.view_args or {}).get("export_name")
+            requirements = {
+                "material-stock-with-cost-layers": ("inventory.cost.view",),
+                "material-transactions": ("inventory.transactions.view",),
+                "finished-goods-warehouses": ("finished_goods.inventory.view",),
+                "finished-goods-transactions": ("finished_goods.transactions.view",),
+                "shipment-plans": ("shipment.view",),
+                "sales-performances": ("sales_performance.view",),
+            }.get(export_name)
         if endpoint == "process_order.api_change_status":
             api_action = (request.view_args or {}).get("action")
             if api_action == "cancel":

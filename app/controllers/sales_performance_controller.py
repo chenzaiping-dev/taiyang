@@ -12,6 +12,7 @@ from app.services.sales_performance_service import (
     SalesPerformanceService, SalesPerformanceError, STATUS_LABELS, PAYMENT_LABELS,
 )
 from app.utils.datetime_utils import util_parse_date
+from app.exports.queries import run_query
 from app.services.permission_service import (
     can_view_sales_performance_money, can_edit_sales_performance_money
 )
@@ -97,14 +98,7 @@ def list_page():
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 20
 
-    rows, total = SalesPerformanceService.list_performances(
-        keyword=keyword, status=status,
-        payment_status=payment_status,
-        date_from=util_parse_date(date_from_raw),
-        date_to=util_parse_date(date_to_raw),
-        salesperson_id=salesperson_id,
-        page=page, page_size=page_size,
-    )
+    rows, total = run_query("sales_performances", request.args, page=page, page_size=page_size)
     total_pages = max((total + page_size - 1) // page_size, 1)
 
     return render_template(

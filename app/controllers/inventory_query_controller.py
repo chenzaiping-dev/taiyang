@@ -8,12 +8,13 @@ from app.generated.models.warehouses import Warehouse
 from app.generated.models.inventory_cost_layers import InventoryCostLayer
 from app.generated.models.inventory_documents import InventoryDocument
 from app.services.inventory_query_service import InventoryQueryService
+from app.exports.queries import run_query
 from app.services.draft_delete_service import DraftDeleteService, DraftDeleteError
 from app.services.inventory_service import (
     PurchaseInService, StockOutService, InventoryDocumentReverseService,
     InventoryError, INBOUND_TYPE_LABELS, OUTBOUND_TYPE_LABELS, _rm_warehouses
 )
-from app.utils.datetime_utils import util_parse_date
+from app.utils.datetime_utils import util_parse_date, util_parse_date_end
 
 bp = Blueprint("inventory_query", __name__, url_prefix="/inventory")
 
@@ -96,13 +97,7 @@ def material_stock_with_cost_layers_page():
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 50
 
-    rows, total = InventoryQueryService.query_material_stock_with_cost_layers(
-        material_code=material_code,
-        warehouse_id=warehouse_id,
-        group_by_warehouse=group_by_warehouse,
-        page=page,
-        page_size=page_size,
-    )
+    rows, total = run_query("material_stock_layers", request.args, page=page, page_size=page_size)
     total_pages = max((total + page_size - 1) // page_size, 1)
 
     # 当前选中的仓库对象（用于顶部信息条）
@@ -156,17 +151,14 @@ def material_io_summary_page():
     date_from_raw = request.args.get("date_from", "").strip() or None
     date_to_raw = request.args.get("date_to", "").strip() or None
 
-    date_from = util_parse_date(date_from_raw)
-    date_to = util_parse_date(date_to_raw)
-
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 50
 
     rows, total = InventoryQueryService.query_material_io_summary(
         material_code=material_code,
         warehouse_id=warehouse_id,
-        date_from=date_from,
-        date_to=date_to,
+        date_from=util_parse_date(date_from_raw),
+        date_to=util_parse_date_end(date_to_raw),
         page=page,
         page_size=page_size,
     )
@@ -239,22 +231,10 @@ def material_transactions_page():
     date_from_raw = request.args.get("date_from", "").strip() or None
     date_to_raw = request.args.get("date_to", "").strip() or None
 
-    date_from = util_parse_date(date_from_raw)
-    date_to = util_parse_date(date_to_raw)
-
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 50
 
-    rows, total = InventoryQueryService.query_material_transactions(
-        material_code=material_code,
-        warehouse_id=warehouse_id,
-        transaction_type=transaction_type,
-        document_no=document_no,
-        date_from=date_from,
-        date_to=date_to,
-        page=page,
-        page_size=page_size,
-    )
+    rows, total = run_query("material_transactions", request.args, page=page, page_size=page_size)
     total_pages = max((total + page_size - 1) // page_size, 1)
 
     return render_template(
@@ -299,7 +279,7 @@ def document_list_page(direction):
         inbound_type=inbound_type,
         outbound_type=outbound_type,
         date_from=util_parse_date(date_from_raw),
-        date_to=util_parse_date(date_to_raw),
+        date_to=util_parse_date_end(date_to_raw),
         page=page, page_size=page_size,
     )
     total_pages = max((total + page_size - 1) // page_size, 1)

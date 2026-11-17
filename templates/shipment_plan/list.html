@@ -33,6 +33,7 @@
      href="{{ url_for('shipment_plan.new_page', performance_id=performance_id) }}">+ 新建发货计划</a>
   {% endif %}
 </form>
+<a class="btn" href="{{ url_for('exports.download', export_name='shipment-plans', **request.args.to_dict()) }}">导出 Excel</a>
 
 <table style="width:100%;border-collapse:collapse;font-size:13px;">
   <thead>

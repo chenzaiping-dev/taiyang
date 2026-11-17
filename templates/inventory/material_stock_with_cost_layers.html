@@ -42,6 +42,7 @@
   <button type="submit" class="btn btn-primary">查询</button>
   <a class="btn" href="{{ url_for('inventory_query.material_stock_with_cost_layers_page') }}">重置</a>
 </form>
+<a class="btn" href="{{ url_for('exports.download', export_name='material-stock-with-cost-layers', **request.args.to_dict()) }}">导出 Excel</a>
 
 {% if current_wh %}
   <div style="margin-bottom:12px;padding:8px 12px;background:#e3f2fd;

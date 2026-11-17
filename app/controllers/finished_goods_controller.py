@@ -17,11 +17,12 @@ from app.generated.models.process_orders import ProcessOrder
 
 from app.services.process_order_service import _fg_warehouses
 from app.services.finished_goods_query_service import FinishedGoodsQueryService
+from app.exports.queries import run_query
 from app.services.finished_goods_service import (
     FinishedGoodsError, FinishedGoodsService, FG_INBOUND_TYPE_LABELS, FG_OUTBOUND_TYPE_LABELS,
     FG_TX_TYPE_LABELS, FG_TRANSACTION_TYPE_DIRECTION
 )
-from app.utils.datetime_utils import util_parse_date
+from app.utils.datetime_utils import util_parse_date, util_parse_date_end
 
 bp = Blueprint("finished_goods", __name__, url_prefix="/finished-goods")
 
@@ -324,10 +325,7 @@ def warehouses_page():
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 50
 
-    rows, total = FinishedGoodsQueryService.list_warehouse_stock(
-        warehouse_id=warehouse_id, batch_keyword=keyword,
-        page=page, page_size=page_size,
-    )
+    rows, total = run_query("finished_goods_stock", request.args, page=page, page_size=page_size)
     total_pages = max((total + page_size - 1) // page_size, 1)
     print("can_view_finished_goods_cost", can_view_finished_goods_cost())
 
@@ -357,13 +355,7 @@ def transactions_page():
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 50
 
-    rows, total = FinishedGoodsQueryService.list_transactions(
-        warehouse_id=warehouse_id, batch_keyword=keyword,
-        tx_type=tx_type, document_no=document_no,
-        date_from=util_parse_date(date_from_raw),
-        date_to=util_parse_date(date_to_raw),
-        page=page, page_size=page_size,
-    )
+    rows, total = run_query("finished_goods_transactions", request.args, page=page, page_size=page_size)
     total_pages = max((total + page_size - 1) // page_size, 1)
 
     return render_template(
@@ -399,7 +391,7 @@ def io_summary_page():
         warehouse_id=warehouse_id,
         batch_keyword=batch_keyword,
         date_from=util_parse_date(date_from_raw),
-        date_to=util_parse_date(date_to_raw),
+        date_to=util_parse_date_end(date_to_raw),
         group_by=group_by,
         page=page, page_size=page_size,
     )
@@ -443,7 +435,7 @@ def document_list_page(direction):
         outbound_type=outbound_type,
         warehouse_id=warehouse_id,
         date_from=util_parse_date(date_from_raw),
-        date_to=util_parse_date(date_to_raw),
+        date_to=util_parse_date_end(date_to_raw),
         page=page, page_size=page_size,
     )
     total_pages = max((total + page_size - 1) // page_size, 1)

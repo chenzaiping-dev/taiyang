@@ -41,6 +41,7 @@
      href="{{ url_for('sales_performance.new_page') }}">+ 新建业绩单</a>
   {% endif %}
 </form>
+<a class="btn" href="{{ url_for('exports.download', export_name='sales-performances', **request.args.to_dict()) }}">导出 Excel</a>
 
 <table style="width:100%;border-collapse:collapse;font-size:13px;">
   <thead>

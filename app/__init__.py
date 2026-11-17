@@ -55,6 +55,9 @@ def create_app(test_config=None):
     from app.controllers.sales_performance_controller import bp as sales_bp
     app.register_blueprint(sales_bp)
 
+    from app.controllers.export_controller import bp as export_bp
+    app.register_blueprint(export_bp)
+
     from app.controllers.role_management_controller import bp as role_management_bp
     app.register_blueprint(role_management_bp)
 

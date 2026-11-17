@@ -4,16 +4,13 @@
 {% block content %}
 <h2>工艺单列表</h2>
 <form method="get" action="{{ url_for('process_order.list_page') }}"
-      style="margin-bottom:16px;">
-  <!-- 过滤条件：保持不变 -->
-  <input type="text" name="keyword" value="{{ keyword }}" placeholder="单号/产品/批号">
-  <select name="status">
-    <option value="">-- 全部状态 --</option>
-    {% for code, label in status_labels.items() %}
-      <option value="{{ code }}"
-        {% if status == code %}selected{% endif %}>{{ label }}</option>
-    {% endfor %}
-  </select>
+      style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+  <input type="text" name="order_no" value="{{ order_no }}"
+         placeholder="工艺单号" maxlength="64" style="width:140px;">
+    <input type="text" name="batch_keyword" value="{{ batch_keyword }}"
+         placeholder="批次号/产品名称" maxlength="50">
+  <input type="text" name="performance_plan_no" value="{{ performance_plan_no }}"
+         placeholder="业绩单/计划单号" maxlength="64" style="width:140px;">
 
   <select name="factory_id">
     <option value="">-- 全部加工厂 --</option>
@@ -23,6 +20,20 @@
       </option>
     {% endfor %}
   </select>
+
+  <select name="status">
+    <option value="">-- 全部状态 --</option>
+    {% for code, label in status_labels.items() %}
+      <option value="{{ code }}"
+        {% if status == code %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+
+  <label style="font-size:12px;color:#666;">
+    下单时间从 <input type="date" name="date_from" value="{{ date_from }}">
+    到 <input type="date" name="date_to" value="{{ date_to }}">
+  </label>
+
   <button type="submit" class="btn btn-primary">查询</button>
   <a class="btn" href="{{ url_for('process_order.list_page') }}">重置</a>
   {% if has_permission('process_order.create') %}
@@ -216,11 +227,15 @@
   <span>共 {{ total }} 条，第 {{ page }}/{{ total_pages }} 页</span>
   {% if page > 1 %}
     <a class="btn" href="{{ url_for('process_order.list_page',
-         keyword=keyword, status=status, factory_id=factory_id, page=page-1) }}">上一页</a>
+         order_no=order_no, batch_keyword=batch_keyword,
+         performance_plan_no=performance_plan_no, status=status, factory_id=factory_id,
+         date_from=date_from, date_to=date_to, page=page-1) }}">上一页</a>
   {% endif %}
   {% if page < total_pages %}
     <a class="btn" href="{{ url_for('process_order.list_page',
-         keyword=keyword, status=status, factory_id=factory_id, page=page+1) }}">下一页</a>
+         order_no=order_no, batch_keyword=batch_keyword,
+         performance_plan_no=performance_plan_no, status=status, factory_id=factory_id,
+         date_from=date_from, date_to=date_to, page=page+1) }}">下一页</a>
   {% endif %}
 </div>
 

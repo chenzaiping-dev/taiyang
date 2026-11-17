@@ -25,3 +25,11 @@ def util_parse_date(s):
         return datetime.strptime(s, "%Y-%m-%d")
     except ValueError:
         return None
+
+def util_parse_date_end(s):
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s, "%Y-%m-%d") + timedelta(days=1)
+    except ValueError:
+        return None
