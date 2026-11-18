@@ -16,6 +16,36 @@ from app.generated.models.process_orders import ProcessOrder
 from app.utils.decimal_utils import _q3, _q6
 
 
+def _infer_source_entry(row: dict) -> str:
+    doc_no = row.get("document_no") or ""
+    doc_type = row.get("document_type") or ""
+    remark = row.get("document_remark") or ""
+    print(remark)
+
+    if "[PROCESS_ORDER_CANCEL]" in remark:
+        return "取消工艺单"
+    if "[PROCESS_ORDER_PLACE]" in remark:
+        return "工艺下单领料"
+    if "[MATERIAL_ADJUST_RED]" in remark:
+        return "配比调整红冲"
+    if "[MATERIAL_ADJUST_BLUE]" in remark:
+        return "配比调整蓝补"
+    if "[INVENTORY_REVERSE]" in remark:
+        return "撤销"
+    if doc_type == "PURCHASE_IN":
+        return "原料入库页"
+    if doc_type == "RETURN":
+        return "原料退货"
+    if doc_type == "STOCKTAKE":
+        return "原料盘点"
+    if doc_type == "PRODUCTION_OUT":
+        return "原料出库页"
+    if doc_type == "OUT_REVERSE":
+        return "出库撤销"
+    if doc_type == "IN_REVERSE":
+        return "入库撤销"
+    return "未知入口"
+
 class InventoryQueryService:
 
     @staticmethod
@@ -396,7 +426,7 @@ class InventoryQueryService:
         return rows, total
 
     @staticmethod
-    def query_material_transactions(
+    def list_transactions(
         material_code: str = None,
         warehouse_id: int = None,
         transaction_type: str = None,
@@ -437,6 +467,7 @@ class InventoryQueryService:
                 Supplier.name.label("supplier_name"),
                 ProcessOrder.id.label("process_order_id"),
                 ProcessOrder.process_order_no,
+                creator.real_name.label("creator_name"),
             )
             .join(Material, Material.id == InventoryTransaction.material_id)
             .join(Warehouse, Warehouse.id == InventoryTransaction.warehouse_id)
@@ -447,6 +478,9 @@ class InventoryQueryService:
             .join(ProcessOrder,
                   ProcessOrder.id == InventoryTransaction.process_order_id,
                   isouter=True)
+            .join(creator,
+                  creator.id == InventoryDocument.created_by,
+                  isouter=True)                     # 制单人为空允许
             .order_by(InventoryTransaction.transaction_time.desc(),
                       InventoryTransaction.id.desc())
         )
@@ -484,6 +518,10 @@ class InventoryQueryService:
 
         stmt = stmt.offset((page - 1) * page_size).limit(page_size)
         rows = [dict(r) for r in db.session.execute(stmt).mappings().all()]
+
+        # ⭐ 在 Python 里推断"操作入口"
+        for r in rows:
+            r["source_entry"] = _infer_source_entry(r)
         return rows, total
 
     @staticmethod

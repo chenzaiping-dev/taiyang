@@ -597,6 +597,7 @@ class StockOutService:
         doc = db.session.query(InventoryDocument).filter_by(id=document_id).with_for_update().first()
         if not doc:
             raise InventoryError("单据不存在")
+        # 这里不需要判断撤销单，因为生产工艺单可能调整过配比，如果取消工艺单触发的撤销，走ADJUSTMENT_RED
         if doc.document_type not in (
             "PRODUCTION_OUT", "STOCKTAKE", "RETURN", "ADJUSTMENT_RED", "ADJUSTMENT_BLUE"
         ):
@@ -791,7 +792,7 @@ class StockOutService:
             document_time=doc_time,
             status="CONFIRMED",
             remark=(
-                f"[PROCESS_ORDER_CANCEL] 取消工艺单 {order.process_order_no} "
+                f"[PROCESS_ORDER_CANCEL] {order.process_order_no} 取消工艺单"
                 f"冲销原料出库" + (f" · {reason}" if reason else "")
             ),
             created_at=doc_time,
@@ -956,7 +957,7 @@ class InventoryDocumentReverseService:
         if (
             doc.document_type in ("ADJUSTMENT_RED", "ADJUSTMENT_BLUE")
             or "[MATERIAL_ADJUST_RED]" in remark_text
-            or "[MATERIAL_ADJUST_ADD]" in remark_text
+            or "[MATERIAL_ADJUST_BLUE]" in remark_text
             or "[PROCESS_ORDER_CANCEL]" in remark_text
         ):
             raise InventoryError("工艺单配比红冲/蓝补单及工艺单取消产生的红冲单不允许撤销")

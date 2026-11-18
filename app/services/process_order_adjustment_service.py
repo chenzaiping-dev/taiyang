@@ -450,7 +450,7 @@ class ProcessOrderAdjustmentService:
             document_no=doc_no,
             document_time=doc_time,
             process_order_id=order.id,
-            remark=f"[MATERIAL_ADJUST_ADD] {order.process_order_no} 配比增加补充出库",
+            remark=f"[MATERIAL_ADJUST_BLUE] {order.process_order_no} 配比增加蓝补",
             auto_confirm=True,
             allow_partial=False,
             commit=False,

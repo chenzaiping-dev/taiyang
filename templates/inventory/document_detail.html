@@ -186,12 +186,11 @@
           <tr>
             <td></td>
             <td colspan="7" style="padding:4px 12px;background:#fafafa;font-size:12px;">
-              <strong>{{ '原成本层回补：' if l.transaction_type == 'OUT_REVERSE' else '成本分配：' }}</strong>
+              <strong>{{ '原成本层回补：' if l.transaction_type == 'OUT_REVERSE' or l.transaction_type == 'ADJUSTMENT_RED' else '成本分配：' }}</strong>
               {% for a in allocs %}
                 <div style="margin:2px 0;color:#555;">
                   层#{{ a.cost_layer_id }}
-                  （{{ {'PURCHASE':'采购','STOCKTAKE_RESET':'盘点重置','RETURN':'退货'}
-                       .get(a.layer_type, a.layer_type) }}，
+                  （{{ layer_type_labels.get(a.layer_type, a.layer_type) }}，
                   {{ a.effective_time.strftime("%Y-%m-%d")
                      if a.effective_time else "-" }}）：
                   {% if can_view_inventory_cost() %}{{ a.quantity|abs }} × {{ a.unit_cost }}
@@ -214,8 +213,7 @@
               {% for layer in layers %}
                 <div style="margin:2px 0;color:#555;">
                   层#{{ layer.layer_id }}
-                  （{{ {'PURCHASE':'采购','STOCKTAKE_RESET':'盘点重置','RETURN':'退货'}
-                       .get(layer.layer_type, layer.layer_type) }}，
+                  （{{ layer_type_labels.get(layer.layer_type, layer.layer_type) }}，
                   {{ layer.effective_time.strftime("%Y-%m-%d")
                      if layer.effective_time else "-" }}）：
                   {% if can_view_inventory_cost() %}{{ layer.original_qty }} × {{ layer.unit_cost }}

@@ -80,7 +80,7 @@ def material_stock_layers(params):
 
 def material_transactions(params):
     page, page_size = _pagination(params)
-    return InventoryQueryService.query_material_transactions(
+    return InventoryQueryService.list_transactions(
         material_code=(params.get("material_code") or "").strip() or None,
         warehouse_id=_positive_int(params.get("warehouse_id")),
         transaction_type=(params.get("transaction_type") or "").strip() or None,

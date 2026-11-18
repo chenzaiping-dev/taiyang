@@ -94,9 +94,7 @@
         {% endif %}
         <td>
           <span class="layer-badge layer-{{ r.layer_type|lower }}">
-            {{ {'PURCHASE':'采购',
-                'STOCKTAKE_RESET':'盘点重置',
-                'RETURN':'退货'}.get(r.layer_type, r.layer_type) }}
+            {{ layer_type_labels.get(r.layer_type, r.layer_type) }}
           </span>
         </td>
         <td>{{ r.effective_time.strftime("%Y-%m-%d %H:%M:%S")

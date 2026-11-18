@@ -19,16 +19,18 @@ def _infer_source_entry(row: dict) -> str:
     doc_no = row.get("document_no") or ""
     doc_type = row.get("document_type") or ""
     remark = row.get("document_remark") or ""
-    print(remark)
+    #print(remark)
 
     if "[PROCESS_ORDER_RECEIVE]" in remark:
         return "工艺单入库"
     if "[SHIP_PLAN_OUTBOUND]" in remark:
         return "发货计划出库"
-    if "[CANCEL_PROCESS_ORDER]" in remark:
+    if "[PROCESS_ORDER_CANCEL]" in remark:
         return "取消工艺单"
-    if "[CANCEL_SHIP_PLAN]" in remark:
+    if "[SHIP_PLAN_CANCEL]" in remark:
         return "取消发货计划"
+    if "[REVERSE]" in remark:
+        return "撤销"
     if doc_type == "PRODUCTION_IN":
         return "成品入库页"
     if doc_type == "RETURN":

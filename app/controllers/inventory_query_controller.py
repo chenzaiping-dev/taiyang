@@ -18,6 +18,54 @@ from app.utils.datetime_utils import util_parse_date, util_parse_date_end
 
 bp = Blueprint("inventory_query", __name__, url_prefix="/inventory")
 
+TRANSACTION_TYPE_LABELS = {
+    "PURCHASE_IN":   "采购入库",
+    "PRODUCTION_OUT": "生产出库",
+    "STOCKTAKE_GAIN": "盘盈入库",
+    "STOCKTAKE_LOSS": "盘亏出库",
+    "RETURN_IN":     "退货入库",
+    "RETURN_OUT":    "退货出库",
+    "ADJUSTMENT_RED": "红冲出库",
+    "ADJUSTMENT_BLUE": "蓝补出库",
+    "IN_REVERSE": "入库撤销",
+    "OUT_REVERSE": "出库撤销",
+}
+
+TRANSACTION_TYPE_DIRECTION = {
+    "PURCHASE_IN":   "in",
+    "PRODUCTION_OUT": "out",
+    "STOCKTAKE_GAIN": "in",
+    "STOCKTAKE_LOSS": "out",
+    "RETURN_IN":     "in",
+    "RETURN_OUT":    "out",
+    "ADJUSTMENT_RED": "out",
+    "ADJUSTMENT_BLUE": "out",
+    "IN_REVERSE": "in",
+    "OUT_REVERSE": "out",
+}
+
+DOC_STATUS_LABELS = {
+    "DRAFT": "草稿",
+    "CONFIRMED": "已确认",
+    "CANCELLED": "已取消",
+}
+
+DOC_TYPE_LABELS = {
+    "PURCHASE_IN": "采购入库单",
+    "PRODUCTION_OUT": "生产出库单",
+    "STOCKTAKE": "盘点单",
+    "RETURN": "退货单",
+    "ADJUSTMENT_RED": "配比调整红冲单",
+    "ADJUSTMENT_BLUE": "配比调整蓝补单",
+    "REVERSE": "原料库存撤销单",
+}
+
+LAYER_TYPE_LABELS = {
+    "PURCHASE": "采购",
+    "STOCKTAKE_RESET": "盘点重置",
+    "RETURN": "退货",
+}
+
 @bp.get("/material-stock")
 def material_stock_page():
     material_code = request.args.get("material_code", "").strip() or None
@@ -139,6 +187,7 @@ def material_stock_with_cost_layers_page():
         group_by_warehouse=group_by_warehouse,
         warehouses=_rm_warehouses(),
         available_materials=available_materials,
+        layer_type_labels=LAYER_TYPE_LABELS,
     )
 
 from datetime import datetime
@@ -177,49 +226,6 @@ def material_io_summary_page():
         current_wh=current_wh,
         warehouses=_rm_warehouses(),
     )
-
-TRANSACTION_TYPE_LABELS = {
-    "PURCHASE_IN":   "采购入库",
-    "PRODUCTION_OUT": "生产出库",
-    "STOCKTAKE_GAIN": "盘盈入库",
-    "STOCKTAKE_LOSS": "盘亏出库",
-    "RETURN_IN":     "退货入库",
-    "RETURN_OUT":    "退货出库",
-    "ADJUSTMENT_RED": "红冲出库",
-    "ADJUSTMENT_BLUE": "蓝补出库",
-    "IN_REVERSE": "入库撤销",
-    "OUT_REVERSE": "出库撤销",
-}
-
-TRANSACTION_TYPE_DIRECTION = {
-    "PURCHASE_IN":   "in",
-    "PRODUCTION_OUT": "out",
-    "STOCKTAKE_GAIN": "in",
-    "STOCKTAKE_LOSS": "out",
-    "RETURN_IN":     "in",
-    "RETURN_OUT":    "out",
-    "ADJUSTMENT_RED": "out",
-    "ADJUSTMENT_BLUE": "out",
-    "IN_REVERSE": "in",
-    "OUT_REVERSE": "out",
-}
-
-DOC_STATUS_LABELS = {
-    "DRAFT": "草稿",
-    "CONFIRMED": "已确认",
-    "CANCELLED": "已取消",
-}
-
-DOC_TYPE_LABELS = {
-    "PURCHASE_IN": "采购入库单",
-    "PRODUCTION_OUT": "生产出库单",
-    "STOCKTAKE": "盘点单",
-    "RETURN": "退货单",
-    "ADJUSTMENT_RED": "配比调整红冲单",
-    "ADJUSTMENT_BLUE": "配比调整蓝补单",
-    "REVERSE": "原料库存撤销单",
-}
-
 
 @bp.get("/material-transactions")
 def material_transactions_page():
@@ -347,6 +353,7 @@ def document_detail_page(direction, document_id):
             doc_type_labels=DOC_TYPE_LABELS,
             status_labels=DOC_STATUS_LABELS,
             transaction_types=TRANSACTION_TYPE_LABELS,
+            layer_type_labels=LAYER_TYPE_LABELS,
             confirm_endpoint=None,
             list_url=url_for("inventory_query.document_list_page",
                              direction=direction),
@@ -410,6 +417,7 @@ def document_detail_page(direction, document_id):
         doc_type_labels=DOC_TYPE_LABELS,
         status_labels=DOC_STATUS_LABELS,
         transaction_types=TRANSACTION_TYPE_LABELS,
+        layer_type_labels=LAYER_TYPE_LABELS,
         confirm_endpoint=confirm_endpoint,
         edit_url=edit_url,
         list_url=url_for("inventory_query.document_list_page",

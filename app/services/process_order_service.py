@@ -207,7 +207,7 @@ class ProcessOrderService:
                 cost=0,
                 remark=it["remark"],
             )
-            print(row)
+            #print(row)
             db.session.add(row)
             rows.append(row)
 
@@ -640,7 +640,8 @@ class ProcessOrderService:
                 document_no=document_no,
                 document_time=doc_time,
                 process_order_id=order.id,
-                remark=remark or f"下单自动领料 - {order.process_order_no}",
+                #remark=remark or f"下单自动领料 - {order.process_order_no}",
+                remark=f"[PROCESS_ORDER_PLACE] {order.process_order_no} 工艺下单领料",
                 auto_confirm=True,
                 allow_partial=allow_partial,
                 commit=False,          # ⭐ 交给外层
@@ -782,7 +783,7 @@ class ProcessOrderService:
                 document_no=f"FG-IN-{order.process_order_no}",  # 幂等单号
                 document_time=now_beijing_naive(),
                 created_by=operator_id,
-                remark=f"[PROCESS_ORDER_RECEIVE] 工艺单入库 {order.process_order_no}",
+                remark=f"[PROCESS_ORDER_RECEIVE] {order.process_order_no} 工艺单生产入库",
                 auto_confirm=True,
                 commit=False,          # ⭐ 交给外层提交
             )
@@ -909,7 +910,7 @@ class ProcessOrderService:
             if old_status == "RECEIVED":
                 fg_reverse_result = FinishedGoodsService.reverse_inbound_by_process_order(
                     order=order,
-                    reason=reason or f"[CANCEL_PROCESS_ORDER] 取消工艺单 {order.process_order_no}",
+                    reason=reason or f"[PROCESS_ORDER_CANCEL] {order.process_order_no} 取消工艺单",
                     created_by=operator_id,
                     commit=False,        # ⭐ 合并事务
                 )
