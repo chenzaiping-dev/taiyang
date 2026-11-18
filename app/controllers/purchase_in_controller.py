@@ -10,7 +10,6 @@ from app.generated.models.warehouses import Warehouse
 from app.generated.models.suppliers import Supplier
 
 from app.generated.models.inventory_documents import InventoryDocument
-from app.generated.models.inventory_transactions import InventoryTransaction
 from app.generated.models.inventory_document_lines import InventoryDocumentLine
 from app.generated.models.inventory_cost_layers import InventoryCostLayer
 

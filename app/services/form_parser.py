@@ -14,12 +14,16 @@ def parse_purchase_in_form(form) -> dict:
         lines[0][quantity]
         lines[0][unit_cost]
     """
+    inbound_type = form.get("inbound_type", "PURCHASE_IN")
     warehouse_id = form.get("warehouse_id", type=int)
     supplier_id = form.get("supplier_id", type=int)
     if not warehouse_id:
         raise FormParseError("请选择仓库")
     if not supplier_id:
         raise FormParseError("请选择供应商")
+
+    if inbound_type not in ("PURCHASE_IN", "STOCKTAKE_GAIN", "RETURN_IN"):
+        raise FormParseError("入库类型非法")
 
     # ---- 收集动态行 ----
     # 通过 material_id 的 key 形式判断行数
@@ -78,7 +82,7 @@ def parse_purchase_in_form(form) -> dict:
     return {
         "warehouse_id": warehouse_id,
         "supplier_id": supplier_id,
-        "inbound_type": form.get("inbound_type", "PURCHASE_IN"),   # ⭐
+        "inbound_type": inbound_type,
         "document_time": form.get("document_time") or None,
         "remark": form.get("remark") or None,
         "auto_confirm": form.get("auto_confirm") == "on",
@@ -88,7 +92,8 @@ def parse_purchase_in_form(form) -> dict:
 def parse_stock_out_form(form) -> dict:
     """解析按行指定仓库的原料出库表格。"""
     outbound_type = form.get("outbound_type", "PRODUCTION_OUT")
-    if outbound_type not in ("PRODUCTION_OUT", "STOCKTAKE_LOSS", "RETURN_OUT", "OUT_REVERSE", "IN_REVERSE"):
+    # "OUT_REVERSE", "IN_REVERSE"
+    if outbound_type not in ("PRODUCTION_OUT", "STOCKTAKE_LOSS", "RETURN_OUT"):
         raise FormParseError("出库类型非法")
 
     line_indexes = set()

@@ -24,14 +24,16 @@ INBOUND_TYPE_LABELS = {
     "PURCHASE_IN":   "采购入库",
     "STOCKTAKE_GAIN": "盘点盘盈",
     "RETURN_IN":     "退货回仓",
+    "IN_REVERSE":    "入库撤销",   # ⭐ delta 负
 }
 
 OUTBOUND_TYPE_LABELS = {
     "PRODUCTION_OUT":  "生产领料",
     "STOCKTAKE_LOSS":  "盘亏出库",
     "RETURN_OUT":      "退货出库",
-    "ADJUSTMENT_RED":  "配比红冲出库",
+    "ADJUSTMENT_RED":  "配比红冲出库", # ⭐ delta 正
     "ADJUSTMENT_BLUE": "配比蓝补出库",
+    "OUT_REVERSE":     "出库撤销",   # ⭐ delta 正
 }
 
 doc_type_map = {
@@ -43,6 +45,8 @@ doc_type_map = {
     "RETURN_OUT":       "RETURN",
     "ADJUSTMENT_RED":   "ADJUSTMENT_RED",
     "ADJUSTMENT_BLUE":  "ADJUSTMENT_BLUE",
+    "OUT_REVERSE": "REVERSE",     # ⭐ 新增
+    "IN_REVERSE": "REVERSE",   # ⭐ 新增
 }
 
 tx_type_map = {
@@ -54,6 +58,8 @@ tx_type_map = {
     "RETURN_OUT":       "RETURN_OUT",
     "ADJUSTMENT_RED":   "ADJUSTMENT_RED",
     "ADJUSTMENT_BLUE":  "ADJUSTMENT_BLUE",
+    "IN_REVERSE":       "IN_REVERSE",
+    "OUT_REVERSE":      "OUT_REVERSE",
 }
 
 prefix_map = {
