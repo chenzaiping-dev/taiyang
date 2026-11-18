@@ -893,7 +893,13 @@ class ProcessOrderService:
         - COMPLETED / CANCELLED      → 拒绝
         整体单事务：任一冲销失败全部回滚。
         """
-        order = db.session.get(ProcessOrder, order_id)
+        # 与配比调整使用同一把工艺单行锁，避免取消和红冲/蓝补并发修改 FIFO allocation。
+        order = (
+            db.session.query(ProcessOrder)
+            .filter_by(id=order_id)
+            .with_for_update()
+            .first()
+        )
         if not order:
             raise ProcessOrderError("工艺单不存在")
         if order.status in ("COMPLETED", "CANCELLED"):

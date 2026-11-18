@@ -11,13 +11,13 @@ from app.generated.models.materials import Material
 from app.generated.models.inventory_documents import InventoryDocument
 from app.generated.models.inventory_document_lines import InventoryDocumentLine
 from app.generated.models.inventory_transactions import InventoryTransaction
-from app.generated.models.inventory_cost_layers import InventoryCostLayer
 from app.generated.models.inventory_cost_allocations import InventoryCostAllocation
 from app.generated.models.process_order_material_adjustments import (
     ProcessOrderMaterialAdjustment,
 )
 from app.services.inventory_service import (
-    StockOutService, InventoryError, generate_document_no_new
+    StockOutService, InventoryError, generate_document_no_new,
+    FifoAllocationReversalService,
 )
 
 class ProcessOrderAdjustmentError(Exception):
@@ -45,7 +45,13 @@ class ProcessOrderAdjustmentService:
           6. 写 process_order_material_adjustments 记录调整快照
           7. 一次 commit
         """
-        order = db.session.get(ProcessOrder, order_id)
+        # 配比调整与工艺单取消必须串行；否则两次调整可能基于同一旧配比重复红冲。
+        order = (
+            db.session.query(ProcessOrder)
+            .filter_by(id=order_id)
+            .with_for_update()
+            .first()
+        )
         if not order:
             raise ProcessOrderAdjustmentError("工艺单不存在")
         if order.status not in ("ORDERED", "PRODUCING", "COMPLETED", "RECEIVED"):
@@ -324,7 +330,8 @@ class ProcessOrderAdjustmentService:
                     db.session.query(func.coalesce(
                         func.sum(InventoryCostAllocation.quantity), 0))
                     .filter(
-                        InventoryCostAllocation.out_transaction_id == orig_tx.id
+                        InventoryCostAllocation.out_transaction_id == orig_tx.id,
+                        InventoryCostAllocation.quantity > 0,
                     )
                     .scalar()
                 ) or Decimal("0")
@@ -383,47 +390,24 @@ class ProcessOrderAdjustmentService:
 
     @staticmethod
     def _reverse_allocation(orig_tx_id: int, reverse_qty: Decimal, new_tx_id: int):
-        """按原 allocation 逆序（LIFO）归还"""
-        allocs = (
-            InventoryCostAllocation.query
-            .filter_by(out_transaction_id=orig_tx_id)
-            .order_by(InventoryCostAllocation.id.desc())
-            .with_for_update()
-            .all()
-        )
-        need = reverse_qty
-        total_cost = Decimal("0")
-        for alloc in allocs:
-            if need <= 0:
-                break
-            layer = db.session.get(InventoryCostLayer, alloc.cost_layer_id)
-            if not layer:
-                continue
-            give = min(alloc.quantity, need)
-            cost = _q6(give * alloc.unit_cost)
-            # 成本层归还
-            layer.remaining_qty = layer.remaining_qty + give
-            # 记录红冲 allocation（负数）
-            db.session.add(InventoryCostAllocation(
-                out_transaction_id=new_tx_id,
-                cost_layer_id=layer.id,
-                quantity=-give,          # ⭐ 负数（需放宽 CHECK）
-                unit_cost=alloc.unit_cost,
-                cost_amount=-cost,       # ⭐ 负数（需放宽 CHECK）
-                created_at=now_beijing_naive(),
-            ))
-            # 原 allocation 数量也同步减少（保持净额准确）
-            alloc.quantity -= give
-            alloc.cost_amount = _q6(alloc.quantity * alloc.unit_cost)
-            if alloc.quantity <= 0:
-                db.session.delete(alloc)
+        """
+        配比减少时，按原消耗流水的现存正 allocation 逆序回补。
+        具体 FIFO 成本层恢复、原 allocation 扣减及负 allocation 留痕，
+        统一交给 FifoAllocationReversalService，避免与工艺单取消/单据撤销分叉。
+        """
+        source_tx = db.session.get(InventoryTransaction, orig_tx_id)
+        reverse_tx = db.session.get(InventoryTransaction, new_tx_id)
+        if not source_tx or not reverse_tx:
+            raise ProcessOrderAdjustmentError("找不到原出库流水或红冲流水")
 
-            need -= give
-            total_cost += cost
-        if need > 0:
-            raise ProcessOrderAdjustmentError(
-                f"无法完整归还 {reverse_qty}，还差 {need}")
-        return {"total_cost": total_cost}
+        result = FifoAllocationReversalService.reverse_allocations(
+            source_transactions=[source_tx],
+            reverse_transaction=reverse_tx,
+            quantity=reverse_qty,
+            now=now_beijing_naive(),
+            error_cls=ProcessOrderAdjustmentError,
+        )
+        return {"total_cost": result["total_cost"]}
 
     @staticmethod
     def _create_consume_in(order, consume_items, adjust_no, operator_id, reason):

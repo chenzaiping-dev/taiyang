@@ -118,6 +118,142 @@ def _save_document_line(document_id, line_no, material_id, quantity,
     return line
 
 
+class FifoAllocationReversalService:
+    """
+    FIFO 出库分配的统一回补器。
+
+    所有“退回原料成本层”的业务都必须经过这里：
+    - 普通出库单撤销
+    - 工艺单取消
+    - 工艺单配比减少（红冲）
+
+    重要约束：
+    1. 只回补源出库流水上仍为正数的 allocation。历史红冲已扣减的数量不会重复回补。
+    2. 按调用方提供的源流水顺序、以及每条流水 allocation.id 倒序（LIFO）回补。
+    3. 直接恢复原 cost_layer，不重新执行 FIFO。
+    4. 源 allocation 减少，反向流水写负 allocation，保证后续多次配比调整可计算“净未撤销消耗量”。
+    """
+
+    @staticmethod
+    def reverse_allocations(
+        source_transactions,
+        reverse_transaction,
+        quantity=None,
+        now=None,
+        error_cls=InventoryError,
+    ) -> dict:
+        if not reverse_transaction or not reverse_transaction.id:
+            raise error_cls("回补成本层前必须先创建并 flush 反向库存流水")
+
+        now = now or now_beijing_naive()
+        remaining = None if quantity is None else _q6(quantity)
+        if remaining is not None and remaining <= 0:
+            raise error_cls("成本层回补数量必须大于 0")
+
+        restored_qty = Decimal("0")
+        restored_cost = Decimal("0")
+
+        for source_tx in source_transactions:
+            if remaining is not None and remaining <= 0:
+                break
+
+            allocs = (
+                InventoryCostAllocation.query
+                .filter(
+                    InventoryCostAllocation.out_transaction_id == source_tx.id,
+                    InventoryCostAllocation.quantity > 0,
+                )
+                .order_by(InventoryCostAllocation.id.desc())
+                .with_for_update()
+                .all()
+            )
+
+            for alloc in allocs:
+                if remaining is not None and remaining <= 0:
+                    break
+
+                available = _q6(alloc.quantity)
+                if available <= 0:
+                    continue
+                give = available if remaining is None else min(available, remaining)
+                if give <= 0:
+                    continue
+
+                layer = (
+                    db.session.query(InventoryCostLayer)
+                    .filter_by(id=alloc.cost_layer_id)
+                    .with_for_update()
+                    .first()
+                )
+                if not layer:
+                    raise error_cls(
+                        f"源出库流水 #{source_tx.id} 的 FIFO 成本层 "
+                        f"#{alloc.cost_layer_id} 不存在，无法回补"
+                    )
+
+                new_remaining = _q6(layer.remaining_qty) + give
+                if new_remaining > _q6(layer.original_qty):
+                    raise error_cls(
+                        f"成本层 #{layer.id} 回补后数量将超过初始数量，"
+                        "可能存在重复回补或库存成本数据不一致"
+                    )
+
+                unit_cost = _q6_amount(alloc.unit_cost)
+                cost = _q6_amount(give * unit_cost)
+
+                # 恢复原始成本层，而不是重新按 FIFO 选择成本层。
+                layer.remaining_qty = new_remaining
+
+                # 源 allocation 只保留尚未被红冲/撤销的净消耗量。
+                new_source_qty = _q6(alloc.quantity) - give
+                alloc.quantity = new_source_qty
+                alloc.cost_amount = _q6_amount(new_source_qty * unit_cost)
+                if new_source_qty <= 0:
+                    db.session.delete(alloc)
+
+                # 反向流水使用负 allocation，建立“回补到哪个成本层”的审计关系。
+                reverse_alloc = (
+                    InventoryCostAllocation.query
+                    .filter_by(
+                        out_transaction_id=reverse_transaction.id,
+                        cost_layer_id=layer.id,
+                    )
+                    .with_for_update()
+                    .first()
+                )
+                if reverse_alloc:
+                    reverse_alloc.quantity = _q6(reverse_alloc.quantity) - give
+                    reverse_alloc.cost_amount = _q6_amount(
+                        reverse_alloc.cost_amount - cost
+                    )
+                else:
+                    db.session.add(InventoryCostAllocation(
+                        out_transaction_id=reverse_transaction.id,
+                        cost_layer_id=layer.id,
+                        quantity=-give,
+                        unit_cost=unit_cost,
+                        cost_amount=-cost,
+                        created_at=now,
+                    ))
+
+                restored_qty += give
+                restored_cost += cost
+                if remaining is not None:
+                    remaining -= give
+
+        if remaining is not None and remaining > 0:
+            raise error_cls(f"原出库可回补数量不足，还差 {remaining}")
+
+        return {
+            "quantity": _q6(restored_qty),
+            "total_cost": _q6_amount(restored_cost),
+            "unit_cost": (
+                _q6_amount(restored_cost / restored_qty)
+                if restored_qty > 0 else None
+            ),
+        }
+
+
 class PurchaseInService:
     """原料入库单：草稿只写 inventory_document_lines，确认后生成流水和 FIFO 成本层。"""
 
@@ -717,10 +853,12 @@ class StockOutService:
     ) -> dict | None:
         """
         冲销某工艺单的全部原料出库消耗（用于取消工艺单）。
-        口径：按正向消耗流水上【现存】的 InventoryCostAllocation 汇总需归还量，
-        而不是按流水 quantity_delta 累计——已红冲的部分已被 ADJUSTMENT_RED 抵消，
-        其 allocation 也已在 _reverse_allocation 中删除/减少，不应再次计入。
-        返回：{document_id, document_no, reversed_qty}；无可冲销量返回 None。
+        口径：按正向消耗流水上【现存正数】的 InventoryCostAllocation 汇总需归还量，
+        而不是按 quantity_delta 累计。配比调整可能多次红冲/蓝补，源 allocation 已被逐次扣减；
+        这里只冲销仍未被历史红冲抵消的净消耗量，避免重复回补成本层。
+        无任何正向出库流水返回 None；有历史流水但 allocation 已全部红冲时返回
+        already_reversed=True（不生成零数量单据），让上层可安全完成工艺单取消。
+        返回：{document_id, document_no, reversed_qty, already_reversed?}。
         """
         wh_filter = []
         if getattr(order, "material_warehouse_id", None):
@@ -750,7 +888,7 @@ class StockOutService:
             return None
 
         tx_ids = [tx.id for tx in consume_txs]
-        #print("reverse_by_process_order, 定位allocation的tx_ids:", tx_ids)
+        print("reverse_by_process_order, 定位allocation的tx_ids:", tx_ids)
 
         # ⭐ 按 (material, warehouse) 汇总现存 allocation（quantity > 0）作为需归还量
         alloc_rows = (
@@ -783,7 +921,16 @@ class StockOutService:
             if (r.need_qty or 0) > 0
         }
         if not need_map:
-            return None
+            # 有历史正向出库流水，但所有有效 allocation 已被配比调整红冲。
+            # 这不是“找不到原领料流水”，取消工艺单时无需再生成一张零数量红冲单。
+            # 返回非 None 结果，允许上层继续取消工艺单。
+            return {
+                "document_id": None,
+                "document_no": None,
+                "reversed_qty": "0",
+                "already_reversed": True,
+                "source_transaction_count": len(consume_txs),
+            }
 
         doc_no = generate_document_no_new("ADJUSTMENT_RED")
         doc_time = now_beijing_naive()
@@ -806,7 +953,7 @@ class StockOutService:
 
         next_line_no = 1
         reversed_qty = Decimal("0")
-        #print("reverse_by_process_order, need_map:", need_map)
+        print("reverse_by_process_order, need_map:", need_map)
 
         for (mid, wh_id), need in need_map.items():
             # 该 (material, warehouse) 下的源流水，从新到旧归还
@@ -851,67 +998,14 @@ class StockOutService:
                 unit_cost=None, remark="工艺单取消红冲",
             )
 
-            remain = need
-            recovered = Decimal("0")
-
-            for src in src_txs:
-                if remain <= 0:
-                    break
-                allocs = (
-                    InventoryCostAllocation.query
-                    .filter_by(out_transaction_id=src.id)
-                    .order_by(InventoryCostAllocation.id.desc())
-                    .with_for_update()
-                    .all()
-                )
-                for alloc in allocs:
-                    if remain <= 0:
-                        break
-                    if alloc.quantity <= 0:
-                        continue
-                    layer = db.session.get(InventoryCostLayer, alloc.cost_layer_id)
-                    if not layer:
-                        continue
-                    give = min(alloc.quantity, remain)
-                    if give <= 0:
-                        continue
-
-                    cost = _q6_amount(give * alloc.unit_cost)
-                    layer.remaining_qty = layer.remaining_qty + give
-
-                    existing = InventoryCostAllocation.query.filter_by(
-                        out_transaction_id=new_tx.id,
-                        cost_layer_id=layer.id,
-                    ).first()
-                    if existing:
-                        existing.quantity = existing.quantity - give
-                        existing.cost_amount = _q6_amount(
-                            existing.cost_amount - cost
-                        )
-                    else:
-                        db.session.add(InventoryCostAllocation(
-                            out_transaction_id=new_tx.id,
-                            cost_layer_id=layer.id,
-                            quantity=-give,
-                            unit_cost=alloc.unit_cost,
-                            cost_amount=-cost,
-                            created_at=doc_time,
-                        ))
-
-                    alloc.quantity -= give
-                    alloc.cost_amount = _q6_amount(alloc.quantity * alloc.unit_cost)
-                    if alloc.quantity <= 0:
-                        db.session.delete(alloc)
-
-                    remain -= give
-                    recovered += cost
-
-            if remain > 0:
-                # 理论上不会发生：need 由现存 allocation 汇总而来
-                raise InventoryError(
-                    f"原料 {mid} 在仓库 {wh_id} 可红冲数量不足，还差 {remain}"
-                )
-
+            result = FifoAllocationReversalService.reverse_allocations(
+                source_transactions=src_txs,
+                reverse_transaction=new_tx,
+                quantity=need,
+                now=doc_time,
+                error_cls=InventoryError,
+            )
+            recovered = result["total_cost"]
             new_tx.total_cost = -_q6_amount(recovered)
             new_tx.unit_cost = (
                 _q6_amount(recovered / need) if need > 0 else None
@@ -1141,23 +1235,25 @@ class InventoryDocumentReverseService:
                     total_reversed_cost += cost
 
             else:
-                # 撤销原出库：按原出库的正向 allocation 回补到原成本层，绝不重新 FIFO。
+                # 撤销原出库：只回补该原单尚未被历史红冲抵消的 allocation。
+                # 工艺单领料单本身会被上层规则禁止单独撤销；这里处理普通出库单。
                 for source_tx in txs:
-                    allocs = (
-                        InventoryCostAllocation.query
-                        .filter_by(out_transaction_id=source_tx.id)
-                        .order_by(InventoryCostAllocation.id.desc())
-                        .with_for_update()
-                        .all()
-                    )
-                    positive_allocs = [a for a in allocs if _q6(a.quantity) > 0]
-                    qty = sum((_q6(a.quantity) for a in positive_allocs), Decimal("0"))
+                    positive_qty = (
+                        db.session.query(
+                            func.coalesce(func.sum(InventoryCostAllocation.quantity), 0)
+                        )
+                        .filter(
+                            InventoryCostAllocation.out_transaction_id == source_tx.id,
+                            InventoryCostAllocation.quantity > 0,
+                        )
+                        .scalar()
+                    ) or Decimal("0")
+                    qty = _q6(positive_qty)
                     if qty <= 0:
                         raise InventoryError(
                             f"出库流水 #{source_tx.id} 没有可回补的成本层数量"
                         )
 
-                    recovered_cost = Decimal("0")
                     reverse_tx = InventoryTransaction(
                         document_id=reverse_doc.id,
                         line_no=next_line_no,
@@ -1183,51 +1279,17 @@ class InventoryDocumentReverseService:
                     )
                     next_line_no += 1
 
-                    for alloc in positive_allocs:
-                        layer = (
-                            db.session.query(InventoryCostLayer)
-                            .filter_by(id=alloc.cost_layer_id)
-                            .with_for_update()
-                            .first()
-                        )
-                        if not layer:
-                            raise InventoryError(
-                                f"原成本层 #{alloc.cost_layer_id} 不存在，无法回补"
-                            )
-                        give = _q6(alloc.quantity)
-                        cost = _q6_amount(alloc.cost_amount)
-
-                        # 恢复原成本层剩余数量，不重新走 FIFO。
-                        restored_qty = _q6(layer.remaining_qty + give)
-                        if restored_qty > _q6(layer.original_qty):
-                            raise InventoryError(
-                                f"成本层 #{layer.id} 回补后数量将超过初始数量，已停止撤销"
-                            )
-                        layer.remaining_qty = restored_qty
-
-                        # 原 allocation 减少；撤销流水写入负 allocation，保留可审计的回补关系。
-                        allocation_unit_cost = _q6_amount(alloc.unit_cost)
-                        alloc.quantity = _q6(alloc.quantity - give)
-                        alloc.cost_amount = _q6_amount(alloc.quantity * allocation_unit_cost)
-                        if alloc.quantity <= 0:
-                            db.session.delete(alloc)
-
-                        db.session.add(InventoryCostAllocation(
-                            out_transaction_id=reverse_tx.id,
-                            cost_layer_id=layer.id,
-                            quantity=-give,
-                            unit_cost=allocation_unit_cost,
-                            cost_amount=-cost,
-                            created_at=now,
-                        ))
-                        recovered_cost += cost
-
-                    reverse_tx.unit_cost = (
-                        _q6_amount(recovered_cost / qty) if qty > 0 else None
+                    result = FifoAllocationReversalService.reverse_allocations(
+                        source_transactions=[source_tx],
+                        reverse_transaction=reverse_tx,
+                        quantity=qty,
+                        now=now,
+                        error_cls=InventoryError,
                     )
-                    reverse_tx.total_cost = -_q6_amount(recovered_cost)
-                    total_reversed_qty += qty
-                    total_reversed_cost += recovered_cost
+                    reverse_tx.unit_cost = result["unit_cost"]
+                    reverse_tx.total_cost = -result["total_cost"]
+                    total_reversed_qty += result["quantity"]
+                    total_reversed_cost += result["total_cost"]
 
             if commit:
                 db.session.commit()
