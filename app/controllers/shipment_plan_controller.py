@@ -6,6 +6,7 @@ from flask import (
 from app.extensions import db
 from app.services.draft_delete_service import DraftDeleteService, DraftDeleteError
 from app.generated.models.sales_performance import SalesPerformance
+from app.generated.models.warehouses import Warehouse
 
 from app.services.shipment_plan_service import ShipmentPlanService, ShipmentPlanError
 from app.services.permission_service import can_edit_shipment_money
@@ -223,12 +224,14 @@ def update_submit(plan_id):
 def list_page():
     keyword = request.args.get("keyword", "").strip() or None
     status = request.args.get("status", "").strip() or None
+    performance_id = request.args.get("performance_id", "").strip() or None
     performance_no = request.args.get("performance_no", "").strip() or None
     company_name = request.args.get("company_name", "").strip() or None
     product_name = request.args.get("product_name", "").strip() or None
     ship_time_from_raw = request.args.get("ship_time_from", "").strip() or None
     ship_time_to_raw = request.args.get("ship_time_to", "").strip() or None
 
+    # ⭐ 支持两种输入：数字 → 直接当 ID；非数字 → 按业绩单号反查
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 20
     rows, total = run_query("shipment_plans", request.args, page=page, page_size=page_size)
@@ -240,12 +243,56 @@ def list_page():
         page_size=page_size, total_pages=total_pages,
         keyword=keyword or "",
         status=status or "",
+        performance_id=performance_id or "",
         performance_no=performance_no or "",
         company_name=company_name or "",
         product_name=product_name or "",
         ship_time_from=ship_time_from_raw or "",
         ship_time_to=ship_time_to_raw or "",
         status_labels=SP_STATUS_LABELS,
+    )
+
+
+# ==================== 发货计划明细列表 ====================
+@bp.get("/details/")
+def detail_list_page():
+    keyword = request.args.get("keyword", "").strip()
+    status = request.args.get("status", "").strip()
+    performance_no = request.args.get("performance_no", "").strip()
+    company_name = request.args.get("company_name", "").strip()
+    product_name = request.args.get("product_name", "").strip()
+    warehouse_id = request.args.get("warehouse_id", "").strip()
+    batch_keyword = request.args.get("batch_keyword", "").strip()
+    ship_time_from = request.args.get("ship_time_from", "").strip()
+    ship_time_to = request.args.get("ship_time_to", "").strip()
+
+    page = max(request.args.get("page", 1, type=int) or 1, 1)
+    page_size = 20
+    rows, total = run_query(
+        "shipment_plan_details", request.args, page=page, page_size=page_size
+    )
+    total_pages = max((total + page_size - 1) // page_size, 1)
+    detail_status_labels = {
+        key: value for key, value in SP_STATUS_LABELS.items() if key != "DRAFT"
+    }
+    warehouses = (
+        db.session.query(Warehouse.id, Warehouse.warehouse_name)
+        .filter(
+            Warehouse.status == 1,
+            Warehouse.warehouse_type.in_(["finished_goods", "general"]),
+        )
+        .order_by(Warehouse.warehouse_code)
+        .all()
+    )
+    return render_template(
+        "shipment_plan/detail_list.html",
+        rows=rows, total=total, page=page, page_size=page_size,
+        total_pages=total_pages, keyword=keyword, status=status,
+        performance_no=performance_no, company_name=company_name,
+        product_name=product_name, warehouse_id=warehouse_id,
+        batch_keyword=batch_keyword, ship_time_from=ship_time_from,
+        ship_time_to=ship_time_to, status_labels=detail_status_labels,
+        warehouses=warehouses,
     )
 
 

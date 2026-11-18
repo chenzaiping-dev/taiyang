@@ -16,6 +16,7 @@ CONFIG = {
     "finished-goods-warehouses": ("finished_goods_stock", "成品库库存"),
     "finished-goods-transactions": ("finished_goods_transactions", "成品库流水"),
     "shipment-plans": ("shipment_plans", "发货计划"),
+    "shipment-plan-details": ("shipment_plan_details", "发货计划明细"),
     "sales-performances": ("sales_performances", "业绩单"),
 }
 

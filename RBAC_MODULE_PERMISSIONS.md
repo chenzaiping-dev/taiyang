@@ -89,3 +89,8 @@ SOURCE migrations/20261115_draft_delete_permissions.sql;
 - `ADJUSTMENT_RED` / `ADJUSTMENT_BLUE` 不允许撤销，包含工艺单配比调整及工艺单取消产生的红冲单。
 - 撤销通过 `REVERSE` 反向单据及 `IN_REVERSE` / `OUT_REVERSE` 流水实现，原单和原成本层均保留。
 - 新权限不会自动授予普通角色；需在角色权限管理中按需授权。
+
+
+### 发货计划明细列表
+
+发货计划列表、发货计划明细列表及其 Excel 导出统一使用 `shipment.view` 权限；明细列表不额外引入权限编码。

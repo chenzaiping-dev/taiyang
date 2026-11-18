@@ -16,6 +16,7 @@
 | 成品库库存 | `/exports/finished-goods-warehouses.xlsx` |
 | 成品库流水 | `/exports/finished-goods-transactions.xlsx` |
 | 发货计划 | `/exports/shipment-plans.xlsx` |
+| 发货计划明细 | `/exports/shipment-plan-details.xlsx` |
 | 业绩单列表 | `/exports/sales-performances.xlsx` |
 
 导出链接会带上当前列表页的筛选参数；导出查询忽略分页参数，按 2,000 行一批读取，直到读取完符合筛选条件的记录。列表页仍按原分页大小展示。

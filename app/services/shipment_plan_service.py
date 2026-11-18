@@ -185,6 +185,7 @@ class ShipmentPlanService:
         creator = db.aliased(Employee)
         keyword = (params.get("keyword") or "").strip() or None
         status = (params.get("status") or "").strip() or None
+        performance_id = (params.get("performance_id") or "").strip() or None
         performance_no = (params.get("performance_no") or "").strip() or None
         company_name = (params.get("company_name") or "").strip() or None
         product_name = (params.get("product_name") or "").strip() or None
@@ -236,6 +237,8 @@ class ShipmentPlanService:
             )
         if status:
             stmt = stmt.where(ShipmentPlan.status == status)
+        if performance_id:
+            stmt = stmt.where(ShipmentPlan.performance_id == performance_id)
         if performance_no:
             stmt = stmt.where(SalesPerformance.performance_no.like(f"%{performance_no}%"))
         if company_name:
@@ -259,6 +262,98 @@ class ShipmentPlanService:
             dict(row)
             for row in db.session.execute(stmt).mappings().all()
         ]
+        return rows, total
+
+    @staticmethod
+    def list_plan_details_query(params=None, page: int = 1, page_size: int = 20):
+        """发货计划明细列表查询：每条仓库/批号分配记录一行，排除草稿。"""
+        params = params or {}
+        creator = db.aliased(Employee)
+        keyword = (params.get("keyword") or "").strip() or None
+        status = (params.get("status") or "").strip() or None
+        performance_no = (params.get("performance_no") or "").strip() or None
+        company_name = (params.get("company_name") or "").strip() or None
+        product_name = (params.get("product_name") or "").strip() or None
+        try:
+            warehouse_id = int(params.get("warehouse_id") or 0) or None
+        except (TypeError, ValueError):
+            warehouse_id = None
+        batch_keyword = (params.get("batch_keyword") or "").strip() or None
+        date_from = util_parse_date(params.get("ship_time_from"))
+        date_to = util_parse_date_end(params.get("ship_time_to"))
+
+        totals = (
+            select(
+                ShipmentPlanLine.shipment_plan_id.label("pid"),
+                func.coalesce(func.sum(ShipmentPlanLine.quantity), 0).label("total_planned"),
+                func.coalesce(func.sum(ShipmentPlanLine.shipped_quantity), 0).label("total_shipped"),
+            )
+            .group_by(ShipmentPlanLine.shipment_plan_id)
+            .subquery()
+        )
+        stmt = (
+            select(
+                ShipmentPlan.id,
+                ShipmentPlan.shipment_plan_no,
+                ShipmentPlan.performance_id,
+                SalesPerformance.performance_no,
+                SalesPerformance.company_name,
+                ShipmentPlanLine.product_name.label("product_name"),
+                ShipmentPlan.destination,
+                ShipmentPlan.planned_ship_time,
+                ShipmentPlan.status,
+                ShipmentPlan.created_by,
+                creator.real_name.label("created_by_name"),
+                ShipmentPlan.created_at,
+                func.coalesce(totals.c.total_planned, 0).label("planned_qty"),
+                func.coalesce(totals.c.total_shipped, 0).label("shipped_qty"),
+                Warehouse.id.label("warehouse_id"),
+                Warehouse.warehouse_code,
+                Warehouse.warehouse_name,
+                FinishedGoodsBatch.id.label("batch_id"),
+                FinishedGoodsBatch.batch_no,
+                ShipmentPlanAllocation.planned_quantity.label("shipment_quantity"),
+            )
+            .join(ShipmentPlanLine, ShipmentPlanLine.shipment_plan_id == ShipmentPlan.id)
+            .join(ShipmentPlanAllocation,
+                  ShipmentPlanAllocation.shipment_line_id == ShipmentPlanLine.id)
+            .join(Warehouse, Warehouse.id == ShipmentPlanAllocation.warehouse_id)
+            .join(FinishedGoodsBatch,
+                  FinishedGoodsBatch.id == ShipmentPlanAllocation.batch_id)
+            .join(creator, creator.id == ShipmentPlan.created_by, isouter=True)
+            .join(SalesPerformance,
+                  SalesPerformance.id == ShipmentPlan.performance_id, isouter=True)
+            .join(totals, totals.c.pid == ShipmentPlan.id, isouter=True)
+            .where(ShipmentPlan.status != "DRAFT")
+            .order_by(ShipmentPlan.id.desc(), ShipmentPlanLine.id.asc(),
+                      ShipmentPlanAllocation.id.asc())
+        )
+        if keyword:
+            stmt = stmt.where(ShipmentPlan.shipment_plan_no.like(f"%{keyword}%"))
+        if status:
+            stmt = stmt.where(ShipmentPlan.status == status)
+        if performance_no:
+            stmt = stmt.where(SalesPerformance.performance_no.like(f"%{performance_no}%"))
+        if company_name:
+            stmt = stmt.where(SalesPerformance.company_name.like(f"%{company_name}%"))
+        if product_name:
+            stmt = stmt.where(ShipmentPlanLine.product_name.like(f"%{product_name}%"))
+        if warehouse_id:
+            stmt = stmt.where(Warehouse.id == warehouse_id)
+        if batch_keyword:
+            stmt = stmt.where(FinishedGoodsBatch.batch_no.like(f"%{batch_keyword}%"))
+        if date_from:
+            stmt = stmt.where(ShipmentPlan.planned_ship_time >= date_from)
+        if date_to:
+            stmt = stmt.where(ShipmentPlan.planned_ship_time < date_to)
+
+        page = max(int(page or 1), 1)
+        page_size = max(int(page_size or 20), 1)
+        total = db.session.execute(
+            select(func.count()).select_from(stmt.order_by(None).subquery())
+        ).scalar() or 0
+        stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+        rows = [dict(row) for row in db.session.execute(stmt).mappings().all()]
         return rows, total
 
     @staticmethod

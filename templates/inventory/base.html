@@ -284,7 +284,10 @@
     <div class="nav-group">
       <div class="nav-label">发货管理</div>
       <div class="nav-dropdown">
-        {% if has_permission('shipment.view') %}<a href="{{ url_for('shipment_plan.list_page') }}">发货计划</a>{% endif %}
+        {% if has_permission('shipment.view') %}
+          <a href="{{ url_for('shipment_plan.list_page') }}">发货计划</a>
+          <a href="{{ url_for('shipment_plan.detail_list_page') }}">发货计划明细</a>
+        {% endif %}
       </div>
     </div>
     {% endif %}

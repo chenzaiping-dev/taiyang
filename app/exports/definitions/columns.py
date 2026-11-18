@@ -49,6 +49,16 @@ EXPORT_COLUMNS = {
         ("planned_qty","计划数量",14,None), ("shipped_qty","已发数量",14,None),
         ("created_by_name","制单人",14,None), ("created_at","创建时间",20,None),
     ],
+    "shipment_plan_details": [
+        ("id", "计划ID", 12, None), ("shipment_plan_no", "发货计划单号", 22, None),
+        ("performance_no", "业绩单号", 22, None), ("company_name", "客户公司", 22, None),
+        ("product_name", "产品名称", 20, None), ("destination", "收货地址", 28, None),
+        ("planned_ship_time", "计划发货时间", 20, None), ("status", "状态", 16, None),
+        ("planned_qty", "计划总数量", 14, None), ("shipped_qty", "已发总数量", 14, None),
+        ("created_by_name", "制单人", 14, None), ("created_at", "创建时间", 20, None),
+        ("warehouse_code", "仓库编码", 14, None), ("warehouse_name", "仓库名称", 18, None),
+        ("batch_no", "产品批号", 18, None), ("shipment_quantity", "发货数量", 14, None),
+    ],
     "sales_performances": [
         ("id","记录ID",12,None), ("performance_no","业绩单号",22,None),
         ("company_name","客户公司",22,None), ("product_name","产品名称",20,None),

@@ -90,6 +90,7 @@ ENDPOINT_REQUIREMENTS = {
     "shipment_plan.update_submit": ("shipment.edit",),
     "shipment_plan.delete_draft": ("shipment.delete",),
     "shipment_plan.list_page": ("shipment.view",),
+    "shipment_plan.detail_list_page": ("shipment.view",),
     "shipment_plan.detail_page": ("shipment.view",),
     "shipment_plan.ship_submit": ("shipment.ship",),
     "shipment_plan.mark_planned": ("shipment.confirm",),
@@ -142,6 +143,7 @@ def register_permission_hooks(app):
                 "finished-goods-warehouses": ("finished_goods.inventory.view",),
                 "finished-goods-transactions": ("finished_goods.transactions.view",),
                 "shipment-plans": ("shipment.view",),
+                "shipment-plan-details": ("shipment.view",),
                 "sales-performances": ("sales_performance.view",),
             }.get(export_name)
         if endpoint == "process_order.api_change_status":

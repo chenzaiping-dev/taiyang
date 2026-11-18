@@ -122,6 +122,13 @@ def shipment_plans(params):
     )
 
 
+def shipment_plan_details(params):
+    page, page_size = _pagination(params)
+    return ShipmentPlanService.list_plan_details_query(
+        params=params, page=page, page_size=page_size,
+    )
+
+
 def sales_performances(params):
     page, page_size = _pagination(params)
     return SalesPerformanceService.list_performances(
@@ -141,6 +148,7 @@ QUERY_FUNCTIONS = {
     "finished_goods_stock": finished_goods_stock,
     "finished_goods_transactions": finished_goods_transactions,
     "shipment_plans": shipment_plans,
+    "shipment_plan_details": shipment_plan_details,
     "sales_performances": sales_performances,
 }
 

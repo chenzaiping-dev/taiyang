@@ -34,6 +34,7 @@
   {% endif %}
 </form>
 <a class="btn" href="{{ url_for('exports.download', export_name='shipment-plans', **request.args.to_dict()) }}">导出 Excel</a>
+<a class="btn" href="{{ url_for('shipment_plan.detail_list_page') }}">查看发货计划明细</a>
 
 <table style="width:100%;border-collapse:collapse;font-size:13px;">
   <thead>
@@ -155,14 +156,14 @@
   <span>共 {{ total }} 条，第 {{ page }}/{{ total_pages }} 页</span>
   {% if page > 1 %}
     <a class="btn" href="{{ url_for('shipment_plan.list_page',
-         keyword=keyword, status=status, performance_no=performance_no,
+         keyword=keyword, status=status, performance_no=performance_no, performance_id=performance_id,
          company_name=company_name, product_name=product_name,
          ship_time_from=ship_time_from, ship_time_to=ship_time_to,
          page=page-1) }}">上一页</a>
   {% endif %}
   {% if page < total_pages %}
     <a class="btn" href="{{ url_for('shipment_plan.list_page',
-         keyword=keyword, status=status, performance_no=performance_no,
+         keyword=keyword, status=status, performance_no=performance_no, performance_id=performance_id,
          company_name=company_name, product_name=product_name,
          ship_time_from=ship_time_from, ship_time_to=ship_time_to,
          page=page+1) }}">下一页</a>
