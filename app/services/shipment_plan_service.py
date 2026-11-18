@@ -635,16 +635,129 @@ class ShipmentPlanService:
     # ---------- 计划 ----------
     @staticmethod
     def mark_planned(plan_id: int) -> ShipmentPlan:
-        plan = _get_plan_or_raise(plan_id)
+        """
+        确认发货计划时完成预留转移：
+        1. 锁定发货计划、生产计划、明细和分配行；
+        2. 从本生产计划的 PRODUCTION_PLAN 预留中扣减本计划全部分配数量；
+        3. 为每条 allocation 建立 SHIPMENT 预留，继续锁住待发库存；
+        4. 最后才把计划状态改为 CONFIRMED。
+
+        整个过程同一事务。任一批次预留不足，所有扣减/新增预留/状态修改一起回滚。
+        """
+        plan = (
+            ShipmentPlan.query.filter_by(id=plan_id)
+            .with_for_update()
+            .first()
+        )
+        if not plan:
+            raise ShipmentPlanError("发货计划不存在")
         if plan.status != STATUS_DRAFT:
             raise ShipmentPlanError(
-                f"只有草稿状态可执行【确认】，当前：{plan.status}")
-        plan.status = STATUS_CONFIRMED
+                f"只有草稿状态可执行【确认】，当前：{plan.status}"
+            )
+
         try:
+            production_plan = (
+                ProductionPlan.query
+                .filter_by(performance_id=plan.performance_id)
+                .with_for_update()
+                .first()
+            )
+            if not production_plan:
+                raise ShipmentPlanError(
+                    f"业绩单 #{plan.performance_id} 没有关联的生产计划，"
+                    "无法确认发货计划"
+                )
+
+            lines = (
+                ShipmentPlanLine.query
+                .filter_by(shipment_plan_id=plan.id)
+                .order_by(ShipmentPlanLine.id.asc())
+                .with_for_update()
+                .all()
+            )
+            if not lines:
+                raise ShipmentPlanError("发货计划无明细，不能确认")
+
+            allocs = (
+                ShipmentPlanAllocation.query
+                .filter(
+                    ShipmentPlanAllocation.shipment_line_id.in_(
+                        [line.id for line in lines]
+                    )
+                )
+                .order_by(ShipmentPlanAllocation.id.asc())
+                .with_for_update()
+                .all()
+            )
+            if not allocs:
+                raise ShipmentPlanError("发货计划无批次分配，不能确认")
+
+            # 先汇总同仓库、同批次的需求，再统一扣减生产计划预留。
+            # 避免同一批次拆成多条 allocation 时重复读取/竞争同一预留行。
+            demand = {}
+            for alloc in allocs:
+                qty = _q6(alloc.planned_quantity or 0)
+                if qty <= 0:
+                    raise ShipmentPlanError(
+                        f"批次分配 #{alloc.id} 的计划数量必须大于 0"
+                    )
+                key = (int(alloc.warehouse_id), int(alloc.batch_id))
+                demand[key] = demand.get(key, Decimal("0")) + qty
+
+            for (warehouse_id, batch_id), qty in demand.items():
+                ShipmentPlanService._consume_production_reservation(
+                    production_plan_id=production_plan.id,
+                    warehouse_id=warehouse_id,
+                    batch_id=batch_id,
+                    quantity=qty,
+                )
+
+            # 生产计划预留转成发货计划预留。
+            # 总 ACTIVE 预留量不变，避免其他生产计划在“已确认但未出库”期间
+            # 再次占用同一批实物库存。
+            for alloc in allocs:
+                existing = (
+                    FinishedGoodsReservation.query
+                    .filter_by(
+                        reservation_type="SHIPMENT",
+                        shipment_allocation_id=alloc.id,
+                    )
+                    .with_for_update()
+                    .first()
+                )
+                if existing:
+                    raise ShipmentPlanError(
+                        f"分配记录 #{alloc.id} 已存在发货预留，"
+                        "请检查是否重复确认或数据异常"
+                    )
+
+                qty = _q6(alloc.planned_quantity)
+                db.session.add(FinishedGoodsReservation(
+                    reservation_no=f"RES-SP-{plan.shipment_plan_no}-{alloc.id}",
+                    reservation_type="SHIPMENT",
+                    production_plan_id=None,
+                    shipment_allocation_id=alloc.id,
+                    warehouse_id=alloc.warehouse_id,
+                    batch_id=alloc.batch_id,
+                    reserved_quantity=qty,
+                    remaining_quantity=qty,
+                    status="ACTIVE",
+                    goods_type="STAPLE",
+                    remark=f"发货计划 {plan.shipment_plan_no} 确认占用",
+                    created_at=now_beijing_naive(),
+                ))
+
+            plan.status = STATUS_CONFIRMED
+            plan.updated_at = now_beijing_naive()
             db.session.commit()
+        except ShipmentPlanError:
+            db.session.rollback()
+            raise
         except Exception as e:
             db.session.rollback()
-            raise ShipmentPlanError(f"标记确认失败: {e}")
+            raise ShipmentPlanError(f"确认发货计划失败: {e}")
+
         return plan
 
     # ---------- 取消 ----------
@@ -652,20 +765,31 @@ class ShipmentPlanService:
     def cancel_plan(plan_id: int, operator_id: int = None) -> ShipmentPlan:
         """
         取消发货计划：
-        - DRAFT / CONFIRMED            → 只置 CANCELLED
-        - PARTIALLY_SHIPPED / SHIPPED  → 撤销已发生的成品出库单（冲销库存），
-                                         还原被消耗的生产计划预留，再置 CANCELLED
+        - DRAFT：未占用预留，直接取消；
+        - 新流程 CONFIRMED：释放 SHIPMENT 预留，并恢复确认时转出的全部生产计划预留；
+        - 新流程已发货：先冲销成品出库，再释放 SHIPMENT 预留，并恢复全部生产计划预留；
+        - 旧版本已确认/已发货单据：兼容旧逻辑（旧确认阶段没有 SHIPMENT 预留）。
+
         整体单事务：任一环节失败全部回滚。
         """
-        plan = _get_plan_or_raise(plan_id)
+        plan = (
+            ShipmentPlan.query.filter_by(id=plan_id)
+            .with_for_update()
+            .first()
+        )
+        if not plan:
+            raise ShipmentPlanError("发货计划不存在")
         if plan.status == STATUS_CANCELLED:
             raise ShipmentPlanError("发货计划已取消，无需重复操作")
 
-        lines = ShipmentPlanLine.query.filter_by(
-            shipment_plan_id=plan.id
-        ).order_by(ShipmentPlanLine.id.asc()).all()
+        lines = (
+            ShipmentPlanLine.query
+            .filter_by(shipment_plan_id=plan.id)
+            .order_by(ShipmentPlanLine.id.asc())
+            .with_for_update()
+            .all()
+        )
         if not lines:
-            # 无明细，直接取消
             plan.status = STATUS_CANCELLED
             try:
                 db.session.commit()
@@ -674,55 +798,107 @@ class ShipmentPlanService:
                 raise ShipmentPlanError(f"取消失败: {e}")
             return plan
 
-        line_ids = [l.id for l in lines]
+        line_ids = [line.id for line in lines]
         allocs = (
             ShipmentPlanAllocation.query
             .filter(ShipmentPlanAllocation.shipment_line_id.in_(line_ids))
             .order_by(ShipmentPlanAllocation.id.asc())
+            .with_for_update()
             .all()
         )
+        allocation_ids = [a.id for a in allocs]
 
-        # 快照"每个 allocation 已发数量"，必须在撤销出库单之前取，
-        # 因为 reverse_document 联动会把它冲减为 0
         shipped_snapshot = [
             (a.warehouse_id, a.batch_id, _q6(a.shipped_quantity or 0))
             for a in allocs
             if _q6(a.shipped_quantity or 0) > 0
         ]
+        has_shipped = bool(shipped_snapshot)
 
-        has_shipped = any(qty > 0 for _, _, qty in shipped_snapshot)
-        print("has shipped:", has_shipped, shipped_snapshot)
+        # 是否存在 SHIPMENT 类型的预留记录，是区分新旧流程的持久化标记。
+        # 即使发货时该预留已 RELEASED，记录仍保留，可用于取消时恢复完整计划量。
+        shipment_reservations = []
+        if allocation_ids:
+            shipment_reservations = (
+                FinishedGoodsReservation.query
+                .filter(
+                    FinishedGoodsReservation.reservation_type == "SHIPMENT",
+                    FinishedGoodsReservation.shipment_allocation_id.in_(allocation_ids),
+                )
+                .order_by(FinishedGoodsReservation.id.asc())
+                .with_for_update()
+                .all()
+            )
+        uses_reservation_transfer = bool(shipment_reservations)
 
         try:
+            # 1. 如果已经发生实际出库，先冲销出库单，恢复成品实物库存。
             if has_shipped:
-                # 1. 撤销成品出库单（内部会冲销库存、回滚 allocation.shipped_quantity 与 plan.status）
                 doc_no = f"FG-OUT-{plan.shipment_plan_no}"
-                out_doc = FinishedGoodsDocument.query.filter_by(
-                    document_no=doc_no
-                ).first()
+                out_doc = (
+                    FinishedGoodsDocument.query
+                    .filter_by(document_no=doc_no)
+                    .with_for_update()
+                    .first()
+                )
                 if not out_doc:
                     raise ShipmentPlanError(
                         f"发货计划 {plan.shipment_plan_no} 存在已发数量，"
-                        f"但找不到对应出库单 {doc_no}，数据异常，无法安全取消"
+                        f"但找不到对应出库单 {doc_no}，无法安全取消"
                     )
 
                 FinishedGoodsService.reverse_document(
                     document_id=out_doc.id,
                     reason=f"[SHIP_PLAN_CANCEL] 取消发货计划 {plan.shipment_plan_no}",
                     created_by=operator_id,
-                    commit=False,          # 合并事务
+                    commit=False,
                 )
 
-                # 2. 还原被消耗的生产计划预留
-                production_plan = ProductionPlan.query.filter_by(
-                    performance_id=plan.performance_id
-                ).first()
+            # 2. 释放本发货计划仍 ACTIVE 的 SHIPMENT 预留。
+            #    已发货时通常已在 ship_plan 中释放；这里兼容未发货取消。
+            for reservation in shipment_reservations:
+                if reservation.status == "ACTIVE":
+                    reservation.remaining_quantity = Decimal("0")
+                    reservation.status = "RELEASED"
+
+            # 3. 恢复生产计划预留。
+            production_plan = None
+            if uses_reservation_transfer:
+                production_plan = (
+                    ProductionPlan.query
+                    .filter_by(performance_id=plan.performance_id)
+                    .with_for_update()
+                    .first()
+                )
                 if not production_plan:
                     raise ShipmentPlanError(
                         f"业绩单 #{plan.performance_id} 没有关联的生产计划，"
-                        f"无法还原预留"
+                        "无法恢复生产计划预留"
                     )
 
+                # 确认时转出的是全部 planned_quantity，不是实际 shipped_quantity。
+                # 即使确认后尚未发货，也必须完整恢复。
+                for alloc in allocs:
+                    ShipmentPlanService._restore_production_reservation(
+                        production_plan_id=production_plan.id,
+                        warehouse_id=alloc.warehouse_id,
+                        batch_id=alloc.batch_id,
+                        quantity=_q6(alloc.planned_quantity or 0),
+                    )
+            elif has_shipped:
+                # 兼容旧版本：旧代码在 ship_plan() 时才消耗生产计划预留，
+                # 所以旧单据只恢复实际已消耗的 shipped_quantity。
+                production_plan = (
+                    ProductionPlan.query
+                    .filter_by(performance_id=plan.performance_id)
+                    .with_for_update()
+                    .first()
+                )
+                if not production_plan:
+                    raise ShipmentPlanError(
+                        f"业绩单 #{plan.performance_id} 没有关联的生产计划，"
+                        "无法恢复旧流程已消耗的预留"
+                    )
                 for wh_id, batch_id, qty in shipped_snapshot:
                     ShipmentPlanService._restore_production_reservation(
                         production_plan_id=production_plan.id,
@@ -731,14 +907,16 @@ class ShipmentPlanService:
                         quantity=qty,
                     )
 
-                # 3. 清空 allocation / line 已发数量
-                for a in allocs:
-                    a.shipped_quantity = Decimal("0")
+            # 4. 已出库单据被冲销后，清零计划已发数量。
+            if has_shipped:
+                for alloc in allocs:
+                    alloc.shipped_quantity = Decimal("0")
                 for line in lines:
                     line.shipped_quantity = Decimal("0")
 
             plan.status = STATUS_CANCELLED
             plan.actual_ship_time = None
+            plan.updated_at = now_beijing_naive()
             db.session.commit()
         except ShipmentPlanError:
             db.session.rollback()
@@ -754,99 +932,171 @@ class ShipmentPlanService:
 
     @staticmethod
     def ship_plan(plan_id: int, operator_id: int = None) -> ShipmentPlan:
-        plan = db.session.get(ShipmentPlan, plan_id)
+        """
+        执行已确认发货计划：
+        - 新流程：确认阶段已把生产计划预留转为 SHIPMENT 预留；
+          发货时只释放本计划 SHIPMENT 预留，再执行成品出库。
+        - 兼容旧流程：若完全不存在 SHIPMENT 预留，则沿用旧的发货时扣减
+          PRODUCTION_PLAN 预留逻辑。
+        """
+        plan = (
+            ShipmentPlan.query.filter_by(id=plan_id)
+            .with_for_update()
+            .first()
+        )
         if not plan:
             raise ShipmentPlanError("发货计划不存在")
-        if plan.status != "CONFIRMED":
+        if plan.status != STATUS_CONFIRMED:
             raise ShipmentPlanError(
-                f"只有【已确认】状态可执行发货，当前：{plan.status}")
-
-        # ⭐ 找到该发货计划对应的生产计划（1:1）
-        production_plan = ProductionPlan.query.filter_by(
-            performance_id=plan.performance_id
-        ).first()
-        if not production_plan:
-            raise ShipmentPlanError(
-                f"业绩单 #{plan.performance_id} 没有关联的生产计划，"
-                f"无法确定要消耗的成品预留"
+                f"只有【已确认】状态可执行发货，当前：{plan.status}"
             )
-        production_plan_id = production_plan.id
 
-        lines = ShipmentPlanLine.query.filter_by(
-            shipment_plan_id=plan.id).all()
+        lines = (
+            ShipmentPlanLine.query
+            .filter_by(shipment_plan_id=plan.id)
+            .order_by(ShipmentPlanLine.id.asc())
+            .with_for_update()
+            .all()
+        )
         if not lines:
             raise ShipmentPlanError("发货计划无明细，不能发货")
 
         allocs = (
             ShipmentPlanAllocation.query
             .filter(ShipmentPlanAllocation.shipment_line_id.in_(
-                [l.id for l in lines]))
+                [line.id for line in lines]
+            ))
+            .order_by(ShipmentPlanAllocation.id.asc())
+            .with_for_update()
             .all()
         )
         if not allocs:
             raise ShipmentPlanError("发货计划无批次分配，不能发货")
 
-        # 1. 过滤出本次真正要发的 allocation
         pending = []
-        for a in allocs:
-            qty = (a.planned_quantity or Decimal("0")) - (a.shipped_quantity or Decimal("0"))
+        for alloc in allocs:
+            qty = _q6(
+                (alloc.planned_quantity or Decimal("0"))
+                - (alloc.shipped_quantity or Decimal("0"))
+            )
             if qty > 0:
-                pending.append((a, _q6(qty)))
+                pending.append((alloc, qty))
         if not pending:
             raise ShipmentPlanError("没有待发货数量")
 
-        try:
-            # 2. 先释放对应生产计划预留（否则可用量 = 库存 - ACTIVE 预留 会不够）
-            for a, qty in pending:
-                ShipmentPlanService._consume_production_reservation(
-                    production_plan_id=production_plan_id,   # ⭐ 强校验：只消耗本计划
-                    warehouse_id=a.warehouse_id,
-                    batch_id=a.batch_id,
-                    quantity=qty,
-                )
+        production_plan = (
+            ProductionPlan.query
+            .filter_by(performance_id=plan.performance_id)
+            .with_for_update()
+            .first()
+        )
+        if not production_plan:
+            raise ShipmentPlanError(
+                f"业绩单 #{plan.performance_id} 没有关联的生产计划，"
+                "无法确定生产计划预留"
+            )
 
-            # 3. ⭐ 一次性构建全部出库行（每行自带 warehouse_id），一张单多仓
+        allocation_ids = [alloc.id for alloc, _ in pending]
+        try:
+            shipment_reservations = (
+                FinishedGoodsReservation.query
+                .filter(
+                    FinishedGoodsReservation.reservation_type == "SHIPMENT",
+                    FinishedGoodsReservation.shipment_allocation_id.in_(allocation_ids),
+                )
+                .order_by(FinishedGoodsReservation.id.asc())
+                .with_for_update()
+                .all()
+            )
+
+            if shipment_reservations:
+                # 新流程：每个 allocation 的发货预留必须覆盖其待发数量。
+                by_allocation = {}
+                for reservation in shipment_reservations:
+                    by_allocation.setdefault(
+                        reservation.shipment_allocation_id, []
+                    ).append(reservation)
+
+                for alloc, qty in pending:
+                    rows = by_allocation.get(alloc.id, [])
+                    active_qty = sum(
+                        (
+                            _q6(r.remaining_quantity or 0)
+                            for r in rows
+                            if r.status == "ACTIVE"
+                        ),
+                        Decimal("0"),
+                    )
+                    if active_qty != qty:
+                        raise ShipmentPlanError(
+                            f"批次分配 #{alloc.id} 的发货预留不匹配："
+                            f"当前有效预留 {active_qty}，待发数量 {qty}。"
+                            "请检查预留记录，暂不能出库"
+                        )
+
+                # 在本事务内释放本计划自己的发货预留，随后 create_outbound
+                # 的“库存 - ACTIVE 预留”校验才能使用这部分库存。
+                for reservation in shipment_reservations:
+                    if reservation.status == "ACTIVE":
+                        reservation.remaining_quantity = Decimal("0")
+                        reservation.status = "RELEASED"
+            else:
+                # 兼容部署前已经确认、但尚无 SHIPMENT 预留的老计划。
+                # 新确认的计划不会走到这里。
+                for alloc, qty in pending:
+                    ShipmentPlanService._consume_production_reservation(
+                        production_plan_id=production_plan.id,
+                        warehouse_id=alloc.warehouse_id,
+                        batch_id=alloc.batch_id,
+                        quantity=qty,
+                    )
+
             fg_lines = [
                 {
-                    "warehouse_id": a.warehouse_id,        # ⭐ 行内自带仓库
-                    "batch_id": a.batch_id,
+                    "warehouse_id": alloc.warehouse_id,
+                    "batch_id": alloc.batch_id,
                     "quantity": qty,
                     "remark": (
                         f"发货计划 {plan.shipment_plan_no} "
-                        f"批次分配#{a.id}"
+                        f"批次分配#{alloc.id}"
                     ),
                 }
-                for a, qty in pending
+                for alloc, qty in pending
             ]
 
             FinishedGoodsService.create_outbound(
-                lines=fg_lines,                            # ⭐ 新签名：lines 第一位
-                document_no=f"FG-OUT-{plan.shipment_plan_no}",  # ⭐ 不再带仓后缀
+                lines=fg_lines,
+                document_no=f"FG-OUT-{plan.shipment_plan_no}",
                 document_time=now_beijing(),
                 created_by=operator_id,
                 remark=f"[SHIP_PLAN_OUTBOUND] 出库 {plan.shipment_plan_no}",
-                commit=False,                              # ⭐ 交给本方法统一提交
+                commit=False,
             )
 
-            # 4. 回写 allocation / line 已发数量
-            for a, qty in pending:
-                a.shipped_quantity = (a.shipped_quantity or Decimal("0")) + qty
+            for alloc, qty in pending:
+                alloc.shipped_quantity = (
+                    (alloc.shipped_quantity or Decimal("0")) + qty
+                )
 
             for line in lines:
                 total = db.session.query(
                     func.coalesce(
-                        func.sum(ShipmentPlanAllocation.shipped_quantity), 0)
+                        func.sum(ShipmentPlanAllocation.shipped_quantity), 0
+                    )
                 ).filter_by(shipment_line_id=line.id).scalar() or Decimal("0")
                 line.shipped_quantity = _q6(total)
 
-            # 5. 更新计划状态
-            all_done = all(line.shipped_quantity >= line.quantity for line in lines)
-            plan.status = "SHIPPED" if all_done else "PARTIALLY_SHIPPED"
+            all_done = all(
+                line.shipped_quantity >= line.quantity for line in lines
+            )
+            plan.status = (
+                STATUS_SHIPPED if all_done else STATUS_PARTIALLY_SHIPPED
+            )
             if all_done and not plan.actual_ship_time:
                 plan.actual_ship_time = now_beijing()
+            plan.updated_at = now_beijing_naive()
 
             db.session.commit()
-            #print("[AFTER COMMIT]")
         except FinishedGoodsError as e:
             db.session.rollback()
             raise ShipmentPlanError(f"发货出库失败: {e}")
@@ -869,8 +1119,8 @@ class ShipmentPlanService:
     ):
         """
         按 FIFO（created_at, id）顺序消耗指定仓库+批次上 ACTIVE 的
-        PRODUCTION_PLAN 预留。剩余量变 0 的预留置为 CONSUMED。
-        不足则抛异常（由 ship_plan 统一回滚）。
+        PRODUCTION_PLAN 预留。剩余量变 0 的预留置为 CONSUMED；
+        转移去向由对应的 SHIPMENT 预留记录表示。不足则抛异常，由外层事务回滚。
         """
         need = _q6(quantity)
         reservations = (
@@ -897,6 +1147,8 @@ class ShipmentPlanService:
             need -= take
             if res.remaining_quantity <= 0:
                 res.remaining_quantity = Decimal("0")
+                # 现有数据库 CHECK 约束允许 CONSUMED/RELEASED 的 remaining=0；
+                # SHIPMENT 预留记录负责标识转移去向。
                 res.status = "CONSUMED"
 
         if need > 0:
@@ -915,8 +1167,8 @@ class ShipmentPlanService:
         quantity: Decimal,
     ):
         """
-        将发货时消耗掉的生产计划预留补回。
-        优先复用同一 (plan, warehouse, batch) 下最近的预留行（CONSUMED/ACTIVE），
+        将确认发货计划时转出的生产计划预留补回。
+        优先复用同一 (plan, warehouse, batch) 下最近的预留行（TRANSFERRED/CONSUMED/ACTIVE），
         把它 remaining_quantity 加回、状态置回 ACTIVE；
         没有现存行则新建一条 ACTIVE。
         受 finished_goods_reservations 的 CHECK 约束：
@@ -928,7 +1180,7 @@ class ShipmentPlanService:
         if qty <= 0:
             return
 
-        # 优先复用已存在的预留（CONSUMED 或 ACTIVE）
+        # 优先复用已存在的预留（TRANSFERRED / CONSUMED / ACTIVE）
         res = (
             FinishedGoodsReservation.query
             .filter(
@@ -936,7 +1188,7 @@ class ShipmentPlanService:
                 FinishedGoodsReservation.warehouse_id == warehouse_id,
                 FinishedGoodsReservation.batch_id == batch_id,
                 FinishedGoodsReservation.reservation_type == "PRODUCTION_PLAN",
-                FinishedGoodsReservation.status.in_(["CONSUMED", "ACTIVE"]),
+                FinishedGoodsReservation.status.in_(["TRANSFERRED", "CONSUMED", "ACTIVE"]),
             )
             .order_by(FinishedGoodsReservation.id.desc())
             .with_for_update()

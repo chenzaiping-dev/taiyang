@@ -1,0 +1,97 @@
+{% extends "inventory/base.html" %}
+{% block title %}发货计划明细列表{% endblock %}
+{% block content %}
+<h2>发货计划明细列表</h2>
+
+<form method="get" action="{{ url_for('shipment_plan.detail_list_page') }}"
+      style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+  <input type="text" name="keyword" value="{{ keyword }}" placeholder="发货计划单号" maxlength="64">
+  <input type="text" name="performance_no" value="{{ performance_no }}" placeholder="业绩单号" maxlength="64" style="width:150px;">
+  <input type="text" name="company_name" value="{{ company_name }}" placeholder="公司名称" maxlength="200" style="width:160px;">
+  <input type="text" name="product_name" value="{{ product_name }}" placeholder="产品名称" maxlength="200" style="width:150px;">
+  <select name="warehouse_id">
+    <option value="">-- 全部仓库 --</option>
+    {% for wh in warehouses %}
+      <option value="{{ wh.id }}" {% if warehouse_id|string == wh.id|string %}selected{% endif %}>{{ wh.warehouse_name }}</option>
+    {% endfor %}
+  </select>
+  <input type="text" name="batch_keyword" value="{{ batch_keyword }}" placeholder="产品批号" maxlength="64" style="width:140px;">
+  <select name="status">
+    <option value="">-- 全部非草稿状态 --</option>
+    {% for code, label in status_labels.items() %}
+      <option value="{{ code }}" {% if status == code %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <label style="font-size:12px;color:#666;">
+    从 <input type="date" name="ship_time_from" value="{{ ship_time_from }}">
+    到 <input type="date" name="ship_time_to" value="{{ ship_time_to }}">
+  </label>
+  <button type="submit" class="btn btn-primary">查询</button>
+  <a class="btn" href="{{ url_for('shipment_plan.detail_list_page') }}">重置</a>
+  <a class="btn" href="{{ url_for('shipment_plan.list_page') }}">返回发货计划列表</a>
+</form>
+<a class="btn" href="{{ url_for('exports.download', export_name='shipment-plan-details', **request.args.to_dict()) }}">导出 Excel</a>
+
+<div style="overflow-x:auto;margin-top:12px;">
+<table style="width:100%;min-width:1450px;border-collapse:collapse;font-size:13px;">
+  <thead>
+    <tr style="background:#f5f5f5;">
+      <th>ID</th>
+      <th>发货计划单号</th>
+      <th>业绩单号</th>
+      <th>公司名称</th>
+      <th>产品名称</th>
+      <th>收货地址</th>
+      <th>计划发货时间</th>
+      <th style="text-align:right;">计划总数量</th>
+      <th style="text-align:right;">已发总数量</th>
+      <th>状态</th>
+      <th>创建人</th>
+      <th>创建时间</th>
+      <th>仓库</th>
+      <th>产品批号</th>
+      <th style="text-align:right;">发货数量</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if rows %}
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.id }}</td>
+        <td><a href="{{ url_for('shipment_plan.detail_page', plan_id=r.id) }}">{{ r.shipment_plan_no }}</a></td>
+        <td>
+          <a href="{{ url_for('sales_performance.detail_page', perf_id=r.performance_id) }}">
+            {{ r.performance_no or ('#' ~ r.performance_id) }}
+          </a>
+        </td>
+        <td>{{ r.company_name or '-' }}</td>
+        <td>{{ r.product_name or '-' }}</td>
+        <td>{{ r.destination or '-' }}</td>
+        <td>{{ r.planned_ship_time.strftime('%Y-%m-%d %H:%M') if r.planned_ship_time else '-' }}</td>
+        <td style="text-align:right;">{{ r.planned_qty }}</td>
+        <td style="text-align:right;">{{ r.shipped_qty }}</td>
+        <td><span class="status-badge status-{{ r.status|lower }}">{{ status_labels.get(r.status, r.status) }}</span></td>
+        <td>{{ r.created_by_name or '-' }}</td>
+        <td>{{ r.created_at.strftime('%Y-%m-%d %H:%M') if r.created_at else '-' }}</td>
+        <td>{{ r.warehouse_name or r.warehouse_code or '-' }}</td>
+        <td>{{ r.batch_no or '-' }}</td>
+        <td style="text-align:right;">{{ r.shipment_quantity }}</td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr><td colspan="15" style="text-align:center;color:#999;padding:24px;">暂无非草稿发货计划明细</td></tr>
+    {% endif %}
+  </tbody>
+</table>
+</div>
+
+<div style="margin-top:16px;display:flex;gap:8px;align-items:center;">
+  <span>共 {{ total }} 条明细，第 {{ page }}/{{ total_pages }} 页</span>
+  {% if page > 1 %}
+    <a class="btn" href="{{ url_for('shipment_plan.detail_list_page', keyword=keyword, status=status, performance_no=performance_no, company_name=company_name, product_name=product_name, warehouse_id=warehouse_id, batch_keyword=batch_keyword, ship_time_from=ship_time_from, ship_time_to=ship_time_to, page=page-1) }}">上一页</a>
+  {% endif %}
+  {% if page < total_pages %}
+    <a class="btn" href="{{ url_for('shipment_plan.detail_list_page', keyword=keyword, status=status, performance_no=performance_no, company_name=company_name, product_name=product_name, warehouse_id=warehouse_id, batch_keyword=batch_keyword, ship_time_from=ship_time_from, ship_time_to=ship_time_to, page=page+1) }}">下一页</a>
+  {% endif %}
+</div>
+{% endblock %}

@@ -349,7 +349,7 @@ def ship_submit(plan_id):
 def mark_planned(plan_id):
     try:
         ShipmentPlanService.mark_planned(plan_id)
-        flash("已标记为【已计划】", "success")
+        flash("已标记为【已确认】", "success")
     except ShipmentPlanError as e:
         flash(str(e), "error")
     return redirect(url_for("shipment_plan.list_page"))
