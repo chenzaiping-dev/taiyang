@@ -3,6 +3,7 @@ from marshmallow import Schema, fields, validate, validates_schema, ValidationEr
 
 class StockOutLineSchema(Schema):
     line_no = fields.Int(required=False, allow_none=True)
+    warehouse_id = fields.Int(required=False, allow_none=True, validate=validate.Range(min=1))
     material_id = fields.Int(required=True, validate=validate.Range(min=1))
     quantity = fields.Decimal(
         required=True, places=6, as_string=True,
@@ -12,7 +13,7 @@ class StockOutLineSchema(Schema):
 
 class StockOutRequestSchema(Schema):
     document_no = fields.Str(required=False, allow_none=True, validate=validate.Length(max=50))
-    warehouse_id = fields.Int(required=True)
+    warehouse_id = fields.Int(required=False, allow_none=True)
     outbound_type = fields.Str(
         required=False, load_default="PRODUCTION_OUT",
         validate=validate.OneOf(["PRODUCTION_OUT", "STOCKTAKE_LOSS", "RETURN_OUT", "ADJUSTMENT_RED", "ADJUSTMENT_BLUE"]),
@@ -30,6 +31,8 @@ class StockOutRequestSchema(Schema):
 
     @validates_schema
     def check_dup(self, data, **kwargs):
-        ids = [l["material_id"] for l in data.get("lines", [])]
-        if len(ids) != len(set(ids)):
-            raise ValidationError("同一原料只能出现一次")
+        keys = [(l.get("warehouse_id") or data.get("warehouse_id"), l["material_id"]) for l in data.get("lines", [])]
+        if any(not wh for wh, _ in keys):
+            raise ValidationError("每行必须指定仓库")
+        if len(keys) != len(set(keys)):
+            raise ValidationError("同一仓库的同一种原料只能出现一次")

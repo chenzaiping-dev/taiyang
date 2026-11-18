@@ -254,6 +254,7 @@ class FifoAllocationReversalService:
         }
 
 
+
 class PurchaseInService:
     """原料入库单：草稿只写 inventory_document_lines，确认后生成流水和 FIFO 成本层。"""
 
@@ -487,68 +488,69 @@ class StockOutService:
 
     @staticmethod
     def _precheck_available(warehouse_id, lines, allow_partial=False):
-        """
-        整单出库前预检：按 (warehouse_id, material_id) 汇总需求，
-        与当前成本层剩余量比较，收集全部不足项后一次性抛出。
-        allow_partial=True 时不做"不足"拦截（与 _consume_fifo 语义一致）。
-        """
+        """兼容旧调用：按单一仓库预检库存。"""
+        normalized = [dict(line, warehouse_id=int(line.get("warehouse_id") or warehouse_id)) for line in lines]
+        return StockOutService._precheck_available_multi(normalized, allow_partial=allow_partial)
+
+    @staticmethod
+    def _precheck_available_multi(lines, allow_partial=False):
+        """按每行 (warehouse_id, material_id) 汇总需求，整单校验，不允许超库存。"""
         if allow_partial:
             return
-
-        # 1. 聚合本单需求
         need_map = {}
-        for l in lines:
-            mid = int(l["material_id"])
-            qty = _q6(l["quantity"])
+        for line in lines:
+            mid = int(line["material_id"])
+            wh_id = int(line["warehouse_id"])
+            qty = _q6(line["quantity"])
             if qty <= 0:
                 continue
-            key = (int(warehouse_id), mid)
+            key = (wh_id, mid)
             need_map[key] = need_map.get(key, Decimal("0")) + qty
-
         if not need_map:
             return
 
-        # 2. 一次性查出涉及的原料
-        mids = {mid for _, mid in need_map.keys()}
-        materials = {
-            m.id: m for m in Material.query.filter(Material.id.in_(mids)).all()
-        }
-
-        # 3. 一次性按 (warehouse, material) 汇总可用量
+        mids = {mid for _, mid in need_map}
+        materials = {m.id: m for m in Material.query.filter(Material.id.in_(mids)).all()}
+        wh_ids = {wh_id for wh_id, _ in need_map}
         avail_rows = (
             db.session.query(
+                InventoryCostLayer.warehouse_id.label("wh_id"),
                 InventoryCostLayer.material_id.label("mid"),
-                func.coalesce(func.sum(InventoryCostLayer.remaining_qty), 0)
-                    .label("available"),
+                func.coalesce(func.sum(InventoryCostLayer.remaining_qty), 0).label("available"),
             )
             .filter(
-                InventoryCostLayer.warehouse_id == warehouse_id,
+                InventoryCostLayer.warehouse_id.in_(wh_ids),
                 InventoryCostLayer.material_id.in_(mids),
                 InventoryCostLayer.remaining_qty > 0,
             )
-            .group_by(InventoryCostLayer.material_id)
+            .group_by(InventoryCostLayer.warehouse_id, InventoryCostLayer.material_id)
             .all()
         )
-        available_map = {int(r.mid): _q6(r.available or 0) for r in avail_rows}
-
-        # 4. 收集不足项
+        available_map = {
+            (int(r.wh_id), int(r.mid)): _q6(r.available or 0)
+            for r in avail_rows
+        }
+        warehouses = {w.id: w for w in Warehouse.query.filter(Warehouse.id.in_(wh_ids)).all()}
         shortages = []
-        for (wh_id, mid), need in need_map.items():
-            available = available_map.get(mid, Decimal("0"))
+        for (wh_id, mid), need in sorted(need_map.items()):
+            available = available_map.get((wh_id, mid), Decimal("0"))
             if need > available:
-                m = materials.get(mid)
-                label = (
-                    f"{m.material_code} - {m.material_name}"
-                    if m else f"#{mid}"
+                material = materials.get(mid)
+                warehouse = warehouses.get(wh_id)
+                material_label = (
+                    f"{material.material_code} - {material.material_name}"
+                    if material else f"原料#{mid}"
                 )
+                warehouse_label = (
+                    f"{warehouse.warehouse_code} - {warehouse.warehouse_name}"
+                    if warehouse else f"仓库#{wh_id}"
+                )
+                shortage = _q6(need - available)
                 shortages.append(
-                    f"{label}：需要 {need}，可用 {available}"
+                    f"{warehouse_label} / {material_label}：需要 {need}，可用 {available}，不足 {shortage}"
                 )
-
         if shortages:
-            raise InventoryError(
-                "以下原料库存不足，无法出库：\n" + "\n".join(shortages)
-            )
+            raise InventoryError("以下库存不足，无法出库：\n" + "\n".join(shortages))
 
     @staticmethod
     def _consume_fifo(
@@ -638,7 +640,7 @@ class StockOutService:
     def create_stock_out(
         lines: list,
         outbound_type: str = "PRODUCTION_OUT",
-        warehouse_id: int = None,
+        warehouse_id: int = None,  # 兼容旧调用；新调用必须在每行提供 warehouse_id
         document_no: str = None,
         document_time: datetime = None,
         process_order_id: int = None,
@@ -648,61 +650,77 @@ class StockOutService:
         allow_partial: bool = False,
         commit: bool = True,
     ) -> dict:
-        """出库单草稿只写单据明细；确认时才生成负向库存流水并扣减 FIFO。"""
+        """创建原料出库单；每行独立指定仓库，确认时按行仓库消耗 FIFO。"""
         if not lines:
             raise InventoryError("出库明细不能为空")
         if outbound_type not in OUTBOUND_TYPE_LABELS:
             raise InventoryError(f"不支持的出库类型: {outbound_type}")
 
-        # 1. 校验仓库
-        wh = db.session.get(Warehouse, warehouse_id)
-        if not wh or wh.status != 1 or wh.warehouse_type not in ("raw_material", "general"):
-            raise InventoryError("原料出库必须使用有效的原料仓或普通仓")
+        normalized_lines = []
+        for idx, source in enumerate(lines, 1):
+            line = dict(source)
+            line_wh_id = line.get("warehouse_id") or warehouse_id
+            if not line_wh_id:
+                raise InventoryError(f"第 {idx} 行未指定仓库")
+            try:
+                line["warehouse_id"] = int(line_wh_id)
+                line["material_id"] = int(line["material_id"])
+                line["quantity"] = _q6(line["quantity"])
+            except (KeyError, TypeError, ValueError):
+                raise InventoryError(f"第 {idx} 行出库明细格式错误")
+            if line["quantity"] <= 0:
+                raise InventoryError(f"第 {idx} 行出库数量必须大于 0")
+            normalized_lines.append(line)
 
-        # 2. 校验明细
-        mids = [int(x["material_id"]) for x in lines]
+        # 同一仓库、同一原料只能有一行，避免重复行绕过前端校验。
+        keys = [(x["warehouse_id"], x["material_id"]) for x in normalized_lines]
+        if len(keys) != len(set(keys)):
+            raise InventoryError("同一仓库的同一种原料只能出现一次")
+
+        warehouse_ids = {x["warehouse_id"] for x in normalized_lines}
+        warehouses = {w.id: w for w in Warehouse.query.filter(Warehouse.id.in_(warehouse_ids)).all()}
+        for wh_id in warehouse_ids:
+            wh = warehouses.get(wh_id)
+            if not wh or wh.status != 1 or wh.warehouse_type not in ("raw_material", "general"):
+                raise InventoryError(f"仓库无效或不是原料仓/普通仓：{wh_id}")
+
+        mids = {x["material_id"] for x in normalized_lines}
         materials = {m.id: m for m in Material.query.filter(Material.id.in_(mids)).all()}
-        for line in lines:
-            mid = int(line["material_id"])
-            if mid not in materials or materials[mid].status != 1:
-                raise InventoryError(f"原料不存在或已停用: {mid}")
-            if _q6(line["quantity"]) <= 0:
-                raise InventoryError("出库数量必须大于 0")
+        for line in normalized_lines:
+            material = materials.get(line["material_id"])
+            if not material or material.status != 1:
+                raise InventoryError(f"原料不存在或已停用: {line['material_id']}")
 
-        # 3. 生成单据号
+        # 草稿保存也检查当前可用库存；确认时 confirm_document 会在锁定成本层后再次检查。
+        StockOutService._precheck_available_multi(normalized_lines, allow_partial=allow_partial)
+
         doc_time = document_time or now_beijing_naive()
         doc_no = document_no or generate_document_no(prefix_map[outbound_type])
         if InventoryDocument.query.filter_by(document_no=doc_no).first():
             raise InventoryError(f"单据号重复: {doc_no}")
 
-        # 4. 创建单据
         doc = InventoryDocument(
             document_no=doc_no, document_type=doc_type_map[outbound_type],
             document_time=doc_time, status="DRAFT", remark=remark,
-            created_by=created_by,
-            created_at=doc_time,
+            created_by=created_by, created_at=doc_time,
             confirmed_by=created_by if auto_confirm else None,
             confirmed_at=now_beijing_naive() if auto_confirm else None,
         )
         db.session.add(doc)
         db.session.flush()
 
-        # 5. 保存单据明细
-        for idx, line in enumerate(lines, 1):
+        for idx, line in enumerate(normalized_lines, 1):
             _save_document_line(
-                doc.id, int(line.get("line_no", idx)), int(line["material_id"]),
-                _q6(line["quantity"]), tx_type_map[outbound_type], warehouse_id,
+                doc.id, int(line.get("line_no", idx)), line["material_id"],
+                line["quantity"], tx_type_map[outbound_type], line["warehouse_id"],
                 process_order_id=process_order_id, remark=line.get("remark"),
             )
 
-        # 7. 确认提交
         try:
             if auto_confirm:
                 result = StockOutService.confirm_document(
-                    doc.id,
-                    allow_partial=allow_partial,
-                    confirmed_by=created_by,
-                    commit=False
+                    doc.id, allow_partial=allow_partial,
+                    confirmed_by=created_by, commit=False,
                 )
             else:
                 result = {"document_id": doc.id, "status": "DRAFT"}
@@ -719,8 +737,9 @@ class StockOutService:
             "document_id": doc.id, "document_no": doc.document_no,
             "document_type": doc.document_type, "status": doc.status,
             "document_time": doc.document_time.isoformat(),
-            "warehouse_id": warehouse_id, "outbound_type": outbound_type,
-            "line_count": len(lines), "lines": result,
+            "warehouse_id": None if len(warehouse_ids) > 1 else next(iter(warehouse_ids)),
+            "outbound_type": outbound_type,
+            "line_count": len(normalized_lines), "lines": result,
         }
 
     @staticmethod
@@ -804,37 +823,64 @@ class StockOutService:
     @staticmethod
     def update_draft(
         document_id: int,
-        warehouse_id: int,
         lines: list,
+        warehouse_id: int = None,  # 兼容旧调用
         outbound_type: str = "PRODUCTION_OUT",
         process_order_id: int = None,
         document_time: datetime = None,
-        remark: str = None
+        remark: str = None,
     ) -> dict:
         doc = db.session.query(InventoryDocument).filter_by(id=document_id).with_for_update().first()
         if not doc or doc.status != "DRAFT":
             raise InventoryError("单据不存在或不是草稿")
         if outbound_type not in OUTBOUND_TYPE_LABELS:
             raise InventoryError(f"不支持的出库类型: {outbound_type}")
-        wh = db.session.get(Warehouse, warehouse_id)
-        if not wh or wh.status != 1 or wh.warehouse_type not in ("raw_material", "general"):
-            raise InventoryError("原料出库必须使用有效的原料仓或普通仓")
         if not lines:
             raise InventoryError("出库明细不能为空")
-        mids = [int(x["material_id"]) for x in lines]
+
+        normalized_lines = []
+        for idx, source in enumerate(lines, 1):
+            line = dict(source)
+            line_wh_id = line.get("warehouse_id") or warehouse_id
+            if not line_wh_id:
+                raise InventoryError(f"第 {idx} 行未指定仓库")
+            try:
+                line["warehouse_id"] = int(line_wh_id)
+                line["material_id"] = int(line["material_id"])
+                line["quantity"] = _q6(line["quantity"])
+            except (KeyError, TypeError, ValueError):
+                raise InventoryError(f"第 {idx} 行出库明细格式错误")
+            if line["quantity"] <= 0:
+                raise InventoryError(f"第 {idx} 行出库数量必须大于 0")
+            normalized_lines.append(line)
+
+        keys = [(x["warehouse_id"], x["material_id"]) for x in normalized_lines]
+        if len(keys) != len(set(keys)):
+            raise InventoryError("同一仓库的同一种原料只能出现一次")
+        warehouse_ids = {x["warehouse_id"] for x in normalized_lines}
+        warehouses = {w.id: w for w in Warehouse.query.filter(Warehouse.id.in_(warehouse_ids)).all()}
+        for wh_id in warehouse_ids:
+            wh = warehouses.get(wh_id)
+            if not wh or wh.status != 1 or wh.warehouse_type not in ("raw_material", "general"):
+                raise InventoryError(f"仓库无效或不是原料仓/普通仓：{wh_id}")
+        mids = {x["material_id"] for x in normalized_lines}
         materials = {m.id: m for m in Material.query.filter(Material.id.in_(mids)).all()}
-        for line in lines:
-            mid = int(line["material_id"])
-            if mid not in materials or materials[mid].status != 1 or _q6(line["quantity"]) <= 0:
-                raise InventoryError(f"原料不存在、已停用或数量不合法: {mid}")
+        for line in normalized_lines:
+            material = materials.get(line["material_id"])
+            if not material or material.status != 1:
+                raise InventoryError(f"原料不存在或已停用: {line['material_id']}")
+
+        # 编辑草稿时重新读取实时库存并校验，不依赖上次打开页面时的库存快照。
+        StockOutService._precheck_available_multi(normalized_lines, allow_partial=False)
+
         InventoryDocumentLine.query.filter_by(document_id=doc.id).delete(synchronize_session=False)
         doc.document_type = doc_type_map[outbound_type]
         doc.document_time = document_time or doc.document_time
         doc.remark = remark
-        for idx, line in enumerate(lines, 1):
+        for idx, line in enumerate(normalized_lines, 1):
             _save_document_line(
-                doc.id, int(line.get("line_no", idx)), int(line["material_id"]),
-                _q6(line["quantity"]), tx_type_map[outbound_type], warehouse_id,
+                doc.id, int(line.get("line_no", idx)), line["material_id"],
+                line["quantity"], tx_type_map[outbound_type], line["warehouse_id"],
                 process_order_id=process_order_id, remark=line.get("remark"),
             )
         try:

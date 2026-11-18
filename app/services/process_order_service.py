@@ -613,6 +613,7 @@ class ProcessOrderService:
             {
                 "line_no": idx + 1,
                 "material_id": m.material_id,
+                "warehouse_id": out_warehouse_id,
                 "quantity": str(m.quantity),
             }
             for idx, m in enumerate(materials)

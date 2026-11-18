@@ -429,6 +429,7 @@ class ProcessOrderAdjustmentService:
             order.material_warehouse_id
             or ProcessOrderAdjustmentService._default_rm_warehouse_id()
         )
+        lines = [dict(line, warehouse_id=warehouse_id) for line in lines]
         result = StockOutService.create_stock_out(
             warehouse_id=warehouse_id,
             lines=lines,

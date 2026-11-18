@@ -137,7 +137,7 @@
             {% endif %}
           {% elif r.status == 'CONFIRMED' %}
             <span class="btn btn-sm disabled">确认</span>
-            {% if r.document_type != 'REVERSE' and  r.is_reversed == false  %}
+            {% if r.document_type != 'REVERSE' and r.document_type != 'ADJUSTMENT_RED' and r.document_type != 'ADJUSTMENT_BLUE' and r.is_reversed == false  %}
             <form method="post" style="display:inline;"
                   action="{{ url_for('inventory_query.document_reverse',
                           direction=direction, document_id=r.id) }}"

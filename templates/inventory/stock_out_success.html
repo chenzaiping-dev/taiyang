@@ -45,6 +45,5 @@
 </table>
 
 <div style="margin-top:20px;">
-  <a class="btn btn-primary" href="{{ url_for('stock_out.stock_out_page') }}">继续出库</a>
-</div>
+  <a class="btn btn-primary" href="{{ url_for("inventory_query.document_list_page", direction="out") }}">返回列表</a>
 {% endblock %}

@@ -86,19 +86,11 @@ def parse_purchase_in_form(form) -> dict:
     }
 
 def parse_stock_out_form(form) -> dict:
-    """
-    将 HTML form 转成 Service 需要的 dict。
-    支持：lines[0][material_id]、lines[0][quantity]
-    """
-    warehouse_id = form.get("warehouse_id", type=int)
-    if not warehouse_id:
-        raise FormParseError("请选择仓库")
-
+    """解析按行指定仓库的原料出库表格。"""
     outbound_type = form.get("outbound_type", "PRODUCTION_OUT")
     if outbound_type not in ("PRODUCTION_OUT", "STOCKTAKE_LOSS", "RETURN_OUT", "OUT_REVERSE", "IN_REVERSE"):
         raise FormParseError("出库类型非法")
 
-    # 收集行
     line_indexes = set()
     for key in form.keys():
         if key.startswith("lines[") and "][material_id]" in key:
@@ -108,39 +100,42 @@ def parse_stock_out_form(form) -> dict:
 
     lines = []
     for idx in sorted(line_indexes):
+        wh_raw = form.get(f"lines[{idx}][warehouse_id]", "").strip()
         mid_raw = form.get(f"lines[{idx}][material_id]", "").strip()
         qty_raw = form.get(f"lines[{idx}][quantity]", "").strip()
-        if not mid_raw and not qty_raw:
+        if not wh_raw and not mid_raw and not qty_raw:
             continue
-        if not mid_raw:
-            raise FormParseError(f"第 {idx + 1} 行：请选择原料")
+        if not wh_raw or not mid_raw:
+            raise FormParseError(f"第 {idx + 1} 行：仓库或原料信息缺失")
         if not qty_raw:
-            raise FormParseError(f"第 {idx + 1} 行：请填写数量")
+            continue  # 空数量表示该库存行不出库
         try:
+            wh_id = int(wh_raw)
             mid = int(mid_raw)
             qty = Decimal(qty_raw)
         except (ValueError, InvalidOperation):
             raise FormParseError(f"第 {idx + 1} 行：格式错误")
-        if qty <= 0:
-            raise FormParseError(f"第 {idx + 1} 行：数量必须大于 0")
+        if qty < 0:
+            raise FormParseError(f"第 {idx + 1} 行：出库数量不能为负数")
+        if qty == 0:
+            continue
         lines.append({
-            "line_no": idx + 1,
+            "line_no": len(lines) + 1,
+            "warehouse_id": wh_id,
             "material_id": mid,
             "quantity": str(qty),
         })
 
     if not lines:
-        raise FormParseError("请至少填写一行有效明细")
+        raise FormParseError("请至少填写一行大于 0 的出库数量")
 
     process_order_id = form.get("process_order_id", type=int)
     return {
-        "warehouse_id": warehouse_id,
         "outbound_type": outbound_type,
         "process_order_id": process_order_id or None,
         "document_time": form.get("document_time") or None,
         "remark": form.get("remark") or None,
         "auto_confirm": form.get("auto_confirm") == "on",
-        "allow_partial": form.get("allow_partial") == "on",
         "lines": lines,
     }
 

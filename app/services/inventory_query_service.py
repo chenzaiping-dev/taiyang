@@ -49,6 +49,42 @@ def _infer_source_entry(row: dict) -> str:
 class InventoryQueryService:
 
     @staticmethod
+    def query_stock_out_available_inventory(warehouse_id: int = None):
+        """查询当前所有有库存的原料-仓库组合，供原料出库表格使用。"""
+        stmt = (
+            select(
+                InventoryCostLayer.warehouse_id,
+                Warehouse.warehouse_code,
+                Warehouse.warehouse_name,
+                InventoryCostLayer.material_id,
+                Material.material_code,
+                Material.material_name,
+                Material.unit,
+                func.sum(InventoryCostLayer.remaining_qty).label("available_qty"),
+            )
+            .join(Material, Material.id == InventoryCostLayer.material_id)
+            .join(Warehouse, Warehouse.id == InventoryCostLayer.warehouse_id)
+            .where(
+                InventoryCostLayer.remaining_qty > 0,
+                Material.status == 1,
+                Warehouse.status == 1,
+                Warehouse.warehouse_type.in_(("raw_material", "general")),
+            )
+        )
+        if warehouse_id:
+            stmt = stmt.where(InventoryCostLayer.warehouse_id == int(warehouse_id))
+        stmt = stmt.group_by(
+            InventoryCostLayer.warehouse_id, Warehouse.warehouse_code,
+            Warehouse.warehouse_name, InventoryCostLayer.material_id,
+            Material.material_code, Material.material_name, Material.unit,
+        ).order_by(
+            Warehouse.warehouse_code.asc(), Material.material_code.asc(),
+        )
+        rows = db.session.execute(stmt).mappings().all()
+        return [dict(row) for row in rows]
+
+
+    @staticmethod
     def query_material_stock(
         material_code: str = None,
         warehouse_id: int = None,
