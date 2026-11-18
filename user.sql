@@ -1237,10 +1237,10 @@ VALUES
 ('sales_performance.delete','删除业绩表草稿','sales_performance','仅允许删除草稿业绩表及可安全清理的关联草稿计划'),
 ('sales_performance.status.change','变更业绩表状态','sales_performance','确认、生产、发货、完成或取消业绩表'),
 ('sales_performance.reopen','重新打开业绩表','sales_performance','将业绩表重新打开为草稿'),
-('sales_performance.cost.view','查看业绩金额','sales_performance','查看成本和利润'),
-('sales_performance.cost.edit','维护业绩金额','sales_performance','录入或修改成本和利润'),
-('sales_performance.money.view','查看业绩金额','sales_performance','查看销售单价、销售金额'),
-('sales_performance.money.edit','维护业绩金额','sales_performance','录入或修改销售单价、销售金额')
+('sales_performance.cost.view','查看业绩成本金额','sales_performance','查看成本和利润'),
+('sales_performance.cost.edit','维护业绩成本金额','sales_performance','录入或修改成本和利润'),
+('sales_performance.money.view','查看业绩销售金额','sales_performance','查看销售单价、销售金额'),
+('sales_performance.money.edit','维护业绩销售金额','sales_performance','录入或修改销售单价、销售金额')
 ON DUPLICATE KEY UPDATE
     permission_name = VALUES(permission_name),
     module_code = VALUES(module_code),
@@ -1292,20 +1292,20 @@ VALUES
 
 SET @doc := LAST_INSERT_ID();
 
-INSERT INTO inventory_transactions
+INSERT INTO inventory_document_lines
     (document_id, line_no, material_id, transaction_type,
-     transaction_time, quantity_delta, unit_cost, total_cost,
+     quantity, unit_cost,
      supplier_id, process_order_id, warehouse_id, created_at)
 VALUES
-    (@doc, 1, 1, 'PURCHASE_IN', NOW(), 1000.0000, 10.0000, 10000.0000,
+    (@doc, 1, 1, 'PURCHASE_IN', 1000.0000, 10.0000,
      1, NULL, 1, NOW()),
-    (@doc, 2, 2, 'PURCHASE_IN', NOW(), 2000.0000,  8.5000, 17000.0000,
+    (@doc, 2, 2, 'PURCHASE_IN', 2000.0000,  8.5000,
      1, NULL, 1, NOW()),
-    (@doc, 3, 3, 'PURCHASE_IN', NOW(), 1500.0000,  9.0000, 13500.0000,
+    (@doc, 3, 3, 'PURCHASE_IN', 1500.0000,  9.0000,
      1, NULL, 1, NOW()),
-    (@doc, 4, 4, 'PURCHASE_IN', NOW(), 3000.0000, 11.5000, 34500.0000,
+    (@doc, 4, 4, 'PURCHASE_IN', 3000.0000, 11.5000,
      1, NULL, 1, NOW()),
-    (@doc, 5, 5, 'PURCHASE_IN', NOW(), 3000.0000, 11.5000, 34500.0000,
+    (@doc, 5, 5, 'PURCHASE_IN', 3000.0000, 11.5000,
      1, NULL, 1, NOW());
 
 INSERT INTO inventory_documents
@@ -1318,18 +1318,18 @@ VALUES
 
 SET @doc := LAST_INSERT_ID();
 
-INSERT INTO inventory_transactions
+INSERT INTO inventory_document_lines
     (document_id, line_no, material_id, transaction_type,
-     transaction_time, quantity_delta, unit_cost, total_cost,
+     quantity, unit_cost,
      supplier_id, process_order_id, warehouse_id, created_at)
 VALUES
-    (@doc, 1, 1, 'PURCHASE_IN', NOW(), 3000.0000, 10.0000, 30000.0000,
+    (@doc, 1, 1, 'PURCHASE_IN', 3000.0000, 10.0000,
      1, NULL, 2, NOW()),
-    (@doc, 2, 2, 'PURCHASE_IN', NOW(), 2000.0000,  8.5000, 17000.0000,
+    (@doc, 2, 2, 'PURCHASE_IN', 2000.0000,  8.5000,
      1, NULL, 2, NOW()),
-    (@doc, 3, 3, 'PURCHASE_IN', NOW(), 1500.0000,  9.0000, 13500.0000,
+    (@doc, 3, 3, 'PURCHASE_IN', 1500.0000,  9.0000,
      1, NULL, 2, NOW()),
-    (@doc, 4, 4, 'PURCHASE_IN', NOW(), 3000.0000, 11.5000, 34500.0000,
+    (@doc, 4, 4, 'PURCHASE_IN', 3000.0000, 11.5000,
      1, NULL, 2, NOW()),
-    (@doc, 5, 5, 'PURCHASE_IN', NOW(), 3000.0000, 11.5000, 34500.0000,
+    (@doc, 5, 5, 'PURCHASE_IN', 3000.0000, 11.5000,
      1, NULL, 2, NOW());

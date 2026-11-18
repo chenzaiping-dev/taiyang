@@ -750,6 +750,7 @@ class StockOutService:
             return None
 
         tx_ids = [tx.id for tx in consume_txs]
+        #print("reverse_by_process_order, 定位allocation的tx_ids:", tx_ids)
 
         # ⭐ 按 (material, warehouse) 汇总现存 allocation（quantity > 0）作为需归还量
         alloc_rows = (
@@ -805,6 +806,7 @@ class StockOutService:
 
         next_line_no = 1
         reversed_qty = Decimal("0")
+        #print("reverse_by_process_order, need_map:", need_map)
 
         for (mid, wh_id), need in need_map.items():
             # 该 (material, warehouse) 下的源流水，从新到旧归还
@@ -961,6 +963,8 @@ class InventoryDocumentReverseService:
             or "[PROCESS_ORDER_CANCEL]" in remark_text
         ):
             raise InventoryError("工艺单配比红冲/蓝补单及工艺单取消产生的红冲单不允许撤销")
+        if "[PROCESS_ORDER_PLACE]" in remark_text:
+            raise InventoryError("工艺单领料下单不允许单独撤销, 请走工艺单取消触发")
         if doc.document_type not in ("PURCHASE_IN", "STOCKTAKE", "RETURN", "PRODUCTION_OUT"):
             raise InventoryError("该类型原料单据不支持撤销")
 
@@ -1068,7 +1072,7 @@ class InventoryDocumentReverseService:
                 document_time=now,
                 status="CONFIRMED",
                 remark=(
-                    f"[INVENTORY_REVERSE] 撤销原单 {doc.document_no}"
+                    f"[INVENTORY_REVERSE] {doc.document_no} 撤销原单"
                     + (f"；原因：{reason.strip()}" if reason and reason.strip() else "")
                 ),
                 created_by=operator_id,

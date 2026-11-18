@@ -129,6 +129,7 @@ def new_page():
         status_labels=STATUS_LABELS,
         payment_labels=PAYMENT_LABELS,
         errors=[],
+        employee_id=session.get("employee_id"),
     )
 
 
@@ -203,6 +204,7 @@ def edit_page(perf_id):
         status_labels=STATUS_LABELS,
         payment_labels=PAYMENT_LABELS,
         errors=[],
+        employee_id=session.get("employee_id"),
     )
 
 

@@ -640,6 +640,7 @@ class ProcessOrderService:
                 document_no=document_no,
                 document_time=doc_time,
                 process_order_id=order.id,
+                created_by=operator_id,
                 #remark=remark or f"下单自动领料 - {order.process_order_no}",
                 remark=f"[PROCESS_ORDER_PLACE] {order.process_order_no} 工艺下单领料",
                 auto_confirm=True,

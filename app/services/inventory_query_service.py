@@ -20,7 +20,7 @@ def _infer_source_entry(row: dict) -> str:
     doc_no = row.get("document_no") or ""
     doc_type = row.get("document_type") or ""
     remark = row.get("document_remark") or ""
-    print(remark)
+    #print(remark)
 
     if "[PROCESS_ORDER_CANCEL]" in remark:
         return "取消工艺单"

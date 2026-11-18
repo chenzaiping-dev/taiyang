@@ -270,7 +270,9 @@ class ProcessOrderAdjustmentService:
             status="CONFIRMED",
             remark=f"[MATERIAL_ADJUST_RED] {order.process_order_no} 配比减少红冲",
             created_at=doc_time,
+            created_by=operator_id,
             confirmed_at=doc_time,
+            confirmed_by=operator_id,
         )
         db.session.add(doc)
         db.session.flush()
@@ -450,6 +452,7 @@ class ProcessOrderAdjustmentService:
             document_no=doc_no,
             document_time=doc_time,
             process_order_id=order.id,
+            created_by=operator_id,
             remark=f"[MATERIAL_ADJUST_BLUE] {order.process_order_no} 配比增加蓝补",
             auto_confirm=True,
             allow_partial=False,

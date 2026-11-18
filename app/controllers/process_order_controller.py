@@ -255,6 +255,7 @@ def _render_new_form(form_data=None, errors=None):
         mode="create",     # 关键：模板根据 mode 决定 action/标题/按钮
         order_id=None,
         status_labels=PO_STATUS_LABELS,
+        employee_id=session.get("employee_id"),
     )
 
 
@@ -346,6 +347,7 @@ def edit_page(order_id: int):
         order_id=order.id,
         order=order,
         status_labels=PO_STATUS_LABELS,
+        employee_id=session.get("employee_id"),
     )
 
 @bp.post("/<int:order_id>/edit")

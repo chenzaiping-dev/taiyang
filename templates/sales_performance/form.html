@@ -126,15 +126,16 @@
     <legend>销售与工厂</legend>
     <div class="form-row">
       <label>主销售员</label>
-      <select name="main_salesperson_id">
+      <select name="main_salesperson_id" disabled style="background:#eee;color:#666;" name="followup_employee_id" required>
         <option value="">-- 请选择 --</option>
         {% for e in employees %}
           <option value="{{ e.id }}"
-            {% if form_data.main_salesperson_id|string == e.id|string %}selected{% endif %}>
+            {% if employee_id|string == e.id|string %}selected{% endif %}>
             {{ e.real_name }} ({{ e.username }})
           </option>
         {% endfor %}
       </select>
+      <input type="hidden" name="main_salesperson_id" value="{{ form_data.main_salesperson_id or employee_id }}">
 
       <label>是否走常州工厂</label>
       <input type="checkbox" name="is_changzhou_factory"

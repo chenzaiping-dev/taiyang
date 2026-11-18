@@ -938,7 +938,7 @@ class FinishedGoodsService:
         if doc.document_type == "REVERSE":
             raise FinishedGoodsError("调整类单据（撤销单）不可再次撤销")
 
-        if reason and "[CANCEL_" in reason:
+        if reason and "_CANCEL]" in reason:
             pass
         else:
             if doc.remark:
