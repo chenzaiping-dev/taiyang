@@ -9,6 +9,45 @@
   .sp-form-actions { margin-top: 24px; display:flex; gap:10px; align-items:center; }
   .sp-save-btn { min-width:100px; }
 
+  /* 成对字段：每个字段独立成格，避免权限隐藏字段后标签/输入框错位 */
+  .sp-pair-grid {
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+    gap:12px;
+    width:100%;
+  }
+  .sp-cell {
+    min-width:0;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .sp-cell > label {
+    flex:0 0 92px;
+    width:auto;
+    margin:0;
+  }
+  .sp-cell > input:not([type=checkbox]),
+  .sp-cell > select {
+    flex:1 1 auto;
+    min-width:0;
+    width:100%;
+    box-sizing:border-box;
+  }
+  .sp-check-cell {
+    min-height:40px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:4px 8px;
+    border:1px solid #e5eaf0;
+    border-radius:4px;
+    background:#fff;
+  }
+  .sp-check-cell label { margin:0; width:auto; flex:1; }
+  .sp-check-cell input[type=checkbox] { width:20px; height:20px; margin:0; }
+  .sp-status-cell { width:100%; }
+
   @media (max-width: 700px) {
     body { margin: 8px !important; padding-bottom: 86px; background:#f5f7fa; }
     .sales-performance-form { width:100%; max-width:none; }
@@ -24,33 +63,60 @@
     }
     .sales-performance-form fieldset::after { content:""; display:block; clear:both; }
     .sales-performance-form .form-row {
-      display:grid; grid-template-columns:82px minmax(0,1fr); gap:0;
-      margin:0; border-bottom:1px solid #e5eaf0; min-height:46px;
+      display:block;
+      margin:0; padding:8px;
+      border-bottom:1px solid #e5eaf0; min-height:0;
+    }
+    .sales-performance-form .sp-pair-grid {
+      grid-template-columns:repeat(2, minmax(0, 1fr));
+      gap:8px;
+    }
+    .sales-performance-form .sp-cell {
+      display:flex; flex-direction:column; align-items:stretch; gap:4px;
+      min-width:0; padding:7px; border:1px solid #dfe6ee;
+      border-radius:5px; background:#fff;
+    }
+    .sales-performance-form .sp-cell > label {
+      flex:none; width:auto; padding:0; margin:0;
+      display:block; border:0; background:transparent;
+      color:#526273; font-size:12px; line-height:1.35;
+    }
+    .sales-performance-form .sp-cell > input:not([type=checkbox]),
+    .sales-performance-form .sp-cell > select {
+      box-sizing:border-box; width:100% !important; min-width:0;
+      min-height:42px; margin:0; padding:8px 7px;
+      border:1px solid #d5dde6; border-radius:4px;
+      background:#fff; color:#17212b; font-size:16px;
+    }
+    .sales-performance-form .sp-check-cell {
+      min-height:76px; box-sizing:border-box; padding:8px;
+      display:flex; flex-direction:row; align-items:center;
+      border:1px solid #dfe6ee; border-radius:5px;
+    }
+    .sales-performance-form .sp-check-cell label {
+      display:block; padding:0; margin:0; border:0;
+      background:transparent; font-size:12px; width:auto;
+    }
+    .sales-performance-form .sp-check-cell input[type=checkbox] {
+      width:22px; height:22px; margin:0; flex:0 0 auto;
+    }
+    .sales-performance-form .sp-status-cell {
+      box-sizing:border-box; width:100%; min-height:42px;
+      padding:8px; border:1px solid #d5dde6; border-radius:4px;
+      background:#f1f3f5; color:#526273; font-size:15px;
     }
     .sales-performance-form .form-row:last-child { border-bottom:0; }
-    .sales-performance-form .form-row > label {
-      box-sizing:border-box; width:auto; padding:12px 7px; margin:0;
-      display:flex; align-items:center; background:#f7f9fc;
-      border-right:1px solid #e5eaf0; color:#526273; font-size:12px;
-      line-height:1.35; overflow-wrap:anywhere;
-    }
-    .sales-performance-form .form-row > input:not([type=checkbox]),
-    .sales-performance-form .form-row > select,
     .sales-performance-form .form-row > textarea {
-      box-sizing:border-box; width:100% !important; min-width:0; max-width:100%;
-      min-height:44px; margin:0; padding:10px 9px; border:0;
-      border-radius:0; background:#fff; color:#17212b; font-size:16px;
-      outline-offset:-2px;
+      box-sizing:border-box; width:100% !important; min-width:0;
+      min-height:76px; margin:0; padding:10px 9px;
+      border:1px solid #d5dde6; border-radius:4px;
+      background:#fff; color:#17212b; font-size:16px;
     }
     .sales-performance-form .form-row > textarea { min-height:76px; resize:vertical; }
-    .sales-performance-form .form-row > input[readonly],
-    .sales-performance-form .form-row > input:disabled,
-    .sales-performance-form .form-row > select:disabled {
+    .sales-performance-form .form-row input[readonly],
+    .sales-performance-form .form-row input:disabled,
+    .sales-performance-form .form-row select:disabled {
       background:#f1f3f5 !important; color:#7b8794 !important;
-    }
-    .sales-performance-form .form-row > input[type=checkbox] {
-      width:22px; height:22px; margin:11px 10px; accent-color:#1976d2;
-      justify-self:start;
     }
     .sales-performance-form .form-row > span {
       display:flex; align-items:center; min-height:44px; padding:0 9px;
@@ -140,92 +206,111 @@
   <fieldset>
     <legend>金额与数量</legend>
     <div class="form-row">
-      {% if can_view_sales_performance_money() %}
-        <label>销售单价</label>
-        {% if can_edit_sales_performance_money() %}
-          <input type="number" step="0.0001" min="0" name="unit_price"
-                 id="unit_price" value="{{ form_data.unit_price }}">
-        {% else %}
-          <span>{{ form_data.unit_price }}</span>
+      <div class="sp-pair-grid">
+        {% if can_view_sales_performance_money() %}
+        <div class="sp-cell">
+          <label for="unit_price">销售单价</label>
+          {% if can_edit_sales_performance_money() %}
+            <input type="number" step="0.0001" min="0" name="unit_price"
+                   id="unit_price" inputmode="decimal" value="{{ form_data.unit_price }}">
+          {% else %}
+            <input type="text" value="{{ form_data.unit_price }}" readonly aria-readonly="true">
+          {% endif %}
+        </div>
         {% endif %}
-      {% endif %}
-
-      <label>销售数量 *</label>
-      <input type="number" step="0.0001" min="0.0001" name="quantity"
-             id="quantity" value="{{ form_data.quantity }}" required>
-    </div>
-    <div class="form-row">
-      {% if can_view_sales_performance_money() %}
-        <label>销售金额</label>
-        {% if can_edit_sales_performance_money() %}
-          <input type="number" step="0.0001" min="0" name="amount"
-                 id="amount" value="{{ form_data.amount }}">
-        {% else %}
-          <span>{{ form_data.amount }}</span>
+        <div class="sp-cell">
+          <label for="quantity">销售数量 *</label>
+          <input type="number" step="0.0001" min="0.0001" name="quantity"
+                 id="quantity" inputmode="decimal" value="{{ form_data.quantity }}" required>
+        </div>
+        {% if can_view_sales_performance_money() %}
+        <div class="sp-cell">
+          <label for="amount">销售金额</label>
+          {% if can_edit_sales_performance_money() %}
+            <input type="number" step="0.0001" min="0" name="amount"
+                   id="amount" inputmode="decimal" value="{{ form_data.amount }}">
+          {% else %}
+            <input type="text" value="{{ form_data.amount }}" readonly aria-readonly="true">
+          {% endif %}
+        </div>
         {% endif %}
-      {% endif %}
-      <label>收款状态</label>
-      <select name="payment_status">
-        {% for code, label in payment_labels.items() %}
-          <option value="{{ code }}"
-            {% if form_data.payment_status == code %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
+        <div class="sp-cell">
+          <label for="payment_status">收款状态</label>
+          <select name="payment_status" id="payment_status">
+            {% for code, label in payment_labels.items() %}
+              <option value="{{ code }}"
+                {% if form_data.payment_status == code %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% if can_view_sales_performance_cost() %}
+        <div class="sp-cell">
+          <label for="cost">成本</label>
+          {% if can_edit_sales_performance_cost() %}
+            <input type="number" step="0.0001" min="0" name="cost"
+                   id="cost" inputmode="decimal" value="{{ form_data.cost }}">
+          {% else %}
+            <input type="text" value="{{ form_data.cost }}" readonly aria-readonly="true">
+          {% endif %}
+        </div>
+        <div class="sp-cell">
+          <label for="profit">利润</label>
+          {% if can_edit_sales_performance_cost() %}
+            <input type="number" step="0.0001" name="profit"
+                   id="profit" inputmode="decimal" value="{{ form_data.profit }}">
+          {% else %}
+            <input type="text" value="{{ form_data.profit }}" readonly aria-readonly="true">
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
     </div>
-    {% if can_view_sales_performance_cost() %}
-    <div class="form-row">
-      <label>成本</label>
-      {% if can_edit_sales_performance_cost() %}
-        <input type="number" step="0.0001" min="0" name="cost"
-               value="{{ form_data.cost }}">
-      {% else %}
-        <span>{{ form_data.cost }}</span>
-      {% endif %}
-      <label>利润</label>
-      {% if can_edit_sales_performance_cost() %}
-        <input type="number" step="0.0001" name="profit"
-               value="{{ form_data.profit }}">
-      {% else %}
-        <span>{{ form_data.profit }}</span>
-      {% endif %}
-    </div>
-    {% endif %}
   </fieldset>
 
   <fieldset>
     <legend>销售与工厂</legend>
     <div class="form-row">
-      <label>主销售员</label>
-      <select name="main_salesperson_id" disabled style="background:#eee;color:#666;" name="followup_employee_id" required>
-        <option value="">-- 请选择 --</option>
-        {% for e in employees %}
-          <option value="{{ e.id }}"
-            {% if employee_id|string == e.id|string %}selected{% endif %}>
-            {{ e.real_name }} ({{ e.username }})
-          </option>
-        {% endfor %}
-      </select>
-      <input type="hidden" name="main_salesperson_id" value="{{ form_data.main_salesperson_id or employee_id }}">
-
-      <label>是否走常州工厂</label>
-      <input type="checkbox" name="is_changzhou_factory"
-             {% if form_data.is_changzhou_factory %}checked{% endif %}>
+      <div class="sp-pair-grid">
+        <div class="sp-cell">
+          <label for="main_salesperson_display">主销售员</label>
+          <select id="main_salesperson_display" disabled style="background:#eee;color:#666;">
+            <option value="">-- 请选择 --</option>
+            {% for e in employees %}
+              <option value="{{ e.id }}"
+                {% if (form_data.main_salesperson_id or employee_id)|string == e.id|string %}selected{% endif %}>
+                {{ e.real_name }} ({{ e.username }})
+              </option>
+            {% endfor %}
+          </select>
+          <input type="hidden" name="main_salesperson_id" value="{{ form_data.main_salesperson_id or employee_id }}">
+        </div>
+        <div class="sp-check-cell">
+          <label for="is_changzhou_factory">是否走常州工厂</label>
+          <input type="checkbox" id="is_changzhou_factory" name="is_changzhou_factory"
+                 value="1" {% if form_data.is_changzhou_factory %}checked{% endif %}>
+        </div>
+      </div>
     </div>
     <div class="form-row">
-      <label>是否共同销售</label>
-      <input type="checkbox" name="is_joint_sales" id="is_joint_sales"
-             {% if form_data.is_joint_sales %}checked{% endif %}>
-
-      <label>共同销售员</label>
-      <select name="co_salesperson_id" id="co_salesperson_id">
-        <option value="">-- 请选择 --</option>
-        {% for e in employees %}
-          <option value="{{ e.id }}"
-            {% if form_data.co_salesperson_id|string == e.id|string %}selected{% endif %}>
-            {{ e.real_name }} ({{ e.username }})
-          </option>
-        {% endfor %}
-      </select>
+      <div class="sp-pair-grid">
+        <div class="sp-check-cell">
+          <label for="is_joint_sales">是否共同销售</label>
+          <input type="checkbox" name="is_joint_sales" id="is_joint_sales"
+                 value="1" {% if form_data.is_joint_sales %}checked{% endif %}>
+        </div>
+        <div class="sp-cell">
+          <label for="co_salesperson_id">共同销售员</label>
+          <select name="co_salesperson_id" id="co_salesperson_id">
+            <option value="">-- 请选择 --</option>
+            {% for e in employees %}
+              <option value="{{ e.id }}"
+                {% if form_data.co_salesperson_id|string == e.id|string %}selected{% endif %}>
+                {{ e.real_name }} ({{ e.username }})
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
     </div>
   </fieldset>
 
@@ -233,13 +318,16 @@
     <legend>状态与备注</legend>
     <div class="form-row">
       <label for="status">状态</label>
-      <select id="status" disabled style="background:#eee;color:#666;">
+      <select id="status" class="sp-status-cell" disabled aria-disabled="true">
+        {% if 'DRAFT' not in status_labels %}
+          <option value="DRAFT" selected>草稿</option>
+        {% endif %}
         {% for code, label in status_labels.items() %}
           <option value="{{ code }}"
-            {% if form_data.status == code %}selected{% endif %}>{{ label }}</option>
+            {% if (form_data.status or 'DRAFT') == code %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
-      <input type="hidden" name="status" value="{{ form_data.status }}">
+      <input type="hidden" name="status" value="{{ form_data.status or 'DRAFT' }}">
     </div>
     <div class="form-row">
       <label>备注</label>

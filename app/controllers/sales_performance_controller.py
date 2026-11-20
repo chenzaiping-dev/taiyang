@@ -44,8 +44,14 @@ def _parse_form(form):
         "cost": fnum("cost"),
         "profit": fnum("profit"),
         "main_salesperson_id": fint("main_salesperson_id"),
-        "is_changzhou_factory": form.get("is_changzhou_factory") == "on",
-        "is_joint_sales": form.get("is_joint_sales") == "on",
+        "is_changzhou_factory": (
+            form.get("is_changzhou_factory", "").strip().lower()
+            in {"1", "on", "true", "yes"}
+        ),
+        "is_joint_sales": (
+            form.get("is_joint_sales", "").strip().lower()
+            in {"1", "on", "true", "yes"}
+        ),
         "co_salesperson_id": fint("co_salesperson_id"),
         "expected_delivery_date":
             util_parse_date(form.get("expected_delivery_date", "")),
