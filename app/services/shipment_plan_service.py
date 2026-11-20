@@ -243,8 +243,6 @@ class ShipmentPlanService:
             stmt = stmt.where(SalesPerformance.performance_no.like(f"%{performance_no}%"))
         if company_name:
             stmt = stmt.where(SalesPerformance.company_name.like(f"%{company_name}%"))
-        if company_name:
-            stmt = stmt.where(SalesPerformance.company_name.like(f"%{company_name}%"))
         if product_name:
             stmt = stmt.where(SalesPerformance.product_name.like(f"%{product_name}%"))
         if date_from:

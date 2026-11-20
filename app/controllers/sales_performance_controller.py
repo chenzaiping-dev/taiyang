@@ -87,7 +87,9 @@ def _default_form_data():
 # ==================== 列表 ====================
 @bp.get("/")
 def list_page():
-    keyword = request.args.get("keyword", "").strip() or None
+    performance_no = request.args.get("performance_no", "").strip() or None
+    company_name = request.args.get("company_name", "").strip() or None
+    product_name = request.args.get("product_name", "").strip() or None
     status = request.args.get("status", "").strip() or None
     payment_status = request.args.get("payment_status", "").strip() or None
     date_from_raw = request.args.get("date_from", "").strip() or None
@@ -105,7 +107,9 @@ def list_page():
         "sales_performance/list.html",
         rows=rows, total=total, page=page,
         page_size=page_size, total_pages=total_pages,
-        keyword=keyword or "",
+        performance_no=performance_no or "",
+        company_name=company_name or "",
+        product_name=product_name or "",
         status=status or "",
         payment_status=payment_status or "",
         date_from=date_from_raw or "",

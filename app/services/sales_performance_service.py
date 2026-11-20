@@ -251,7 +251,8 @@ class SalesPerformanceService:
 
     # ---------- 列表 ----------
     @staticmethod
-    def list_performances(keyword=None, status=None, payment_status=None,
+    def list_performances(performance_no=None, company_name=None, product_name = None,
+                          status=None, payment_status=None,
                           date_from=None, date_to=None, salesperson_id=None,
                           page=1, page_size=20):
         creator = db.aliased(Employee)
@@ -299,13 +300,12 @@ class SalesPerformanceService:
                 isouter=True)
             .order_by(SalesPerformance.id.desc())
         )
-        if keyword:
-            like = f"%{keyword}%"
-            base = base.where(or_(
-                SalesPerformance.performance_no.like(like),
-                SalesPerformance.company_name.like(like),
-                SalesPerformance.product_name.like(like),
-            ))
+        if performance_no:
+            base = base.where(SalesPerformance.performance_no.like(f"%{performance_no}%"))
+        if company_name:
+            base = base.where(SalesPerformance.company_name.like(f"%{company_name}%"))
+        if product_name:
+            base = base.where(SalesPerformance.product_name.like(f"%{product_name}%"))
         if status:
             base = base.where(SalesPerformance.status == status)
         if payment_status:

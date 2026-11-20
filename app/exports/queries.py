@@ -132,7 +132,9 @@ def shipment_plan_details(params):
 def sales_performances(params):
     page, page_size = _pagination(params)
     return SalesPerformanceService.list_performances(
-        keyword=(params.get("keyword") or "").strip() or None,
+        performance_no=(params.get("performance_no") or "").strip() or None,
+        company_name=(params.get("company_name") or "").strip() or None,
+        product_name=(params.get("product_name") or "").strip() or None,
         status=(params.get("status") or "").strip() or None,
         payment_status=(params.get("payment_status") or "").strip() or None,
         date_from=util_parse_date(params.get("date_from")),

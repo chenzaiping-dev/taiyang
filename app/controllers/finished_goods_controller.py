@@ -11,8 +11,6 @@ from app.generated.models.employees import Employee
 from app.generated.models.finished_goods_batches import FinishedGoodsBatch
 from app.generated.models.finished_goods_documents import FinishedGoodsDocument
 from app.generated.models.finished_goods_document_lines import FinishedGoodsDocumentLine
-from app.generated.models.finished_goods_inventory import FinishedGoodsInventory
-from app.generated.models.finished_goods_transactions import FinishedGoodsTransaction
 from app.generated.models.process_orders import ProcessOrder
 
 from app.services.process_order_service import _fg_warehouses

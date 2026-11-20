@@ -11,7 +11,6 @@ from app.generated.models.suppliers import Supplier
 
 from app.generated.models.inventory_documents import InventoryDocument
 from app.generated.models.inventory_document_lines import InventoryDocumentLine
-from app.generated.models.inventory_cost_layers import InventoryCostLayer
 
 from app.schemas.purchase_in_schema import PurchaseInRequestSchema
 from app.services.form_parser import parse_purchase_in_form, FormParseError

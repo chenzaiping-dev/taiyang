@@ -5,8 +5,12 @@
 
 <form method="get" action="{{ url_for('sales_performance.list_page') }}"
       style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-  <input type="text" name="keyword" value="{{ keyword }}"
-         placeholder="编号/公司/产品" maxlength="100">
+  <input type="text" name="performance_no" value="{{ performance_no }}"
+         placeholder="业绩表单号" maxlength="100">
+  <input type="text" name="company_name" value="{{ company_name }}"
+         placeholder="公司名称" maxlength="200" style="width:160px;">
+  <input type="text" name="product_name" value="{{ product_name }}"
+         placeholder="产品名称" maxlength="200" style="width:160px;">
   <select name="salesperson_id">
     <option value="">-- 全部销售员 --</option>
     {% for e in employees %}
@@ -256,14 +260,16 @@
   <span>共 {{ total }} 条，第 {{ page }}/{{ total_pages }} 页</span>
   {% if page > 1 %}
     <a class="btn" href="{{ url_for('sales_performance.list_page',
-         keyword=keyword, status=status, payment_status=payment_status,
+         performance_no=performance_no, status=status, payment_status=payment_status,
+         company_name=company_name, product_name=product_name,
          date_from=date_from, date_to=date_to,
          salesperson_id=salesperson_id,
          page=page-1) }}">上一页</a>
   {% endif %}
   {% if page < total_pages %}
     <a class="btn" href="{{ url_for('sales_performance.list_page',
-         keyword=keyword, status=status, payment_status=payment_status,
+         performance_no=performance_no, status=status, payment_status=payment_status,
+         company_name=company_name, product_name=product_name,
          date_from=date_from, date_to=date_to,
          salesperson_id=salesperson_id,
          page=page+1) }}">下一页</a>
