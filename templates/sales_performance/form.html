@@ -2,7 +2,77 @@
 {% block title %}{{ '编辑业绩单' if mode == 'edit' else '新建业绩单' }}{% endblock %}
 
 {% block content %}
-<h2>{{ '编辑业绩单' if mode == 'edit' else '新建业绩单' }}
+<style>
+  /* PC 保持原有表单布局；手机端切换为类似 Excel 的紧凑网格录入 */
+  .sales-performance-form { max-width: 1180px; }
+  .sales-performance-form fieldset { min-width: 0; }
+  .sp-form-actions { margin-top: 24px; display:flex; gap:10px; align-items:center; }
+  .sp-save-btn { min-width:100px; }
+
+  @media (max-width: 700px) {
+    body { margin: 8px !important; padding-bottom: 86px; background:#f5f7fa; }
+    .sales-performance-form { width:100%; max-width:none; }
+    .sp-page-title { font-size:19px; margin:10px 2px 14px; }
+    .sales-performance-form fieldset {
+      border:1px solid #cbd5e1; border-radius:6px; padding:0; margin:0 0 12px;
+      background:#fff; overflow:hidden;
+    }
+    .sales-performance-form legend {
+      display:block; float:left; width:100%; box-sizing:border-box;
+      padding:10px 12px; margin:0; background:#eaf1f8; color:#23415f;
+      font-size:14px; font-weight:700; border-bottom:1px solid #cbd5e1;
+    }
+    .sales-performance-form fieldset::after { content:""; display:block; clear:both; }
+    .sales-performance-form .form-row {
+      display:grid; grid-template-columns:82px minmax(0,1fr); gap:0;
+      margin:0; border-bottom:1px solid #e5eaf0; min-height:46px;
+    }
+    .sales-performance-form .form-row:last-child { border-bottom:0; }
+    .sales-performance-form .form-row > label {
+      box-sizing:border-box; width:auto; padding:12px 7px; margin:0;
+      display:flex; align-items:center; background:#f7f9fc;
+      border-right:1px solid #e5eaf0; color:#526273; font-size:12px;
+      line-height:1.35; overflow-wrap:anywhere;
+    }
+    .sales-performance-form .form-row > input:not([type=checkbox]),
+    .sales-performance-form .form-row > select,
+    .sales-performance-form .form-row > textarea {
+      box-sizing:border-box; width:100% !important; min-width:0; max-width:100%;
+      min-height:44px; margin:0; padding:10px 9px; border:0;
+      border-radius:0; background:#fff; color:#17212b; font-size:16px;
+      outline-offset:-2px;
+    }
+    .sales-performance-form .form-row > textarea { min-height:76px; resize:vertical; }
+    .sales-performance-form .form-row > input[readonly],
+    .sales-performance-form .form-row > input:disabled,
+    .sales-performance-form .form-row > select:disabled {
+      background:#f1f3f5 !important; color:#7b8794 !important;
+    }
+    .sales-performance-form .form-row > input[type=checkbox] {
+      width:22px; height:22px; margin:11px 10px; accent-color:#1976d2;
+      justify-self:start;
+    }
+    .sales-performance-form .form-row > span {
+      display:flex; align-items:center; min-height:44px; padding:0 9px;
+      background:#fff; font-size:14px; overflow-wrap:anywhere;
+    }
+    .sales-performance-form .form-row > input[type=hidden] { display:none; }
+    .sales-performance-form .sp-form-actions {
+      position:fixed; z-index:150; left:0; right:0; bottom:0;
+      box-sizing:border-box; margin:0; padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+      background:rgba(255,255,255,.97); border-top:1px solid #d8e0e8;
+      box-shadow:0 -3px 12px rgba(20,40,60,.08); gap:8px;
+    }
+    .sales-performance-form .sp-form-actions .btn {
+      box-sizing:border-box; min-height:44px; display:flex; align-items:center;
+      justify-content:center; font-size:15px; border-radius:6px;
+    }
+    .sales-performance-form .sp-save-btn { flex:1; font-weight:700; }
+    .sales-performance-form .sp-cancel-btn { width:82px; }
+    .sales-performance-form .error-box { font-size:13px; }
+  }
+</style>
+<h2 class="sp-page-title">{{ '编辑业绩单' if mode == 'edit' else '新建业绩单' }}
   {% if perf %}<span style="color:#888;font-size:14px;">#{{ perf.performance_no }}</span>{% endif %}
 </h2>
 
@@ -14,7 +84,7 @@
   </div>
 {% endif %}
 
-<form method="post"
+<form method="post" class="sales-performance-form"
       action="{% if mode == 'edit' %}
                 {{ url_for('sales_performance.update_submit', perf_id=perf.id) }}
               {% else %}
@@ -177,9 +247,9 @@
     </div>
   </fieldset>
 
-  <div style="margin-top:24px;">
-    <button type="submit" class="btn btn-primary">保存</button>
-    <a class="btn" href="{{ url_for('sales_performance.list_page') }}">取消</a>
+  <div class="sp-form-actions">
+    <button type="submit" class="btn btn-primary sp-save-btn">{{ '保存修改' if mode == 'edit' else '保存草稿' }}</button>
+    <a class="btn sp-cancel-btn" href="{{ url_for('sales_performance.list_page') }}">取消</a>
   </div>
 </form>
 
