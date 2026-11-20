@@ -254,7 +254,7 @@ class SalesPerformanceService:
     def list_performances(performance_no=None, company_name=None, product_name = None,
                           status=None, payment_status=None,
                           date_from=None, date_to=None, salesperson_id=None,
-                          page=1, page_size=20):
+                          exclude_drafts=False, page=1, page_size=20):
         creator = db.aliased(Employee)
         sales = db.aliased(Employee)
         co_sales = db.aliased(Employee)
@@ -306,6 +306,10 @@ class SalesPerformanceService:
             base = base.where(SalesPerformance.company_name.like(f"%{company_name}%"))
         if product_name:
             base = base.where(SalesPerformance.product_name.like(f"%{product_name}%"))
+        # 跟单员列表不显示业务员保存但尚未提交的草稿。
+        # 放在查询层执行，确保分页总数和实际结果一致。
+        if exclude_drafts:
+            base = base.where(SalesPerformance.status != "DRAFT")
         if status:
             base = base.where(SalesPerformance.status == status)
         if payment_status:

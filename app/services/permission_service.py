@@ -57,6 +57,20 @@ def is_super_admin():
     return any(row.get("role_code") == SUPER_ADMIN_ROLE for row in _load_permission_rows())
 
 
+def has_role(role_code: str) -> bool:
+    """Return whether the current employee has an active role with this code.
+
+    Role membership is additive: an employee with several roles matches when
+    any active assigned role has the requested role_code.
+    """
+    # Bootstrap 管理员不代表实际持有某个业务角色，不应用业务角色的数据过滤。
+    if _bootstrap_bypass():
+        return False
+    if not _employee_id():
+        return False
+    return any(row.get("role_code") == role_code for row in _load_permission_rows())
+
+
 def has_permission(permission_code: str) -> bool:
     # Bootstrap admin is a development-only identity and has no employee_id.
     if _bootstrap_bypass() or is_super_admin():

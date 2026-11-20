@@ -5,6 +5,7 @@ from app.services.inventory_query_service import InventoryQueryService
 from app.services.finished_goods_query_service import FinishedGoodsQueryService
 from app.services.sales_performance_service import SalesPerformanceService
 from app.services.shipment_plan_service import ShipmentPlanService
+from app.services.permission_service import has_role
 
 
 EXPORT_PAGE_SIZE = 2_000
@@ -140,6 +141,9 @@ def sales_performances(params):
         date_from=util_parse_date(params.get("date_from")),
         date_to=util_parse_date_end(params.get("date_to")),
         salesperson_id=_positive_int(params.get("salesperson_id")),
+        # 跟单员可能同时拥有其他角色；只要包含 order_followup 角色，
+        # 就不展示业务员尚未提交的草稿业绩单。该规则同时作用于列表和 Excel。
+        exclude_drafts=has_role("order_followup"),
         page=page, page_size=page_size,
     )
 
