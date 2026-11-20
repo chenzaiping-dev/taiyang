@@ -40,10 +40,18 @@ def create_employee(username: str, real_name: str, phone: str = "", nickname: st
 
 def list_employees():
     return db.session.execute(text("""
-        SELECT id, username, real_name, phone, nickname, status,
-               COALESCE(must_change_password, 0) AS must_change_password
-          FROM employees
-         ORDER BY status DESC, id
+        SELECT e.id, e.username, e.real_name, e.phone, e.nickname, e.status,
+               COALESCE(e.must_change_password, 0) AS must_change_password,
+               COALESCE((
+                   SELECT GROUP_CONCAT(DISTINCT r.role_name
+                                       ORDER BY r.role_name
+                                       SEPARATOR '、')
+                     FROM employee_roles er
+                     JOIN roles r ON r.id = er.role_id
+                    WHERE er.employee_id = e.id
+               ), '') AS role_names
+          FROM employees e
+         ORDER BY e.status DESC, e.id
     """)).mappings().all()
 
 
