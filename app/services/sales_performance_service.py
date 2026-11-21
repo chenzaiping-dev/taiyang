@@ -12,6 +12,9 @@ from app.generated.models.shipment_plans import ShipmentPlan
 from app.services.production_plan_service import PLAN_STATUS_LABELS
 from app.utils.datetime_utils import now_beijing_naive
 from app.utils.decimal_utils import _q3, _q6
+from app.services.sales_performance_access_service import (
+    apply_sales_performance_scope,
+)
 
 PAYMENT_LABELS = {"UNPAID": "未收款", "PAID": "已收款"}
 
@@ -314,6 +317,13 @@ class SalesPerformanceService:
                 isouter=True)
             .order_by(SalesPerformance.id.desc())
         )
+        # 统一应用业绩单数据范围
+        base = apply_sales_performance_scope(
+            base,
+            SalesPerformance,
+            permission_code="sales_performance.view",
+        )
+
         if performance_no:
             base = base.where(SalesPerformance.performance_no.like(f"%{performance_no}%"))
         if company_name:

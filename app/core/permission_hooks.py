@@ -7,6 +7,10 @@ from flask import abort, jsonify, redirect, request, session, url_for
 
 from app.services.permission_service import has_permission, is_super_admin, get_data_scopes
 
+from app.services.sales_performance_access_service import (
+    can_access_sales_performance,
+)
+
 # endpoint -> all required permission codes
 ENDPOINT_REQUIREMENTS = {
     # Raw-material inventory / procurement
@@ -114,6 +118,22 @@ MANAGED_BLUEPRINTS = {
     "production_plan", "shipment_plan", "sales_performance", "exports",
 }
 
+def _supports_data_scope(endpoint, permission_code, export_name=None):
+    """
+    当前明确接入数据范围过滤的业务入口。
+    其他模块仍然保持原有 fail-closed 行为。
+    """
+    if endpoint.startswith("sales_performance."):
+        return permission_code.startswith("sales_performance.")
+
+    if (
+        endpoint == "exports.download"
+        and export_name == "sales-performances"
+        and permission_code == "sales_performance.view"
+    ):
+        return True
+
+    return False
 
 def register_permission_hooks(app):
     @app.before_request
@@ -163,11 +183,23 @@ def register_permission_hooks(app):
         missing = [code for code in requirements if not has_permission(code)]
         # Fail closed for non-all scopes until each business query has a verified
         # owner/assignment/factory filter. Never silently treat `own` as `all`.
+        export_name = (request.view_args or {}).get("export_name")
+
         unsupported_scope = [
-            code for code in requirements
-            if has_permission(code)
-            and (get_data_scopes(code) and "all" not in get_data_scopes(code))
+            code
+            for code in requirements
+            if (
+                has_permission(code)
+                and get_data_scopes(code)
+                and "all" not in get_data_scopes(code)
+                and not _supports_data_scope(
+                    endpoint,
+                    code,
+                    export_name,
+                )
+            )
         ]
+
         if missing or unsupported_scope:
             if request.is_json or request.path.startswith("/inventory/api/"):
                 return jsonify({
@@ -180,4 +212,20 @@ def register_permission_hooks(app):
                     "unsupported_data_scope_permissions": unsupported_scope,
                 }), 403
             abort(403)
+
+        # 业绩单详情、编辑、删除、状态变更等单条记录操作
+        if endpoint.startswith("sales_performance."):
+            view_args = request.view_args or {}
+            perf_id = view_args.get("perf_id")
+
+            if perf_id:
+                permission_code = requirements[0]
+
+                if not can_access_sales_performance(
+                    perf_id,
+                    permission_code=permission_code,
+                ):
+                    # 返回 404，避免通过 ID 判断其他员工是否存在某张业绩单
+                    abort(404)
+
         return None

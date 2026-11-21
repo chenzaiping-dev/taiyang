@@ -9,6 +9,8 @@ from app.extensions import db
 
 SUPER_ADMIN_ROLE = "super_admin"
 
+def get_current_employee_id():
+    return _employee_id()
 
 def _bootstrap_bypass():
     return bool(

@@ -67,7 +67,13 @@
                     <td>
                       <select class="form-select form-select-sm scope-select" name="scope_{{ p.id }}" data-permission-id="{{ p.id }}" {% if not p.granted %}disabled{% endif %}>
                         {% for scope in ['all', 'own', 'assigned', 'factory'] %}
-                        <option value="{{ scope }}" {% if (p.data_scope or 'all') == scope %}selected{% endif %}>{{ {'all':'全部数据','own':'本人创建','assigned':'分配给本人','factory':'所属工厂'}[scope] }}</option>
+                        <option value="{{ scope }}" {% if (p.data_scope or 'all') == scope %}selected{% endif %}>
+                          {% if p.module_code == 'sales_performance' and scope == 'own' %}
+                              本人创建或作为副销售
+                          {% else %}
+                          {{ {'all':'全部数据','own':'本人创建','assigned':'分配给本人','factory':'所属工厂'}[scope] }}
+                          {% endif %}
+                        </option>
                         {% endfor %}
                       </select>
                     </td>
