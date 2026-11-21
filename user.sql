@@ -877,7 +877,7 @@ CREATE TABLE production_plans (
     performance_id BIGINT UNSIGNED NOT NULL COMMENT '业绩ID',
 
     total_quantity DECIMAL(16, 4) NOT NULL
-        COMMENT '计划覆盖总数量',
+        COMMENT '订单总数量',
 
     process_quantity DECIMAL(16, 4) NOT NULL DEFAULT 0
         COMMENT '计划新生产数量',
