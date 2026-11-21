@@ -1,7 +1,7 @@
 from decimal import Decimal
 from datetime import date, datetime
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import select, case, func, or_, exists
+from sqlalchemy import select, case, func, or_, exists, cast
 from flask import flash
 
 from app.extensions import db
@@ -274,8 +274,22 @@ class SalesPerformanceService:
                 SalesPerformance.product_specification,
                 SalesPerformance.unit,
                 SalesPerformance.quantity,
+                case(
+                    (
+                        SalesPerformance.is_joint_sales == 1,
+                        cast(SalesPerformance.quantity / 2, db.Numeric(18, 4)),
+                    ),
+                    else_=SalesPerformance.quantity,
+                ).label("attributed_quantity"),
                 SalesPerformance.unit_price,
                 SalesPerformance.amount,
+                case(
+                    (
+                        SalesPerformance.is_joint_sales == 1,
+                        cast(SalesPerformance.amount / 2, db.Numeric(18, 4)),
+                    ),
+                    else_=SalesPerformance.amount,
+                ).label("attributed_amount"),
                 SalesPerformance.payment_status,
                 SalesPerformance.cost,
                 SalesPerformance.profit,

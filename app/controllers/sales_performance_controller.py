@@ -1,4 +1,5 @@
 from datetime import datetime
+from sqlalchemy import text
 from flask import (
     Blueprint, render_template, request, redirect, url_for, flash, abort, session
 )
@@ -14,7 +15,7 @@ from app.services.sales_performance_service import (
 from app.utils.datetime_utils import util_parse_date
 from app.exports.queries import run_query
 from app.services.permission_service import (
-    can_view_sales_performance_money, can_edit_sales_performance_money
+    can_view_sales_performance_money, can_edit_sales_performance_money, has_role
 )
 
 bp = Blueprint("sales_performance", __name__, url_prefix="/sales-performances")
@@ -63,6 +64,29 @@ def _parse_form(form):
 def _employees():
     return (Employee.query.filter_by(status=1)
             .order_by(Employee.real_name.asc()).all())
+
+def _sales_employees():
+    """只返回拥有 sales 角色的在职员工。"""
+    sales_ids = db.session.execute(text("""
+        SELECT DISTINCT e.id
+          FROM employees e
+          JOIN employee_roles er ON er.employee_id = e.id
+          JOIN roles r ON r.id = er.role_id
+         WHERE e.status = 1
+           AND r.status = 1
+           AND r.role_code = 'sales'
+         ORDER BY e.id
+    """)).scalars().all()
+
+    if not sales_ids:
+        return []
+
+    return (
+        Employee.query
+        .filter(Employee.id.in_(sales_ids))
+        .order_by(Employee.real_name.asc())
+        .all()
+    )
 
 
 def _default_form_data():
@@ -121,9 +145,10 @@ def list_page():
         date_from=date_from_raw or "",
         date_to=date_to_raw or "",
         salesperson_id=salesperson_id or "",
-        employees=_employees(),          # ⭐ 销售员下拉用
+        employees=_sales_employees(),          # ⭐ 销售员下拉用
         status_labels=STATUS_LABELS,
         payment_labels=PAYMENT_LABELS,
+        is_sales_role=has_role("sales"),
     )
 
 
@@ -135,6 +160,7 @@ def new_page():
         mode="create",
         perf=None,
         employees=_employees(),
+        sales_employees=_sales_employees(),
         form_data=_default_form_data(),
         status_labels=STATUS_LABELS,
         payment_labels=PAYMENT_LABELS,
@@ -159,6 +185,7 @@ def create_submit():
             mode="create",
             perf=None,
             employees=_employees(),
+            sales_employees=_sales_employees(),
             form_data={**_default_form_data(), **{
                 k: request.form.get(k, "")
                 for k in _default_form_data()
@@ -210,6 +237,7 @@ def edit_page(perf_id):
         mode="edit",
         perf=perf,
         employees=_employees(),
+        sales_employees=_sales_employees(),
         form_data=form_data,
         status_labels=STATUS_LABELS,
         payment_labels=PAYMENT_LABELS,
@@ -244,6 +272,7 @@ def update_submit(perf_id):
             mode="edit",
             perf=perf,
             employees=_employees(),
+            sales_employees=_sales_employees(),
             form_data={**_default_form_data(), **{
                 k: request.form.get(k, "")
                 for k in _default_form_data()

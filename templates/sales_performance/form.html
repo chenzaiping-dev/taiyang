@@ -302,7 +302,7 @@
           <label for="co_salesperson_id">共同销售员</label>
           <select name="co_salesperson_id" id="co_salesperson_id">
             <option value="">-- 请选择 --</option>
-            {% for e in employees %}
+            {% for e in sales_employees %}
               <option value="{{ e.id }}"
                 {% if form_data.co_salesperson_id|string == e.id|string %}selected{% endif %}>
                 {{ e.real_name }} ({{ e.username }})

@@ -58,9 +58,11 @@
       <th style="width:60px;text-align:right;">数量</th>
       <th style="width:20px;">单位</th>
       <th style="width:50px;text-align:right;">{{ "单价" if can_view_sales_performance_money() else "" }}</th>
-      <th style="width:60px;text-align:right;">{{ "金额" if can_view_sales_performance_money() else "" }}</th>
+      <th style="width:60px;text-align:right;">{{ "销售额" if can_view_sales_performance_money() else "" }}</th>
       <th style="width:60px;text-align:right;">{{ "成本" if can_view_sales_performance_cost() else "" }}</th>
       <th style="width:60px;text-align:right;">{{ "利润" if can_view_sales_performance_cost() else "" }}</th>
+      <th>归属数量</th>
+      <th style="width:60px;text-align:right;">{{ "归属销售额" if can_view_sales_performance_money() else "" }}</th>
       <th style="width:60px;text-align:right;">主销售</th>
       <th style="width:40px;text-align:right;">是否共同销售</th>
       <th style="width:60px;text-align:right;">副销售</th>
@@ -68,7 +70,9 @@
       <th style="width:80px;text-align:right;">期待发货日期</th>
       <th style="width:60px;">收款状态</th>
       <th style="width:100px;">创建时间</th>
+      {% if not is_sales_role %}
       <th style="width:100px;">创建计划</th>
+      {% endif %}
       <th style="width:40px;">状态</th>
       <th style="width:100px;">操作</th>
     </tr>
@@ -92,6 +96,8 @@
         <td style="text-align:right;color:#2440b3;">{% if can_view_sales_performance_money() %}{{ r.amount }}{% else %}—{% endif %}</td>
         <td style="text-align:right;color:#ef6c00;">{% if can_view_sales_performance_cost() %}{{ r.cost }}{% else %}—{% endif %}</td>
         <td style="text-align:right;color:#2e7d32;">{% if can_view_sales_performance_cost() %}{{ r.profit }}{% else %}—{% endif %}</td>
+        <td style="text-align:right;">{{ r.attributed_quantity }}</td>
+        <td style="text-align:right;color:#2440b3;">{% if can_view_sales_performance_money() %}{{ r.attributed_amount }}{% else %}—{% endif %}</td>
         <td style="text-align:right;">{{ r.salesperson_name }}</td>
         <td style="text-align:right;">{{ r.is_joint_sales }}</td>
         <td style="text-align:right;">{{ r.co_salesperson_name }}</td>
@@ -99,6 +105,7 @@
         <td style="text-align:right;">{{ r.expected_delivery_date }}</td>
         <td>{{ payment_labels.get(r.payment_status, r.payment_status) }}</td>
         <td>{{ r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "-" }}</td>
+        {% if not is_sales_role %}
         <!-- ⭐ 生产计划：有则跳详情，无则跳新建 -->
         <td style="text-align:center;white-space:nowrap;">
           {% if r.production_plan_id and has_permission('production_plan.view') %}
@@ -122,6 +129,7 @@
               title="为该业绩单创建发货计划">发货</a>
           {% endif %}
         </td>
+        {% endif %}
         <td>
           <span class="status-badge status-{{ r.status|lower }}">
             {{ status_labels.get(r.status, r.status) }}
@@ -140,7 +148,7 @@
               <button type="submit" class="btn btn-sm btn-primary">确认</button>
             </form>
 
-          {% elif r.status == 'CONFIRMED' %}
+          {% elif r.status == 'CONFIRMED' and not is_sales_role %}
             <form method="post" style="display:inline;"
                   action="{{ url_for('sales_performance.change_status', perf_id=r.id, action='produce') }}"
                   onsubmit="return confirm('确认已下单生产？');">
@@ -148,7 +156,7 @@
               <button type="submit" class="btn btn-sm btn-warn">生产</button>
             </form>
 
-          {% elif r.status == 'PRODUCED' %}
+          {% elif r.status == 'PRODUCED' and not is_sales_role %}
             <form method="post" style="display:inline;"
                   action="{{ url_for('sales_performance.change_status', perf_id=r.id, action='ship') }}"
                   onsubmit="return confirm('确认标记为已发货？');">
@@ -222,7 +230,7 @@
       </tr>
       {% endfor %}
     {% else %}
-      <tr><td colspan="21" style="text-align:center;color:#999;padding:24px;">
+      <tr><td colspan="{{ 20 if is_sales_role else 21 }}" style="text-align:center;color:#999;padding:24px;">
         暂无业绩单
       </td></tr>
     {% endif %}
@@ -241,6 +249,10 @@
       </td>
       <td style="text-align:right;color:#2e7d32;">
         {% if can_view_sales_performance_cost() %}{{ rows|sum(attribute='profit') }}{% else %}—{% endif %}
+      </td>
+      <td style="text-align:right;">{{ rows|sum(attribute='attributed_quantity') }}</td>
+      <td style="text-align:right;color:#2440b3;">
+        {% if can_view_sales_performance_money() %}{{ rows|sum(attribute='attributed_amount') }}{% else %}—{% endif %}
       </td>
       <td></td>
       <td></td>
