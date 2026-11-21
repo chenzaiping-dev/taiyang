@@ -101,9 +101,15 @@ def save_role_permissions(role_id, submitted_permission_ids, submitted_scopes):
 
     scopes = {}
     for permission_id in ids:
-        scope = (submitted_scopes.get(str(permission_id)) or "all").strip()
+        # 前端字段名称为 scope_{permission_id}
+        field_name = f"scope_{permission_id}"
+        scope = (
+            submitted_scopes.get(field_name) or "all"
+        ).strip().lower()
         if scope not in ALLOWED_DATA_SCOPES:
-            raise ValueError(f"权限 {permission_id} 的数据范围无效。")
+            raise ValueError(
+                f"权限 {permission_id} 的数据范围无效：{scope}"
+            )
         scopes[permission_id] = scope
 
     try:
