@@ -10,14 +10,6 @@
       style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
   <input type="text" name="keyword" value="{{ keyword }}"
          placeholder="单据号" maxlength="64">
-  <select name="status">
-    <option value="">-- 全部状态 --</option>
-    {% for code, label in status_labels.items() %}
-      <option value="{{ code }}"
-        {% if status == code %}selected{% endif %}>{{ label }}</option>
-    {% endfor %}
-  </select>
-
   {% if direction == 'in' %}
   <select name="inbound_type">
     <option value="">-- 全部入库类型 --</option>
@@ -46,7 +38,13 @@
       </option>
     {% endfor %}
   </select>
-
+  <select name="status">
+    <option value="">-- 全部状态 --</option>
+    {% for code, label in status_labels.items() %}
+      <option value="{{ code }}"
+        {% if status == code %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
   <label style="font-size:12px;color:#666;">
     从 <input type="date" name="date_from" value="{{ date_from }}">
     到 <input type="date" name="date_to" value="{{ date_to }}">
@@ -62,7 +60,7 @@
   </a>
   {% endif %}
 </form>
-{% set ns = namespace(total_signed=0) %}
+{% set ns = namespace(total_signed=0, total_cost=0) %}
 <table style="width:100%;border-collapse:collapse;font-size:13px;">
   <thead>
     <tr style="background:#f5f5f5;">
@@ -76,6 +74,7 @@
       <th style="width:120px;text-align:right;">
         {{ '入库数量合计' if direction == 'in' else '出库数量合计' }}
       </th>
+      {% if can_view_cost %}<th style="width:130px;text-align:right;">成本金额</th>{% endif %}
       <th style="width:110px;">状态</th>
       <th style="width:50px;">创建人</th>
       <th style="width:100px;">创建时间</th>
@@ -101,7 +100,9 @@
         <td style="text-align:right;">{{ r.line_count }}</td>
         {% set signed_qty = (r.total_qty if r.document_type != 'REVERSE' else -r.total_qty) %}
         {% set ns.total_signed = ns.total_signed + (signed_qty or 0) %}
+        {% set ns.total_cost = ns.total_cost + (r.total_cost or 0) %}
         <td style="text-align:right;">{{ signed_qty }}</td>
+        {% if can_view_cost %}<td style="text-align:right;">{{ '%+.2f'|format(r.total_cost) if r.total_cost is not none else '-' }}</td>{% endif %}
         <td>
           <span class="status-badge status-{{ r.status|lower }}">
             {{ status_labels.get(r.status, r.status) }}
@@ -154,7 +155,7 @@
       </tr>
       {% endfor %}
     {% else %}
-      <tr><td colspan="12" style="text-align:center;color:#999;padding:24px;">
+      <tr><td colspan="{{ 13 if can_view_cost else 12 }}" style="text-align:center;color:#999;padding:24px;">
         暂无{{ '入库单' if direction == 'in' else '出库单' }}
       </td></tr>
     {% endif %}
@@ -163,7 +164,7 @@
     <tr style="background:#fafafa;font-weight:600;">
       <td colspan="5" style="text-align:right;">本页合计：</td>
       <td style="text-align:right;color:#2440b3;">{{ ns.total_signed }}</td>
-      <td></td>
+      {% if can_view_cost %}<td style="text-align:right;color:#2440b3;">{{ '%+.2f'|format(ns.total_cost) }}</td>{% endif %}
       <td></td>
       <td></td>
       <td></td>

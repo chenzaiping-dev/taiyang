@@ -368,7 +368,8 @@ def transactions_page():
         date_to=date_to_raw or "",
         warehouses=_fg_warehouses(),
         tx_types=FG_TX_TYPE_LABELS,
-        transaction_directions=FG_TRANSACTION_TYPE_DIRECTION
+        transaction_directions=FG_TRANSACTION_TYPE_DIRECTION,
+        can_view_cost=can_view_finished_goods_cost(),
     )
 
 @bp.get("/io-summary")
@@ -461,6 +462,7 @@ def document_list_page(direction):
             if direction == "in"
             else url_for("finished_goods.outbound_page")
         ),
+        can_view_cost=can_view_finished_goods_cost(),
     )
 
 @bp.get("/documents/<direction>/<int:document_id>")

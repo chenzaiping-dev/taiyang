@@ -135,6 +135,17 @@ class FinishedGoodsQueryService:
                 FinishedGoodsTransaction.transaction_time,
                 FinishedGoodsTransaction.transaction_type,
                 FinishedGoodsTransaction.quantity_delta,
+                # 成本单价优先取业务单据明细快照，历史明细为空时回退批次成本。
+                func.coalesce(
+                    FinishedGoodsDocumentLine.unit_cost,
+                    FinishedGoodsBatch.unit_cost,
+                ).label("unit_cost"),
+                (
+                    func.coalesce(
+                        FinishedGoodsDocumentLine.unit_cost,
+                        FinishedGoodsBatch.unit_cost,
+                    ) * FinishedGoodsTransaction.quantity_delta
+                ).label("total_cost"),
                 FinishedGoodsTransaction.warehouse_id,
                 Warehouse.warehouse_code,
                 Warehouse.warehouse_name,
@@ -158,6 +169,10 @@ class FinishedGoodsQueryService:
             .join(Warehouse, Warehouse.id == FinishedGoodsTransaction.warehouse_id)
             .join(FinishedGoodsBatch,
                   FinishedGoodsBatch.id == FinishedGoodsTransaction.batch_id)
+            .join(
+                FinishedGoodsDocumentLine,
+                FinishedGoodsDocumentLine.id == FinishedGoodsTransaction.document_line_id,
+            )
             .join(FinishedGoodsDocument,
                   FinishedGoodsDocument.id == FinishedGoodsTransaction.document_id)
             .join(ProcessOrder,
@@ -623,6 +638,20 @@ class FinishedGoodsQueryService:
         qty_expr = func.coalesce(
             func.sum(FinishedGoodsDocumentLine.quantity), 0
         ).label("total_qty")
+        # 单据列表展示该单据涉及的成本总额（正数口径）；流水金额则保留 quantity_delta 的正负号。
+        # 与库存流水保持相同的正负号：普通入库为正、普通出库为负；
+        # 撤销出库会增加库存（正），撤销入库会减少库存（负）。
+        cost_sign = case(
+            (FinishedGoodsDocument.business_type == "OUT_REVERSE", 1),
+            (FinishedGoodsDocument.business_type == "IN_REVERSE", -1),
+            else_=(1 if direction == "IN" else -1),
+        )
+        cost_expr = func.sum(
+            func.coalesce(
+                FinishedGoodsDocumentLine.unit_cost,
+                FinishedGoodsBatch.unit_cost,
+            ) * FinishedGoodsDocumentLine.quantity * cost_sign
+        ).label("total_cost")
 
         stmt = (
             select(
@@ -642,6 +671,7 @@ class FinishedGoodsQueryService:
                     func.distinct(FinishedGoodsDocumentLine.id)
                 ).label("line_count"),
                 qty_expr,
+                cost_expr,
             )
             .join(creator, creator.id == FinishedGoodsDocument.created_by, isouter=True)
             .join(confirmer, confirmer.id == FinishedGoodsDocument.confirmed_by, isouter=True)
@@ -649,6 +679,10 @@ class FinishedGoodsQueryService:
                 FinishedGoodsDocumentLine,
                 FinishedGoodsDocumentLine.document_id
                 == FinishedGoodsDocument.id,
+            )
+            .outerjoin(
+                FinishedGoodsBatch,
+                FinishedGoodsBatch.id == FinishedGoodsDocumentLine.batch_id,
             )
             .where(dir_condition)
             .group_by(

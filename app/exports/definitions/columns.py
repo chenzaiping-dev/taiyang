@@ -37,6 +37,8 @@ EXPORT_COLUMNS = {
         ("warehouse_name","仓库名称",18,None), ("batch_no","批号",18,None),
         ("product_name","产品名称",20,None), ("unit","单位",10,None),
         ("quantity_delta","数量变动",14,None), ("document_no","单据编号",20,None),
+        ("unit_cost","单位成本",14,"finished_goods.cost.view"),
+        ("total_cost","成本金额",14,"finished_goods.cost.view"),
         ("document_type","单据类型",18,None), ("document_status","单据状态",14,None),
         ("process_order_no","工艺单号",20,None), ("source_entry","操作入口",18,None),
         ("creator_name","制单人",14,None),

@@ -980,6 +980,7 @@ class FinishedGoodsService:
                     "warehouse_id": l.to_warehouse_id,
                     "batch_id": l.batch_id,
                     "quantity": str(l.quantity),
+                    "unit_cost": str(l.unit_cost) if l.unit_cost is not None else None,
                     "remark": reverse_remark,
                 }
                 for l in lines
@@ -1002,6 +1003,7 @@ class FinishedGoodsService:
                     "warehouse_id": l.from_warehouse_id,
                     "batch_id": l.batch_id,
                     "quantity": str(l.quantity),
+                    "unit_cost": str(l.unit_cost) if l.unit_cost is not None else None,
                     "remark": reverse_remark,
                 }
                 for l in lines
