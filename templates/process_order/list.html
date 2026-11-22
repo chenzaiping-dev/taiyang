@@ -46,19 +46,18 @@
   <thead>
     <tr style="background:#f5f5f5;">
       <th style="width:20px;">ID</th>
-      <th>工艺单编号</th>
-      <th>加工厂</th>
-      <th>生产批号</th>
-      <th>产品名称</th>
-      <th style="width:40px;">计划数量</th>
-      <th>业绩单号</th>
-      <th style="width:200px;">生产计划</th>
-      <th style="width:70px;">下单时间</th>
-      <th>跟单人</th>
-      <th>创建人</th>
+      <th style="width:50px;">工艺单编号</th>
+      <th style="width:50px;">加工厂</th>
+      <th style="width:50px;">生产批号</th>
+      <th style="width:150px;">产品名称</th>
+      <th style="width:50px;">计划数量</th>
+      <th style="width:180px;">业绩单号/生产计划</th>
+      <th style="width:100px;">下单时间</th>
+      <th style="width:40px;">跟单人</th>
+      <th style="width:40px;">创建人</th>
       <th style="width:40px;">{{ "实际单位成本" if can_view_production_cost() else "" }}</th>
       <th style="width:50px;">状态</th>
-      <th style="width:120px;">操作</th>
+      <th style="width:200px;">操作</th>
     </tr>
   </thead>
   <tbody>
@@ -88,9 +87,7 @@
           </a>
           {% else %}
             {{ "-" }}
-          {% endif %}
-        </td>
-        <td>
+          {% endif %}/
           {% if it.plan_id %}
             <a href="{{ url_for('production_plan.detail_page', plan_id=it.plan_id) }}">
               {{ it.plan_no }}
