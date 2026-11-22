@@ -500,7 +500,8 @@ class ProductionPlanService:
             db.session.add(rel)
 
     @staticmethod
-    def list_plans(keyword=None, status=None, performance_id=None,
+    def list_plans(plan_no=None, performance_no=None, product_name=None,
+                   status=None, performance_id=None,
                    page=1, page_size=20):
         """
         生产计划列表。
@@ -546,15 +547,13 @@ class ProductionPlanService:
             .order_by(ProductionPlan.id.desc())
         )
 
-        if keyword:
-            like = f"%{keyword}%"
-            base = base.where(
-                db.or_(
-                    SalesPerformance.performance_no.like(like),
-                    SalesPerformance.product_name.like(like),
-                    ProductionPlan.plan_no.like(like),   # ⭐
-                )
-            )
+        if plan_no:
+            base = base.where(ProductionPlan.plan_no.like(f"%{plan_no}%"))
+        if performance_no:
+            base = base.where(SalesPerformance.performance_no.like(f"%{performance_no}%"))
+        if product_name:
+            base = base.where(SalesPerformance.product_name.like(f"%{product_name}%"))
+
         if status:
             base = base.where(ProductionPlan.status == status)
         if performance_id:

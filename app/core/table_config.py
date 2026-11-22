@@ -122,8 +122,8 @@ TABLES = {
     },
     "finished_goods_batches": {
         "label": "成品批次", "module": "成品管理", "mode": "crud",
-        "list_fields": ["id", "batch_no", "process_order_id", "product_name", "product_specification", "unit", "batch_source", "quality_status"],
-        "form_fields": ["batch_no", "process_order_id", "product_name", "product_specification", "unit", "batch_source", "quality_status"],
+        "list_fields": ["id", "batch_no", "process_order_id", "product_name", "product_specification", "unit", "unit_cost", "batch_source", "quality_status"],
+        "form_fields": ["batch_no", "process_order_id", "product_name", "product_specification", "unit", "unit_cost", "batch_source", "quality_status"],
         "search_fields": ["process_order_id"],
         "can_create": True, "can_edit": True, "can_delete": False,
     },

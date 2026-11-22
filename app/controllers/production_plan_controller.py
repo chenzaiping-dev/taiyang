@@ -420,7 +420,9 @@ RES_STATUS_LABELS = {
 # ==================== 列表 ====================
 @bp.get("/")
 def list_page():
-    keyword = request.args.get("keyword", "").strip() or None
+    plan_no = request.args.get("plan_no", "").strip() or None
+    performance_no = request.args.get("performance_no", "").strip() or None
+    product_name = request.args.get("product_name", "").strip() or None
     status = request.args.get("status", "").strip() or None
     perf_raw = request.args.get("performance_id", "").strip()
     performance_id = int(perf_raw) if perf_raw.isdigit() else None
@@ -428,7 +430,8 @@ def list_page():
     page_size = 20
 
     rows, total = ProductionPlanService.list_plans(
-        keyword=keyword, status=status, performance_id=performance_id,
+        plan_no=plan_no, performance_no=performance_no, product_name=product_name,
+        status=status, performance_id=performance_id,
         page=page, page_size=page_size,
     )
     total_pages = max((total + page_size - 1) // page_size, 1)
@@ -442,7 +445,9 @@ def list_page():
         "production_plan/list.html",
         rows=rows, total=total, page=page,
         page_size=page_size, total_pages=total_pages,
-        keyword=keyword or "",
+        plan_no=plan_no or "",
+        performance_no=performance_no or "",
+        product_name=product_name or "",
         status=status or "",
         performance_id=performance_id or "",
         perf_filter=perf_filter,

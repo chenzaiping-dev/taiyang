@@ -11,8 +11,13 @@
 
 <form method="get" action="{{ url_for('production_plan.list_page') }}"
       style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-  <input type="text" name="keyword" value="{{ keyword }}"
-         placeholder="计划单号/业绩单号/产品名" maxlength="64">
+  <input type="text" name="plan_no" value="{{ plan_no }}"
+         placeholder="计划单号" maxlength="64" style="width:140px;">
+  <input type="text" name="performance_no" value="{{ performance_no }}"
+         placeholder="业绩单号" maxlength="100">
+  <input type="text" name="product_name" value="{{ product_name }}"
+         placeholder="产品名称" maxlength="200" style="width:160px;">
+
   <select name="status">
     <option value="">-- 全部状态 --</option>
     {% for code, label in status_labels.items() %}
@@ -51,9 +56,9 @@
           </a>
         </td>
         <td>
-          <a href="{{ url_for('production_plan.list_page',
-               performance_id=r.performance_id) }}"
-             title="按此业绩单筛选">
+          <a href="{{ url_for('sales_performance.detail_page',
+                perf_id=r.performance_id) }}"
+              title="按此业绩单筛选">
             {{ r.performance_no }}
           </a>
         </td>
@@ -169,12 +174,14 @@
   <span>共 {{ total }} 条，第 {{ page }}/{{ total_pages }} 页</span>
   {% if page > 1 %}
     <a class="btn" href="{{ url_for('production_plan.list_page',
-         keyword=keyword, status=status, performance_id=performance_id,
+         plan_no=plan_no, performance_no=performance_no, product_name=product_name,
+         status=status, performance_id=performance_id,
          page=page-1) }}">上一页</a>
   {% endif %}
   {% if page < total_pages %}
     <a class="btn" href="{{ url_for('production_plan.list_page',
-         keyword=keyword, status=status, performance_id=performance_id,
+         plan_no=plan_no, performance_no=performance_no, product_name=product_name,
+         status=status, performance_id=performance_id,
          page=page+1) }}">下一页</a>
   {% endif %}
 </div>
