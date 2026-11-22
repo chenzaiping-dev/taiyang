@@ -784,17 +784,6 @@ class InventoryQueryService:
         )
         lines = [dict(r) for r in db.session.execute(line_stmt).mappings().all()]
 
-        total_in_qty = sum(
-            (l["quantity_delta"] for l in lines
-            if l["quantity_delta"] is not None and l["quantity_delta"] > 0),
-            Decimal("0"),
-        )
-        total_out_qty = sum(
-            (-l["quantity_delta"] for l in lines
-            if l["quantity_delta"] is not None and l["quantity_delta"] < 0),
-            Decimal("0"),
-        )
-
         tx_ids = [l["transaction_id"] for l in lines]
 
         # 出库：成本分配明细
@@ -839,7 +828,7 @@ class InventoryQueryService:
             for r in db.session.execute(layer_stmt).mappings().all():
                 layers_map.setdefault(r["source_transaction_id"], []).append(dict(r))
 
-        total_qty = sum((abs(l["quantity_delta"]) for l in lines), Decimal("0"))
+        total_qty = sum((l["quantity_delta"] for l in lines), Decimal("0"))
         total_cost = sum((l["total_cost"] or Decimal("0") for l in lines),
                         Decimal("0"))
 
@@ -862,6 +851,4 @@ class InventoryQueryService:
             "layers_map": layers_map,
             "total_qty": total_qty,
             "total_cost": _q6(total_cost),
-            "total_in_qty": total_in_qty,
-            "total_out_qty": total_out_qty,
         }

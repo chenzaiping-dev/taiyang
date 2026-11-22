@@ -119,9 +119,8 @@
       {% if doc.status == 'DRAFT' %}
       草稿数量 {{ detail.total_qty }}, 成本待计算
       {% else %}
-      {% if detail.total_in_qty > 0 %}数量 +{{ detail.total_in_qty }},{% endif %}
-      {% if detail.total_out_qty > 0 %}数量 -{{ detail.total_out_qty }},{% endif %}
-      {% if can_view_inventory_cost() %}成本 {{ detail.total_cost }}{% endif %}
+      数量变动 {{ '+' if detail.total_qty > 0 }}{{ detail.total_qty }}
+      {% if can_view_inventory_cost() %}, 成本金额 {{ '+' if detail.total_cost > 0 }}{{ detail.total_cost }}{% endif %}
       {% endif %}
     </div>
   </fieldset>
@@ -138,9 +137,9 @@
           <th style="width:50px;">行号</th>
           <th>原料</th>
           <th>仓库</th>
-          <th style="width:110px;text-align:right;">净变动数量</th>
+          <th style="width:110px;text-align:right;">数量变动</th>
           <th style="width:110px;text-align:right;">{{ "单位成本" if can_view_inventory_cost() else "" }}</th>
-          <th style="width:120px;text-align:right;">{{ "相对成本金额" if can_view_inventory_cost() else "" }}</th>
+          <th style="width:120px;text-align:right;">{{ "成本金额" if can_view_inventory_cost() else "" }}</th>
           <th style="width:130px;">业务类型</th>
           <th>关联（供应商/工艺单）</th>
         </tr>

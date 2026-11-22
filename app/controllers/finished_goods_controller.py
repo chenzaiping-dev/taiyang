@@ -482,6 +482,7 @@ def document_detail_page(direction, document_id):
             tx_types=FG_TX_TYPE_LABELS,
             list_url=url_for("finished_goods.document_list_page",
                              direction=direction),
+            can_view_cost=can_view_finished_goods_cost(),
         ), 404
 
     # ============ 统一从 ORM doc 取 related_document_id，绕开 dict 结构 ============

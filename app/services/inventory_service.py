@@ -808,7 +808,7 @@ class StockOutService:
             lines_result.append(result)
 
             if result["consumed"] > 0:
-                tx.total_cost = result["total_cost"]
+                tx.total_cost = -result["total_cost"]
                 tx.unit_cost = _q6_amount(result["total_cost"] / result["consumed"])
 
         doc.status = "CONFIRMED"
@@ -1058,7 +1058,7 @@ class StockOutService:
                 error_cls=InventoryError,
             )
             recovered = result["total_cost"]
-            new_tx.total_cost = -_q6_amount(recovered)
+            new_tx.total_cost = _q6_amount(recovered)
             new_tx.unit_cost = (
                 _q6_amount(recovered / need) if need > 0 else None
             )
@@ -1339,7 +1339,7 @@ class InventoryDocumentReverseService:
                         error_cls=InventoryError,
                     )
                     reverse_tx.unit_cost = result["unit_cost"]
-                    reverse_tx.total_cost = -result["total_cost"]
+                    reverse_tx.total_cost = result["total_cost"]
                     total_reversed_qty += result["quantity"]
                     total_reversed_cost += result["total_cost"]
 

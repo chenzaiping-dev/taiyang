@@ -51,7 +51,6 @@
   </a>
   {% endif %}
 </form>
-{% set ns = namespace(total_signed=0) %}
 <table style="width:100%;border-collapse:collapse;font-size:13px;">
   <thead>
     <tr style="background:#f5f5f5;">
@@ -60,11 +59,9 @@
       <th style="width:120px;">单据类型</th>
       <th style="width:140px;">{{ '入库时间' if direction == 'in' else '出库时间' }}</th>
       <th style="width:90px;text-align:right;">明细行数</th>
+      <th style="width:140px;text-align:right;">数量变动</th>
       <th style="width:140px;text-align:right;">
-        {{ '入库数量合计' if direction == 'in' else '出库数量合计' }}
-      </th>
-      <th style="width:140px;text-align:right;">
-        {% if can_view_inventory_cost() %}{{ '入库成本合计' if direction == 'in' else '出库成本合计' }}{% endif %}
+        {% if can_view_inventory_cost() %}成本金额{% endif %}
       </th>
       <th style="width:90px;">状态</th>
       <th style="width:50px;">创建人</th>
@@ -89,9 +86,7 @@
         <td>{{ r.document_time.strftime("%Y-%m-%d %H:%M")
                if r.document_time else "-" }}</td>
         <td style="text-align:right;">{{ r.line_count }}</td>
-        {% set signed_qty = (r.total_qty if direction == 'in' else -r.total_qty) %}
-        {% set ns.total_signed = ns.total_signed + (signed_qty or 0) %}
-        <td style="text-align:right;">{{ signed_qty }}</td>
+        <td style="text-align:right;">{{ r.total_qty }}</td>
         <td style="text-align:right;">{% if can_view_inventory_cost() %}{{ r.total_cost }}{% else %}—{% endif %}</td>
         <td>
           <span class="status-badge status-{{ r.status|lower }}">
@@ -159,7 +154,7 @@
   <tfoot>
     <tr style="background:#fafafa;font-weight:600;">
       <td colspan="5" style="text-align:right;">本页合计：</td>
-      <td style="text-align:right;color:#2440b3;">{{ ns.total_signed }}</td>
+      <td style="text-align:right;color:#2440b3;">{{ rows|sum(attribute='total_qty') }}</td>
       <td style="text-align:right;color:#ef6c00;">
         {% if can_view_inventory_cost() %}{{ rows|sum(attribute='total_cost') }}{% else %}—{% endif %}
       </td>

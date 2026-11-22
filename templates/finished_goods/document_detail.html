@@ -115,8 +115,12 @@
     {% endif %}
     <div class="form-row"><label>备注：</label>{{ doc.remark or "-" }}</div>
     <div class="form-row"><label>合计：</label>
-      {% if detail.total_in_qty > 0 %}入库 {{ detail.total_in_qty }}{% endif %}
-      {% if detail.total_out_qty > 0 %}出库 {{ detail.total_out_qty }}{% endif %}
+      {% if doc.status == 'DRAFT' %}
+      草稿数量 {{ detail.total_qty }}, 成本待计算
+      {% else %}
+      数量变动 {{ '+' if detail.total_qty > 0 }}{{ detail.total_qty }}
+      {% if can_view_cost %}, 成本金额 {{ '+' if detail.total_cost > 0 }}{{ detail.total_cost }}{% endif %}
+      {% endif %}
     </div>
   </fieldset>
 

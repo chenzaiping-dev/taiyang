@@ -177,7 +177,7 @@ class ProcessOrderAdjustmentService:
             ).all()
             total_cost = Decimal("0")
             for row in new_rows:
-                row.cost = cost_map.get(row.material_id, Decimal("0"))
+                row.cost = abs(cost_map.get(row.material_id, Decimal("0")))
                 total_cost += row.cost
             order.actual_total_cost = _q6(total_cost)
 
@@ -374,7 +374,7 @@ class ProcessOrderAdjustmentService:
                     orig_tx.id, take_qty, new_tx.id
                 )
                 recovered_cost = result["total_cost"]
-                new_tx.total_cost = -_q6(recovered_cost)
+                new_tx.total_cost = _q6(recovered_cost)
                 new_tx.unit_cost = (
                     _q6(recovered_cost / take_qty) if take_qty > 0 else None
                 )

@@ -14,6 +14,7 @@ from app.generated.models.finished_goods_reservations import FinishedGoodsReserv
 from app.services.finished_goods_service import (
     FG_INBOUND_TYPE_LABELS, FG_OUTBOUND_TYPE_LABELS, FG_TX_TYPE_LABELS
 )
+from app.utils.decimal_utils import _q3, _q6
 
 def _infer_source_entry(row: dict) -> str:
     doc_no = row.get("document_no") or ""
@@ -86,7 +87,7 @@ class FinishedGoodsQueryService:
                 FinishedGoodsBatch.product_specification,
                 FinishedGoodsBatch.unit,
                 FinishedGoodsBatch.unit_cost,
-                func.round(FinishedGoodsBatch.unit_cost * FinishedGoodsInventory.quantity, 6).label("total_cost"),
+                func.round(FinishedGoodsBatch.unit_cost * FinishedGoodsInventory.quantity, 4).label("total_cost"),
                 FinishedGoodsBatch.quality_status,
                 FinishedGoodsInventory.quantity.label("total_qty"),
                 # ⭐ 锁定数量 & 可用数量
@@ -140,14 +141,12 @@ class FinishedGoodsQueryService:
                     FinishedGoodsBatch.unit_cost,
                     0,
                 ).label("unit_cost"),
-                (
-                    cast(
+                func.round(
                     func.coalesce(
                         FinishedGoodsDocumentLine.unit_cost,
                         FinishedGoodsBatch.unit_cost,
                         0,
-                    ) * FinishedGoodsTransaction.quantity_delta, db.Numeric(18, 4)
-                    )
+                    ) * FinishedGoodsTransaction.quantity_delta, 4
                 ).label("total_cost"),
                 FinishedGoodsTransaction.warehouse_id,
                 Warehouse.warehouse_code,
@@ -650,7 +649,7 @@ class FinishedGoodsQueryService:
                     func.sum(FinishedGoodsTransaction.quantity_delta), 0
                 ).label("total_qty"),
                 func.coalesce(
-                    cast(func.sum(tx_unit_cost * FinishedGoodsTransaction.quantity_delta), db.Numeric(18, 4)), 0
+                    func.round(func.sum(tx_unit_cost * FinishedGoodsTransaction.quantity_delta), 4), 0
                 ).label("total_cost"),
             )
             .join(
@@ -744,7 +743,7 @@ class FinishedGoodsQueryService:
             quantity, unit_cost, remark,
             transaction_id, transaction_type, transaction_time, quantity_delta
         }],
-        'total_in_qty', 'total_out_qty'
+        'total_qty', 'total_cost'
         }
         """
         doc = db.session.get(FinishedGoodsDocument, document_id)
@@ -798,6 +797,13 @@ class FinishedGoodsQueryService:
                 FinishedGoodsDocumentLine.quantity,
                 FinishedGoodsDocumentLine.unit_cost,
                 FinishedGoodsDocumentLine.remark,
+                func.round(
+                    func.coalesce(
+                        FinishedGoodsDocumentLine.unit_cost,
+                        FinishedGoodsBatch.unit_cost,
+                        0,
+                    ) * FinishedGoodsTransaction.quantity_delta, 4
+                ).label("total_cost"),
 
                 FinishedGoodsTransaction.id.label("transaction_id"),
                 FinishedGoodsTransaction.transaction_type,
@@ -827,17 +833,9 @@ class FinishedGoodsQueryService:
             .order_by(FinishedGoodsDocumentLine.line_no.asc())
         )
         lines = [dict(r) for r in db.session.execute(line_stmt).mappings().all()]
-
-        total_in_qty = sum(
-            (l["quantity_delta"] for l in lines
-            if l["quantity_delta"] is not None and l["quantity_delta"] > 0),
-            Decimal("0"),
-        )
-        total_out_qty = sum(
-            (-l["quantity_delta"] for l in lines
-            if l["quantity_delta"] is not None and l["quantity_delta"] < 0),
-            Decimal("0"),
-        )
+        total_qty = sum((l["quantity_delta"] for l in lines), Decimal("0"))
+        total_cost = sum((l["total_cost"] or Decimal("0") for l in lines),
+                        Decimal("0"))
 
         return {
             "document": {
@@ -856,6 +854,6 @@ class FinishedGoodsQueryService:
                 "confirmed_at": doc.confirmed_at,
             },
             "lines": lines,
-            "total_in_qty": total_in_qty,
-            "total_out_qty": total_out_qty,
+            "total_qty": total_qty,
+            "total_cost": _q6(total_cost),
         }
