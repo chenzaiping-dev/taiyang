@@ -1,5 +1,5 @@
 from decimal import Decimal
-from sqlalchemy import select, case, func, or_
+from sqlalchemy import select, case, func, or_, cast
 from app.extensions import db
 from app.generated.models.warehouses import Warehouse
 from app.generated.models.employees import Employee
@@ -135,16 +135,19 @@ class FinishedGoodsQueryService:
                 FinishedGoodsTransaction.transaction_time,
                 FinishedGoodsTransaction.transaction_type,
                 FinishedGoodsTransaction.quantity_delta,
-                # 成本单价优先取业务单据明细快照，历史明细为空时回退批次成本。
                 func.coalesce(
                     FinishedGoodsDocumentLine.unit_cost,
                     FinishedGoodsBatch.unit_cost,
+                    0,
                 ).label("unit_cost"),
                 (
+                    cast(
                     func.coalesce(
                         FinishedGoodsDocumentLine.unit_cost,
                         FinishedGoodsBatch.unit_cost,
-                    ) * FinishedGoodsTransaction.quantity_delta
+                        0,
+                    ) * FinishedGoodsTransaction.quantity_delta, db.Numeric(18, 4)
+                    )
                 ).label("total_cost"),
                 FinishedGoodsTransaction.warehouse_id,
                 Warehouse.warehouse_code,
@@ -169,10 +172,8 @@ class FinishedGoodsQueryService:
             .join(Warehouse, Warehouse.id == FinishedGoodsTransaction.warehouse_id)
             .join(FinishedGoodsBatch,
                   FinishedGoodsBatch.id == FinishedGoodsTransaction.batch_id)
-            .join(
-                FinishedGoodsDocumentLine,
-                FinishedGoodsDocumentLine.id == FinishedGoodsTransaction.document_line_id,
-            )
+            .join(FinishedGoodsDocumentLine,
+                  FinishedGoodsDocumentLine.id == FinishedGoodsTransaction.document_line_id)
             .join(FinishedGoodsDocument,
                   FinishedGoodsDocument.id == FinishedGoodsTransaction.document_id)
             .join(ProcessOrder,
@@ -634,24 +635,35 @@ class FinishedGoodsQueryService:
                 ),
             )
 
-        # ---- 数量/行数聚合（与方向无关，按行统计） ----
-        qty_expr = func.coalesce(
-            func.sum(FinishedGoodsDocumentLine.quantity), 0
-        ).label("total_qty")
-        # 单据列表展示该单据涉及的成本总额（正数口径）；流水金额则保留 quantity_delta 的正负号。
-        # 与库存流水保持相同的正负号：普通入库为正、普通出库为负；
-        # 撤销出库会增加库存（正），撤销入库会减少库存（负）。
-        cost_sign = case(
-            (FinishedGoodsDocument.business_type == "OUT_REVERSE", 1),
-            (FinishedGoodsDocument.business_type == "IN_REVERSE", -1),
-            else_=(1 if direction == "IN" else -1),
+        # 与原料库一致：数量、成本和行数统一来自已过账交易流水。
+        # 草稿单没有 FinishedGoodsTransaction，因此行数/数量/成本均为 0。
+        tx_unit_cost = func.coalesce(
+            FinishedGoodsDocumentLine.unit_cost,
+            FinishedGoodsBatch.unit_cost,
+            0,
         )
-        cost_expr = func.sum(
-            func.coalesce(
-                FinishedGoodsDocumentLine.unit_cost,
-                FinishedGoodsBatch.unit_cost,
-            ) * FinishedGoodsDocumentLine.quantity * cost_sign
-        ).label("total_cost")
+        tx_stats = (
+            select(
+                FinishedGoodsTransaction.document_id.label("document_id"),
+                func.count(FinishedGoodsTransaction.id).label("line_count"),
+                func.coalesce(
+                    func.sum(FinishedGoodsTransaction.quantity_delta), 0
+                ).label("total_qty"),
+                func.coalesce(
+                    cast(func.sum(tx_unit_cost * FinishedGoodsTransaction.quantity_delta), db.Numeric(18, 4)), 0
+                ).label("total_cost"),
+            )
+            .join(
+                FinishedGoodsDocumentLine,
+                FinishedGoodsDocumentLine.id == FinishedGoodsTransaction.document_line_id,
+            )
+            .join(
+                FinishedGoodsBatch,
+                FinishedGoodsBatch.id == FinishedGoodsTransaction.batch_id,
+            )
+            .group_by(FinishedGoodsTransaction.document_id)
+            .subquery()
+        )
 
         stmt = (
             select(
@@ -667,35 +679,14 @@ class FinishedGoodsQueryService:
                 confirmer.real_name.label("confirmed_by_name"),
                 FinishedGoodsDocument.confirmed_at,
                 reversed_exists.label("is_reversed"),
-                func.count(
-                    func.distinct(FinishedGoodsDocumentLine.id)
-                ).label("line_count"),
-                qty_expr,
-                cost_expr,
+                func.coalesce(tx_stats.c.line_count, 0).label("line_count"),
+                func.coalesce(tx_stats.c.total_qty, 0).label("total_qty"),
+                func.coalesce(tx_stats.c.total_cost, 0).label("total_cost"),
             )
             .join(creator, creator.id == FinishedGoodsDocument.created_by, isouter=True)
             .join(confirmer, confirmer.id == FinishedGoodsDocument.confirmed_by, isouter=True)
-            .join(
-                FinishedGoodsDocumentLine,
-                FinishedGoodsDocumentLine.document_id
-                == FinishedGoodsDocument.id,
-            )
-            .outerjoin(
-                FinishedGoodsBatch,
-                FinishedGoodsBatch.id == FinishedGoodsDocumentLine.batch_id,
-            )
+            .outerjoin(tx_stats, tx_stats.c.document_id == FinishedGoodsDocument.id)
             .where(dir_condition)
-            .group_by(
-                FinishedGoodsDocument.id,
-                FinishedGoodsDocument.document_no,
-                FinishedGoodsDocument.document_type,
-                FinishedGoodsDocument.business_type,
-                FinishedGoodsDocument.document_time,
-                FinishedGoodsDocument.status,
-                FinishedGoodsDocument.remark,
-                FinishedGoodsDocument.created_at,
-                FinishedGoodsDocument.confirmed_at,
-            )
             .order_by(FinishedGoodsDocument.id.desc())
         )
 
@@ -715,9 +706,12 @@ class FinishedGoodsQueryService:
         # 行级字段：IN 看 to_warehouse_id，OUT 看 from_warehouse_id
         if warehouse_id:
             stmt = stmt.where(
-                db.or_(
-                    FinishedGoodsDocumentLine.from_warehouse_id == warehouse_id,
-                    FinishedGoodsDocumentLine.to_warehouse_id == warehouse_id,
+                exists().where(
+                    FinishedGoodsDocumentLine.document_id == FinishedGoodsDocument.id,
+                    db.or_(
+                        FinishedGoodsDocumentLine.from_warehouse_id == warehouse_id,
+                        FinishedGoodsDocumentLine.to_warehouse_id == warehouse_id,
+                    ),
                 )
             )
 

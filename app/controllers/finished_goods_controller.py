@@ -457,12 +457,12 @@ def document_list_page(direction):
         inbound_types=FG_INBOUND_TYPE_LABELS,
         outbound_types=FG_OUTBOUND_TYPE_LABELS,
         warehouses=_fg_warehouses(),
+        can_view_cost=can_view_finished_goods_cost(),
         new_doc_url=(
             url_for("finished_goods.inbound_page")
             if direction == "in"
             else url_for("finished_goods.outbound_page")
         ),
-        can_view_cost=can_view_finished_goods_cost(),
     )
 
 @bp.get("/documents/<direction>/<int:document_id>")

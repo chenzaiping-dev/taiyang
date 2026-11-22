@@ -27,7 +27,6 @@
     {% endfor %}
   </select>
   {% endif %}
-
   <select name="warehouse_id">
     <option value="">-- 全部仓库 --</option>
     {% for w in warehouses %}
@@ -45,6 +44,7 @@
         {% if status == code %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
   </select>
+
   <label style="font-size:12px;color:#666;">
     从 <input type="date" name="date_from" value="{{ date_from }}">
     到 <input type="date" name="date_to" value="{{ date_to }}">
@@ -60,7 +60,6 @@
   </a>
   {% endif %}
 </form>
-{% set ns = namespace(total_signed=0, total_cost=0) %}
 <table style="width:100%;border-collapse:collapse;font-size:13px;">
   <thead>
     <tr style="background:#f5f5f5;">
@@ -98,11 +97,10 @@
         <td>{{ r.document_time.strftime("%Y-%m-%d %H:%M")
                if r.document_time else "-" }}</td>
         <td style="text-align:right;">{{ r.line_count }}</td>
-        {% set signed_qty = (r.total_qty if r.document_type != 'REVERSE' else -r.total_qty) %}
-        {% set ns.total_signed = ns.total_signed + (signed_qty or 0) %}
-        {% set ns.total_cost = ns.total_cost + (r.total_cost or 0) %}
-        <td style="text-align:right;">{{ signed_qty }}</td>
-        {% if can_view_cost %}<td style="text-align:right;">{{ '%+.2f'|format(r.total_cost) if r.total_cost is not none else '-' }}</td>{% endif %}
+        <td style="text-align:right;">{{ r.total_qty }}</td>
+        {% if can_view_cost %}
+          <td style="text-align:right;">{{ r.total_cost }}</td>
+        {% endif %}
         <td>
           <span class="status-badge status-{{ r.status|lower }}">
             {{ status_labels.get(r.status, r.status) }}
@@ -163,8 +161,9 @@
   <tfoot>
     <tr style="background:#fafafa;font-weight:600;">
       <td colspan="5" style="text-align:right;">本页合计：</td>
-      <td style="text-align:right;color:#2440b3;">{{ ns.total_signed }}</td>
-      {% if can_view_cost %}<td style="text-align:right;color:#2440b3;">{{ '%+.2f'|format(ns.total_cost) }}</td>{% endif %}
+      <td style="text-align:right;color:#2440b3;">{{ rows|sum(attribute='total_qty') }}</td>
+      {% if can_view_cost %}<td style="text-align:right;">{{ rows|sum(attribute='total_cost') }}</td>{% endif %}
+      <td></td>
       <td></td>
       <td></td>
       <td></td>

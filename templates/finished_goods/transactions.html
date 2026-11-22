@@ -45,10 +45,10 @@
       <th>批次号</th>
       <th>产品名称</th>
       <th style="width:10px;">单位</th>
-      <th style="width:70px;text-align:right;">数量变化</th>
+      <th style="width:70px;text-align:right;">数量变动</th>
       {% if can_view_cost %}
-      <th style="width:100px;text-align:right;">单位成本</th>
-      <th style="width:120px;text-align:right;">成本金额</th>
+      <th style="width:40px;text-align:right;">单位成本</th>
+      <th style="width:80px;text-align:right;">成本金额</th>
       {% endif %}
       <th style="width:240px;">单据号</th>
       <th>单据类型</th>
@@ -75,10 +75,8 @@
           {{ '+' if r.quantity_delta > 0 }}{{ r.quantity_delta }}
         </td>
         {% if can_view_cost %}
-        <td style="text-align:right;">{{ '%.4f'|format(r.unit_cost) if r.unit_cost is not none else '-' }}</td>
-        <td style="text-align:right;color:{{ '#2e7d32' if (r.total_cost or 0) > 0 else '#c62828' if (r.total_cost or 0) < 0 else '#666' }};">
-          {{ '%+.2f'|format(r.total_cost or 0) }}
-        </td>
+          <td style="text-align:right;">{{ r.unit_cost }}</td>
+          <td style="text-align:right;">{{ r.total_cost }}</td>
         {% endif %}
         <td>
           <a href="{{ url_for('finished_goods.document_detail_page',

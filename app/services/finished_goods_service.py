@@ -1019,14 +1019,6 @@ class FinishedGoodsService:
                 commit=False,                # ⭐
             )
             new_doc = db.session.get(FinishedGoodsDocument, result["document_id"])
-            # ⭐ 若是发货计划出库，同步回滚发货计划
-            #if doc.remark and "[SHIP_PLAN_OUTBOUND]" in doc.remark:
-            #    try:
-            #        FinishedGoodsService._rollback_shipment_plan_on_reverse(doc)
-            #    except Exception as e:
-            #        # 回滚发货计划失败 → 整体回滚
-            #        db.session.rollback()
-            #        raise FinishedGoodsError(f"撤销发货计划联动失败: {e}")
 
         # 关联原单
         new_doc.related_document_id = doc.id
@@ -1048,85 +1040,6 @@ class FinishedGoodsService:
             "original_document_id": doc.id,
             "original_document_no": doc.document_no,
         }
-
-    @staticmethod
-    def _rollback_shipment_plan_on_reverse(orig_doc: FinishedGoodsDocument):
-        """
-        发货计划出库被撤销时，反向冲减 shipment_plan_allocations.shipped_quantity，
-        并重算 shipment_plan_lines.shipped_quantity 与 shipment_plans.status。
-
-        原发货计划出库单 document_no = FG-OUT-{plan.shipment_plan_no}
-        通过 document_no 反查发货计划。
-        """
-        from app.generated.models.shipment_plans import ShipmentPlan
-        from app.generated.models.shipment_plan_lines import ShipmentPlanLine
-        from app.generated.models.shipment_plan_allocations import ShipmentPlanAllocation
-
-        # 从 remark 里兜底识别；也可以直接用 document_no 前缀
-        if not orig_doc.remark or "[SHIP_PLAN_OUTBOUND]" not in orig_doc.remark:
-            return
-
-        # 通过 document_no = FG-OUT-{shipment_plan_no} 反查
-        prefix = "FG-OUT-"
-        if not orig_doc.document_no.startswith(prefix):
-            return
-        plan_no = orig_doc.document_no[len(prefix):]
-        plan = ShipmentPlan.query.filter_by(shipment_plan_no=plan_no).first()
-        if not plan:
-            raise FinishedGoodsError(
-                f"找不到发货计划 {plan_no}，无法回滚"
-            )
-
-        # 1. 撤销本次出库对应的 allocation.shipped_quantity
-        #    原出库单的每一行对应一个 allocation；通过 (wh, batch, qty) 匹配回滚
-        orig_lines = FinishedGoodsDocumentLine.query.filter_by(
-            document_id=orig_doc.id
-        ).all()
-
-        for ol in orig_lines:
-            alloc = (
-                ShipmentPlanAllocation.query
-                .join(ShipmentPlanLine,
-                    ShipmentPlanLine.id == ShipmentPlanAllocation.shipment_line_id)
-                .filter(
-                    ShipmentPlanLine.shipment_plan_id == plan.id,
-                    ShipmentPlanAllocation.warehouse_id == ol.from_warehouse_id,
-                    ShipmentPlanAllocation.batch_id == ol.batch_id,
-                    ShipmentPlanAllocation.shipped_quantity >= ol.quantity,
-                )
-                .order_by(ShipmentPlanAllocation.id.desc())
-                .with_for_update()
-                .first()
-            )
-            if alloc:
-                alloc.shipped_quantity = (alloc.shipped_quantity or Decimal("0")) - _q6(ol.quantity)
-
-        # 2. 重算 line.shipped_quantity
-        lines = ShipmentPlanLine.query.filter_by(
-            shipment_plan_id=plan.id
-        ).all()
-        for line in lines:
-            total = (
-                db.session.query(func.coalesce(
-                    func.sum(ShipmentPlanAllocation.shipped_quantity), 0))
-                .filter(ShipmentPlanAllocation.shipment_line_id == line.id)
-                .scalar()
-            ) or Decimal("0")
-            line.shipped_quantity = _q6(total)
-
-        # 3. 重算 plan.status
-        has_any = any(l.shipped_quantity > 0 for l in lines)
-        all_done = all(l.shipped_quantity >= l.quantity for l in lines)
-
-        if not has_any:
-            plan.status = "CONFIRMED"
-            plan.actual_ship_time = None
-        elif all_done:
-            plan.status = "SHIPPED"
-        else:
-            plan.status = "PARTIALLY_SHIPPED"
-
-        # 注意：这里不提交，由外层 reverse_document 统一 commit
 
     @staticmethod
     def reverse_inbound_by_process_order(
