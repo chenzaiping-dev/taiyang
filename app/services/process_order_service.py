@@ -705,10 +705,10 @@ class ProcessOrderService:
         )
 
         # 幂等：批次号已存在时拒绝（防止重复点击 / 并发）
-        #if FinishedGoodsBatch.query.filter_by(batch_no=order.batch_no).first():
-        #    raise ProcessOrderError(
-        #        f"批次号 [{order.batch_no}] 已存在，无法重复入库"
-        #    )
+        if FinishedGoodsBatch.query.filter_by(batch_no=order.batch_no).first():
+            raise ProcessOrderError(
+                f"批次号 [{order.batch_no}] 已存在，无法重复入库"
+            )
 
         # 组装入库明细
         lines = [{

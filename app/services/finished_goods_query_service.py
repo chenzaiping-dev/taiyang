@@ -53,8 +53,8 @@ class FinishedGoodsQueryService:
     @staticmethod
     def list_warehouse_stock(warehouse_id=None, batch_keyword=None,
                              page=1, page_size=50, include_summary=False):
-        """成品库仓库列表：按 (warehouse, batch) 展示现存 + 锁定 + 可用"""
-        # ⭐ 锁定汇总子查询
+        """成品库批次列表：以批次档案为主，显示所有批次及其各仓库库存（含零库存）。"""
+        # 锁定数量按仓库 + 批次汇总；没有预留时通过 COALESCE 显示为 0。
         locked_subq = (
             select(
                 FinishedGoodsReservation.warehouse_id.label("wh_id"),
@@ -63,9 +63,7 @@ class FinishedGoodsQueryService:
                     func.sum(FinishedGoodsReservation.remaining_quantity), 0
                 ).label("locked_qty"),
             )
-            .where(
-                FinishedGoodsReservation.status == "ACTIVE",
-            )
+            .where(FinishedGoodsReservation.status == "ACTIVE")
             .group_by(
                 FinishedGoodsReservation.warehouse_id,
                 FinishedGoodsReservation.batch_id,
@@ -73,48 +71,71 @@ class FinishedGoodsQueryService:
             .subquery()
         )
 
+        stock_qty_col = func.coalesce(FinishedGoodsInventory.quantity, 0)
         locked_qty_col = func.coalesce(locked_subq.c.locked_qty, 0)
 
+        # 以 FinishedGoodsBatch 为主表，LEFT JOIN 库存余额：
+        # 1. 已有库存余额且数量为 0 的批次仍显示；
+        # 2. 尚无库存余额记录的批次也显示，仓库列显示为“-”。
         stmt = (
             select(
-                FinishedGoodsInventory.id,
+                FinishedGoodsBatch.id.label("id"),
+                FinishedGoodsInventory.id.label("inventory_id"),
                 FinishedGoodsInventory.warehouse_id,
                 Warehouse.warehouse_code,
                 Warehouse.warehouse_name,
-                FinishedGoodsInventory.batch_id,
+                FinishedGoodsBatch.id.label("batch_id"),
                 FinishedGoodsBatch.batch_no,
                 FinishedGoodsBatch.product_name,
                 FinishedGoodsBatch.product_specification,
                 FinishedGoodsBatch.unit,
                 FinishedGoodsBatch.unit_cost,
-                func.round(FinishedGoodsBatch.unit_cost * FinishedGoodsInventory.quantity, 4).label("total_cost"),
+                func.round(
+                    FinishedGoodsBatch.unit_cost * stock_qty_col, 4
+                ).label("total_cost"),
                 FinishedGoodsBatch.quality_status,
                 FinishedGoodsBatch.process_order_id,
                 ProcessOrder.process_order_no.label("process_order_no"),
-                FinishedGoodsInventory.quantity.label("total_qty"),
-                # ⭐ 锁定数量 & 可用数量
+                stock_qty_col.label("total_qty"),
                 locked_qty_col.label("locked_qty"),
-                (FinishedGoodsInventory.quantity - locked_qty_col).label("available_qty"),
-                FinishedGoodsInventory.updated_at,
+                (stock_qty_col - locked_qty_col).label("available_qty"),
+                func.coalesce(
+                    FinishedGoodsInventory.updated_at,
+                    FinishedGoodsBatch.created_at,
+                ).label("updated_at"),
             )
-            .join(Warehouse, Warehouse.id == FinishedGoodsInventory.warehouse_id)
-            .join(FinishedGoodsBatch,
-                  FinishedGoodsBatch.id == FinishedGoodsInventory.batch_id)
-            .join(locked_subq,
-                  (locked_subq.c.wh_id == FinishedGoodsInventory.warehouse_id)
-                  & (locked_subq.c.bt_id == FinishedGoodsInventory.batch_id),
-                  isouter=True)
+            .select_from(FinishedGoodsBatch)
+            .join(
+                FinishedGoodsInventory,
+                FinishedGoodsInventory.batch_id == FinishedGoodsBatch.id,
+                isouter=True,
+            )
+            .join(
+                Warehouse,
+                Warehouse.id == FinishedGoodsInventory.warehouse_id,
+                isouter=True,
+            )
+            .join(
+                locked_subq,
+                (locked_subq.c.wh_id == FinishedGoodsInventory.warehouse_id)
+                & (locked_subq.c.bt_id == FinishedGoodsBatch.id),
+                isouter=True,
+            )
             .join(
                 ProcessOrder,
                 ProcessOrder.id == FinishedGoodsBatch.process_order_id,
-                isouter=True)
-            .where(FinishedGoodsInventory.quantity > 0)
-            .order_by(Warehouse.warehouse_code.asc(),
-                      FinishedGoodsBatch.id.desc())
-                      #FinishedGoodsBatch.batch_no.asc())
+                isouter=True,
+            )
+            .order_by(
+                Warehouse.warehouse_code.asc(),
+                FinishedGoodsBatch.id.desc(),
+            )
         )
+
         if warehouse_id:
-            stmt = stmt.where(FinishedGoodsInventory.warehouse_id == warehouse_id)
+            stmt = stmt.where(
+                FinishedGoodsInventory.warehouse_id == warehouse_id
+            )
         if batch_keyword:
             like = f"%{batch_keyword}%"
             stmt = stmt.where(or_(

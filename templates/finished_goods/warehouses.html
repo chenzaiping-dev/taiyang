@@ -28,13 +28,13 @@
   <div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:130px;"><div style="font-size:12px;color:#666;">锁定数量</div><strong style="font-size:18px;">{{ summary.locked_qty or 0 }}</strong></div>
   <div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:130px;"><div style="font-size:12px;color:#666;">可用数量</div><strong style="font-size:18px;">{{ summary.available_qty or 0 }}</strong></div>
   {% if can_view_cost %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:130px;"><div style="font-size:12px;color:#666;">库存成本</div><strong style="font-size:18px;">{{ summary.total_cost or 0 }}</strong></div>{% endif %}
-  <span style="align-self:center;font-size:12px;color:#888;">当前筛选条件下全部库存批次，不受分页影响</span>
+  <span style="align-self:center;font-size:12px;color:#888;">当前筛选条件下全部批次（包含零库存），不受分页影响</span>
 </div>
 
 <table style="width:100%;border-collapse:collapse;font-size:13px;">
   <thead>
     <tr style="background:#f5f5f5;">
-      <th style="width:50px;">ID</th>
+      <th style="width:50px;">批次ID</th>
       <th>仓库</th>
       <th>批次号</th>
       <th>产品名称</th>
@@ -57,7 +57,7 @@
       {% for r in rows %}
       <tr>
         <td>{{ r.id }}</td>
-        <td>{{ r.warehouse_code }} - {{ r.warehouse_name }}</td>
+        <td>{{ (r.warehouse_code ~ " - " ~ r.warehouse_name) if r.warehouse_code else "-" }}</td>
         <td>{{ r.batch_no }}</td>
         <td>{{ r.product_name }}</td>
         <td>{{ r.product_specification or "-" }}</td>
@@ -88,7 +88,7 @@
       </tr>
       {% endfor %}
       {% else %}
-        <tr><td colspan="{{ 14 if can_view_cost else 12 }}" style="text-align:center;color:#999;padding:24px;">暂无库存</td></tr>
+        <tr><td colspan="{{ 14 if can_view_cost else 12 }}" style="text-align:center;color:#999;padding:24px;">暂无批次记录</td></tr>
       {% endif %}
   </tbody>
   <tfoot>

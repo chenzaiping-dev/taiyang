@@ -22,7 +22,7 @@ EXPORT_COLUMNS = {
         ("source_entry","操作入口",18,None), ("creator_name","操作人",14,None),
     ],
     "finished_goods_stock": [
-        ("id","库存记录ID",14,None), ("warehouse_code","仓库编码",14,None),
+        ("id","批次ID",14,None), ("warehouse_code","仓库编码",14,None),
         ("warehouse_name","仓库名称",18,None), ("batch_no","批号",18,None),
         ("product_name","产品名称",20,None), ("product_specification","产品规格",20,None),
         ("process_order_no", "工艺单号", 20, None),
