@@ -89,6 +89,8 @@ class FinishedGoodsQueryService:
                 FinishedGoodsBatch.unit_cost,
                 func.round(FinishedGoodsBatch.unit_cost * FinishedGoodsInventory.quantity, 4).label("total_cost"),
                 FinishedGoodsBatch.quality_status,
+                FinishedGoodsBatch.process_order_id,
+                ProcessOrder.process_order_no.label("process_order_no"),
                 FinishedGoodsInventory.quantity.label("total_qty"),
                 # ⭐ 锁定数量 & 可用数量
                 locked_qty_col.label("locked_qty"),
@@ -102,6 +104,10 @@ class FinishedGoodsQueryService:
                   (locked_subq.c.wh_id == FinishedGoodsInventory.warehouse_id)
                   & (locked_subq.c.bt_id == FinishedGoodsInventory.batch_id),
                   isouter=True)
+            .join(
+                ProcessOrder,
+                ProcessOrder.id == FinishedGoodsBatch.process_order_id,
+                isouter=True)
             .where(FinishedGoodsInventory.quantity > 0)
             .order_by(Warehouse.warehouse_code.asc(),
                       FinishedGoodsBatch.id.desc())

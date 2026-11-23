@@ -377,6 +377,7 @@ class ProcessOrderService:
                 Factory.factory_name.label("factory_name"),
                 ProcessOrder.batch_no,
                 ProcessOrder.product_name,
+                ProcessOrder.product_specification,
                 ProcessOrder.planned_quantity,
                 ProcessOrder.unit,
                 ProcessOrder.performance_id,
@@ -443,87 +444,6 @@ class ProcessOrderService:
         stmt = stmt.offset((page - 1) * page_size).limit(page_size)
         rows = db.session.execute(stmt).mappings().all()
         return [dict(r) for r in rows], total
-
-    @staticmethod
-    def old_list_orders(
-        keyword: str = None,
-        status: str = None,
-        factory_id: int = None,
-        page: int = 1,
-        page_size: int = 20,
-    ):
-        """
-        列表查询：一次 JOIN 出加工厂/业绩单/跟单人/创建人名称。
-        返回 (items, total)。
-        items: [dict]
-        """
-        creator = db.aliased(Employee)   # 创建人别名
-        follow  = db.aliased(Employee)   # 跟单人别名
-
-        stmt = (
-            select(
-                ProcessOrder.id,
-                ProcessOrder.process_order_no,
-                ProcessOrder.factory_id,
-                Factory.factory_name.label("factory_name"),
-                ProcessOrder.batch_no,
-                ProcessOrder.product_name,
-                ProcessOrder.planned_quantity,
-                ProcessOrder.unit,
-                ProcessOrder.performance_id,
-                SalesPerformance.performance_no.label("performance_no"),
-                ProcessOrder.order_time,
-                follow.real_name.label("followup_employee_name"),
-                creator.real_name.label("created_by_name"),
-                ProcessOrder.planned_cost_price,
-                ProcessOrder.actual_total_cost,
-                ProcessOrder.completed_quantity,
-                ProcessOrder.status,
-                # ⭐ 生产计划信息（一个工艺单最多挂一个计划）
-                ProductionPlan.id.label("plan_id"),
-                ProductionPlan.plan_no.label("plan_no"),
-                ProductionPlan.status.label("plan_status"),
-            )
-            .join(Factory, Factory.id == ProcessOrder.factory_id, isouter=True)
-            .join(SalesPerformance,
-                  SalesPerformance.id == ProcessOrder.performance_id, isouter=True)
-            .join(follow, follow.id == ProcessOrder.followup_employee_id, isouter=True)
-            .join(creator, creator.id == ProcessOrder.created_by, isouter=True)
-            .join(ProductionPlanProcessOrder,
-                  ProductionPlanProcessOrder.process_order_id == ProcessOrder.id,
-                  isouter=True)
-            .join(ProductionPlan,
-                  ProductionPlan.id == ProductionPlanProcessOrder.production_plan_id,
-                  isouter=True)
-            .order_by(ProcessOrder.id.desc())
-        )
-
-        if keyword:
-            like = f"%{keyword}%"
-            stmt = stmt.where(
-                db.or_(
-                    ProcessOrder.process_order_no.like(like),
-                    ProcessOrder.product_name.like(like),
-                    ProcessOrder.batch_no.like(like),
-                    ProductionPlan.plan_no.like(like),   # ⭐
-                )
-            )
-        if status:
-            stmt = stmt.where(ProcessOrder.status == status)
-        if factory_id:
-            stmt = stmt.where(ProcessOrder.factory_id == factory_id)
-
-        # 总数（复用过滤条件）
-        from sqlalchemy import func
-        count_stmt = select(func.count()).select_from(stmt.subquery())
-        total = db.session.execute(count_stmt).scalar() or 0
-
-        # 分页
-        stmt = stmt.offset((page - 1) * page_size).limit(page_size)
-        rows = db.session.execute(stmt).mappings().all()
-
-        items = [dict(r) for r in rows]
-        return items, total
 
     @staticmethod
     def change_status(order_id: int, action: str) -> dict:

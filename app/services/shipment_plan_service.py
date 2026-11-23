@@ -297,6 +297,7 @@ class ShipmentPlanService:
                 SalesPerformance.performance_no,
                 SalesPerformance.company_name,
                 ShipmentPlanLine.product_name.label("product_name"),
+                ShipmentPlanLine.product_specification,
                 ShipmentPlan.destination,
                 ShipmentPlan.planned_ship_time,
                 ShipmentPlan.status,
@@ -310,6 +311,8 @@ class ShipmentPlanService:
                 Warehouse.warehouse_name,
                 FinishedGoodsBatch.id.label("batch_id"),
                 FinishedGoodsBatch.batch_no,
+                FinishedGoodsBatch.process_order_id,
+                ProcessOrder.process_order_no.label("process_order_no"),
                 ShipmentPlanAllocation.planned_quantity.label("shipment_quantity"),
             )
             .join(ShipmentPlanLine, ShipmentPlanLine.shipment_plan_id == ShipmentPlan.id)
@@ -318,6 +321,7 @@ class ShipmentPlanService:
             .join(Warehouse, Warehouse.id == ShipmentPlanAllocation.warehouse_id)
             .join(FinishedGoodsBatch,
                   FinishedGoodsBatch.id == ShipmentPlanAllocation.batch_id)
+            .join(ProcessOrder, ProcessOrder.id == FinishedGoodsBatch.process_order_id, isouter=True)
             .join(creator, creator.id == ShipmentPlan.created_by, isouter=True)
             .join(SalesPerformance,
                   SalesPerformance.id == ShipmentPlan.performance_id, isouter=True)

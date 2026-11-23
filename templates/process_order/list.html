@@ -50,6 +50,7 @@
       <th style="width:50px;">加工厂</th>
       <th style="width:50px;">生产批号</th>
       <th style="width:150px;">产品名称</th>
+      <th style="width:80px;">产品规格</th>
       <th style="width:50px;">计划数量</th>
       <th style="width:180px;">业绩单号/生产计划</th>
       <th style="width:100px;">下单时间</th>
@@ -78,6 +79,7 @@
         </td>
         <td>{{ it.batch_no }}</td>
         <td>{{ it.product_name }}</td>
+        <td>{{ it.product_specification or "-" }}</td>
         <td style="text-align:right;">
           {{ it.planned_quantity }}
           {% if it.unit %}<span style="color:#999;font-size:11px;">{{ it.unit }}</span>{% endif %}
@@ -213,7 +215,7 @@
       {% endfor %}
     {% else %}
       <tr>
-        <td colspan="{{ 13 if can_view_production_cost() else 12 }}" style="text-align:center;color:#999;padding:24px;">
+        <td colspan="{{ 14 if can_view_production_cost() else 13 }}" style="text-align:center;color:#999;padding:24px;">
           暂无数据
         </td>
       </tr>

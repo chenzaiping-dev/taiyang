@@ -536,6 +536,7 @@ class ProductionPlanService:
                 ProductionPlan.created_by,
                 SalesPerformance.performance_no,
                 SalesPerformance.product_name,
+                SalesPerformance.product_specification,
                 creator.real_name.label("created_by_name"),
                 ProductionPlan.created_at,
                 func.coalesce(locked_subq.c.locked_qty, 0).label("locked_qty"),

@@ -41,13 +41,14 @@
       <th>业绩单号</th>
       <th>公司名称</th>
       <th>产品名称</th>
+      <th>规格</th>
+      <th>工艺单号</th>
       <th>收货地址</th>
       <th>计划发货时间</th>
       <th style="text-align:right;">计划总数量</th>
       <th style="text-align:right;">已发总数量</th>
       <th>状态</th>
       <th>创建人</th>
-      <th>创建时间</th>
       <th>仓库</th>
       <th>产品批号</th>
       <th style="text-align:right;">发货数量</th>
@@ -66,20 +67,29 @@
         </td>
         <td>{{ r.company_name or '-' }}</td>
         <td>{{ r.product_name or '-' }}</td>
+        <td>{{ r.product_specification or '-' }}</td>
+        <td>
+          {% if r.process_order_id and r.process_order_no %}
+            <a href="{{ url_for('process_order.detail_page', order_id=r.process_order_id) }}">
+              {{ r.process_order_no }}
+            </a>
+          {% else %}
+            -
+          {% endif %}
+        </td>
         <td>{{ r.destination or '-' }}</td>
         <td>{{ r.planned_ship_time.strftime('%Y-%m-%d %H:%M') if r.planned_ship_time else '-' }}</td>
         <td style="text-align:right;">{{ r.planned_qty }}</td>
         <td style="text-align:right;">{{ r.shipped_qty }}</td>
         <td><span class="status-badge status-{{ r.status|lower }}">{{ status_labels.get(r.status, r.status) }}</span></td>
         <td>{{ r.created_by_name or '-' }}</td>
-        <td>{{ r.created_at.strftime('%Y-%m-%d %H:%M') if r.created_at else '-' }}</td>
         <td>{{ r.warehouse_name or r.warehouse_code or '-' }}</td>
         <td>{{ r.batch_no or '-' }}</td>
         <td style="text-align:right;">{{ r.shipment_quantity }}</td>
       </tr>
       {% endfor %}
     {% else %}
-      <tr><td colspan="15" style="text-align:center;color:#999;padding:24px;">暂无非草稿发货计划明细</td></tr>
+      <tr><td colspan="16" style="text-align:center;color:#999;padding:24px;">暂无非草稿发货计划明细</td></tr>
     {% endif %}
   </tbody>
 </table>

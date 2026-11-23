@@ -30,16 +30,17 @@
       <th>批次号</th>
       <th>产品名称</th>
       <th>规格</th>
+      <th>工艺单号</th>
       <th style="width:60px;">单位</th>
-      <th style="width:90px;">质量</th>
-      <th style="width:130px;text-align:right;">库存总量</th>
-      <th style="width:130px;text-align:right;background:#fff8e1;">锁定数量</th>
-      <th style="width:130px;text-align:right;background:#e8f5e9;">可用数量</th>
+      <th style="width:60px;">质量</th>
+      <th style="width:100px;text-align:right;">库存总量</th>
+      <th style="width:100px;text-align:right;background:#fff8e1;">锁定数量</th>
+      <th style="width:100px;text-align:right;background:#e8f5e9;">可用数量</th>
       {% if can_view_cost %}
-      <th style="width:130px;text-align:right;background:#e8f5e9;">单价</th>
-      <th style="width:130px;text-align:right;background:#e8f5e9;">库存成本</th>
+      <th style="width:100px;text-align:right;background:#e8f5e9;">单价</th>
+      <th style="width:120px;text-align:right;background:#e8f5e9;">库存成本</th>
       {% endif %}
-      <th style="width:150px;">更新时间</th>
+      <th style="width:130px;">更新时间</th>
     </tr>
   </thead>
   <tbody>
@@ -51,6 +52,15 @@
         <td>{{ r.batch_no }}</td>
         <td>{{ r.product_name }}</td>
         <td>{{ r.product_specification or "-" }}</td>
+        <td>
+          {% if r.process_order_no %}
+            <a href="{{ url_for('process_order.detail_page', order_id=r.process_order_id) }}">
+              {{ r.process_order_no }}
+            </a>
+          {% else %}
+            -
+          {% endif %}
+        </td>
         <td>{{ r.unit or "" }}</td>
         <td>{{ quality_labels.get(r.quality_status, r.quality_status) }}</td>
         <td style="text-align:right;color:#2440b3;">{{ r.total_qty }}</td>
@@ -69,12 +79,12 @@
       </tr>
       {% endfor %}
       {% else %}
-        <tr><td colspan="{{ 13 if can_view_cost else 11 }}" style="text-align:center;color:#999;padding:24px;">暂无库存</td></tr>
+        <tr><td colspan="{{ 14 if can_view_cost else 12 }}" style="text-align:center;color:#999;padding:24px;">暂无库存</td></tr>
       {% endif %}
   </tbody>
   <tfoot>
     <tr style="background:#fafafa;font-weight:600;">
-      <td colspan="7" style="text-align:right;">本页合计：</td>
+      <td colspan="8" style="text-align:right;">本页合计：</td>
       <td style="text-align:right;color:#2440b3;">{{ rows|sum(attribute='total_qty') }}</td>
       <td style="text-align:right;color:#f00;">
         {{ rows|sum(attribute='locked_qty') }}

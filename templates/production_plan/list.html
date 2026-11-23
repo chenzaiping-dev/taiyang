@@ -36,13 +36,15 @@
       <th>生产计划单号</th>
       <th style="width:120px;">业绩单号</th>
       <th>产品名称</th>
-      <th style="width:130px;text-align:right;">锁定总数量</th>
-      <th style="width:120px;text-align:right;">草稿意向锁定</th>
-      <th style="width:130px;text-align:right;">计划生产数量</th>
-      <th style="width:100px;">计划单状态</th>
+      <th>产品规格</th>
+      <th style="width:100px;text-align:right;">订单总数量</th>
+      <th style="width:100px;text-align:right;">锁定总数量</th>
+      <th style="width:100px;text-align:right;">草稿意向锁定</th>
+      <th style="width:100px;text-align:right;">计划生产数量</th>
+      <th style="width:80px;">计划单状态</th>
       <th style="width:100px;">创建人</th>
-      <th style="width:150px;">创建时间</th>
-      <th style="width:220px;">操作</th>
+      <th style="width:130px;">创建时间</th>
+      <th style="width:200px;">操作</th>
     </tr>
   </thead>
   <tbody>
@@ -63,6 +65,8 @@
           </a>
         </td>
         <td>{{ r.product_name }}</td>
+        <td>{{ r.product_specification or "-" }}</td>
+        <td style="text-align:right;">{{ r.total_quantity }}</td>
         <td style="text-align:right;">{{ r.locked_qty }}</td>
         <td style="text-align:right;">
           {% if r.status == 'DRAFT' and r.draft_locked_qty %}
@@ -163,7 +167,7 @@
       </tr>
       {% endfor %}
     {% else %}
-      <tr><td colspan="11" style="text-align:center;color:#999;padding:24px;">
+      <tr><td colspan="13" style="text-align:center;color:#999;padding:24px;">
         暂无生产计划
       </td></tr>
     {% endif %}

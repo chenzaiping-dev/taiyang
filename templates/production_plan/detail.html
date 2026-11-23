@@ -168,6 +168,7 @@
         <th>加工厂</th>
         <th>生产批号</th>
         <th>产品名称</th>
+        <th>规格</th>
         <th style="width:60px;">单位</th>
         <th style="width:120px;text-align:right;">锁定数量</th>
         <th style="width:120px;text-align:right;">计划生产数量</th>
@@ -190,6 +191,7 @@
           <td>{{ po.factory_name or "-" }}</td>
           <td>{{ po.batch_no }}</td>
           <td>{{ po.product_name }}</td>
+          <td>{{ po.product_specification or "-"  }}</td>
           <td>{{ po.unit or "" }}</td>
           <td style="text-align:right;">{{ po.locked_quantity }}</td>
           <td style="text-align:right;">{{ po.planned_quantity }}</td>
