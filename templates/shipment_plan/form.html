@@ -84,7 +84,7 @@
           <td>{{ r.product_name }}</td>
           <td>{{ r.product_specification or "-" }}</td>
           <td>{{ r.unit or "" }}</td>
-          <td style="text-align:right;">{{ r.remaining_quantity }}</td>
+          <td style="text-align:right;">{{ r.remaining_quantity|format_qty }}</td>
           {% if can_view_shipment_money() %}
           <td style="text-align:right;">
               {{ existing.unit_price if existing else "—" }}

@@ -71,11 +71,11 @@
           <td>{{ r.product_name }}</td>
           <td>{{ r.product_specification or "-" }}</td>
           <td>{{ r.unit or "" }}</td>
-          <td style="text-align:right;">{{ r.quantity }}</td>
-          <td style="text-align:right;color:#ef6c00;">{{ r.locked_qty }}</td>
+          <td style="text-align:right;">{{ r.quantity|format_qty }}</td>
+          <td style="text-align:right;color:#ef6c00;">{{ r.locked_qty|format_qty }}</td>
           <td style="text-align:right;font-weight:600;
                     color:{{ '#c62828' if r.available_qty <= 0 else '#2e7d32' }};">
-            {{ r.available_qty }}
+            {{ r.available_qty|format_qty }}
           </td>
           <td>
             <input type="hidden" name="stock[{{ loop.index0 }}][warehouse_id]"

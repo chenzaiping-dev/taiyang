@@ -27,8 +27,8 @@
     <tr>
       <td>{{ l.layer_id }}</td>
       <td>{{ l.material_id }}</td>
-      <td>{{ l.original_qty }}</td>
-      <td>{{ l.remaining_qty }}</td>
+      <td>{{ l.original_qty|format_qty }}</td>
+      <td>{{ l.remaining_qty|format_qty }}</td>
       <td>{% if can_view_inventory_cost() %}{{ l.unit_cost }}{% else %}—{% endif %}</td>
     </tr>
     {% endfor %}

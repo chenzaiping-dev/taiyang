@@ -67,7 +67,7 @@
   <div class="form-row"><label>产品名称：</label>{{ order.product_name }}</div>
   <div class="form-row"><label>产品规格：</label>{{ order.product_specification or "-" }}</div>
   <div class="form-row"><label>计划数量：</label>
-    {{ order.planned_quantity }}{% if order.unit %} {{ order.unit }}{% endif %}
+    {{ order.planned_quantity|format_qty }}{% if order.unit %} {{ order.unit }}{% endif %}
   </div>
   <div class="form-row"><label>业绩单号：</label>
     {% if performance %}
@@ -88,9 +88,9 @@
     {{ creator.real_name if creator else "-" }}
   </div>
   {% if can_view_production_cost() %}
-  <div class="form-row"><label>预计单位成本：</label>{{ order.planned_cost_price }}</div>
-  <div class="form-row"><label>预计总成本：</label>{{ order.planned_total_cost }}</div>
-  <div class="form-row"><label>实际总成本：</label>{{ order.actual_total_cost }}</div>
+  <!--div class="form-row"><label>预计单位成本：</label>{{ order.planned_cost_price|format_cost }}</div>
+  <div class="form-row"><label>预计总成本：</label>{{ order.planned_total_cost|format_cost }}</div-->
+  <div class="form-row"><label>实际总成本：</label>{{ order.actual_total_cost|format_cost }}</div>
   {% endif %}
   <div class="form-row"><label>状态：</label>
     <span class="status-badge status-{{ order.status|lower }}">
@@ -144,8 +144,8 @@
             {% endif %}
           </td>
           <td>{{ m.ratio_value }}</td>
-          <td>{{ m.quantity }}</td>
-          {% if can_view_production_cost() %}<td>{{ m.cost }}</td>{% endif %}
+          <td>{{ m.quantity|format_qty }}</td>
+          {% if can_view_production_cost() %}<td>{{ m.cost|format_cost }}</td>{% endif %}
           <td>{{ m.remark or "-" }}</td>
         </tr>
       {% else %}
@@ -169,15 +169,15 @@
           <td><span style="color:#999;">WATER</span></td>
           <td>水 <span style="color:#999;font-size:12px;">(虚拟行)</span></td>
           <td>{{ "%.6f"|format(water_ratio) }}</td>
-          <td>{{ "%.4f"|format(water_qty) }}</td>
-          {% if can_view_production_cost() %}<td>0.0000</td>{% endif %}
+          <td>{{ water_qty|format_qty }}</td>
+          {% if can_view_production_cost() %}<td>0.00</td>{% endif %}
           <td><span style="color:#999;">按计划数量补足</span></td>
         </tr>
         <tr style="font-weight:bold;background:#f0f0f0;">
           <td colspan="3" style="text-align:right;">合计</td>
           <td>{{ "%.4f"|format(ns.sum_ratio + water_ratio) }}</td>
-          <td>{{ "%.4f"|format(ns.sum_qty + water_qty) }}</td>
-          {% if can_view_production_cost() %}<td>{{ materials | sum(attribute='cost') }}</td>{% endif %}
+          <td>{{ (ns.sum_qty + water_qty)|format_qty }}</td>
+          {% if can_view_production_cost() %}<td>{{ materials | sum(attribute='cost') |format_cost }}</td>{% endif %}
           <td></td>
         </tr>
       {% endif %}

@@ -38,22 +38,22 @@
       #{{ plan.performance_id }}
     {% endif %}
   </div>
-  <div class="form-row"><label>订单总数量：</label>{{ plan.total_quantity }}</div>
-  <div class="form-row"><label>新生产数量：</label>{{ plan.process_quantity }}</div>
+  <div class="form-row"><label>订单总数量：</label>{{ plan.total_quantity|format_qty }}</div>
+  <div class="form-row"><label>新生产数量：</label>{{ plan.process_quantity|format_qty }}</div>
   <div class="form-row"><label>成品锁定总数量（已生效）：</label>
-    <strong>{{ fg_locked_total }}</strong>
+    <strong>{{ fg_locked_total|format_qty }}</strong>
   </div>
   {% if plan.status == 'DRAFT' %}
   <div class="form-row"><label>草稿意向锁定：</label>
-    <strong style="color:#ef6c00;">{{ draft_locked_total }}</strong>
+    <strong style="color:#ef6c00;">{{ draft_locked_total|format_qty }}</strong>
     <span style="color:#999;font-size:12px;">（确认后才生效，当前不占用库存）</span>
   </div>
   {% endif %}
   <div class="form-row"><label>生产锁定总数量：</label>
-    <strong>{{ prod_locked_total }}</strong>
+    <strong>{{ prod_locked_total|format_qty }}</strong>
   </div>
   <div class="form-row"><label>工艺单生产数量：</label>
-    <strong>{{ prod_planned_total }}</strong>
+    <strong>{{ prod_planned_total|format_qty }}</strong>
   </div>
   <div class="form-row"><label>计划单状态：</label>
     <span class="status-badge status-{{ plan.status|lower }}">
@@ -93,7 +93,7 @@
         <td>{{ r.product_name }}</td>
         <td>{{ r.product_specification or "-" }}</td>
         <td>{{ r.unit or "" }}</td>
-        <td style="text-align:right;color:#ef6c00;">{{ r.lock_qty }}</td>
+        <td style="text-align:right;color:#ef6c00;">{{ r.lock_qty|format_qty }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -132,9 +132,9 @@
           <td>{{ r.product_name }}</td>
           <td>{{ r.product_specification or "-" }}</td>
           <td>{{ r.unit or "" }}</td>
-          <td style="text-align:right;">{{ r.reserved_quantity }}</td>
+          <td style="text-align:right;">{{ r.reserved_quantity|format_qty }}</td>
           <td style="text-align:right;font-weight:600;">
-            {{ r.remaining_quantity }}
+            {{ r.remaining_quantity|format_qty }}
           </td>
           <td>
             <span class="res-badge res-{{ r.status|lower }}">
@@ -193,9 +193,9 @@
           <td>{{ po.product_name }}</td>
           <td>{{ po.product_specification or "-"  }}</td>
           <td>{{ po.unit or "" }}</td>
-          <td style="text-align:right;">{{ po.locked_quantity }}</td>
-          <td style="text-align:right;">{{ po.planned_quantity }}</td>
-          <td style="text-align:right;">{{ po.completed_quantity }}</td>
+          <td style="text-align:right;">{{ po.locked_quantity|format_qty }}</td>
+          <td style="text-align:right;">{{ po.planned_quantity|format_qty }}</td>
+          <td style="text-align:right;">{{ po.completed_quantity|format_qty }}</td>
           <td>
             <span class="po-badge po-{{ po.po_status|lower }}">
               {{ po_status_labels.get(po.po_status, po.po_status) }}

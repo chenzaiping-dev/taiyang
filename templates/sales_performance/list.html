@@ -49,11 +49,11 @@
 
 
 <div class="list-summary" style="display:flex;gap:12px;flex-wrap:wrap;margin:14px 0;">
-  {% if can_view_summary_money %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">销售额（全量）</div><strong style="font-size:18px;">{{ summary.amount or 0 }}</strong></div>{% endif %}
-  {% if can_view_summary_cost %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">成本（全量）</div><strong style="font-size:18px;">{{ summary.cost or 0 }}</strong></div>
-  <div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">利润（全量）</div><strong style="font-size:18px;">{{ summary.profit or 0 }}</strong></div>{% endif %}
-  <div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">归属数量（全量）</div><strong style="font-size:18px;">{{ summary.attributed_quantity or 0 }}</strong></div>
-  {% if can_view_summary_money %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">归属销售额（全量）</div><strong style="font-size:18px;">{{ summary.attributed_amount or 0 }}</strong></div>{% endif %}
+  {% if can_view_summary_money %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">销售额（全量）</div><strong style="font-size:18px;">{{ (summary.amount or 0)|format_cost }}</strong></div>{% endif %}
+  {% if can_view_summary_cost %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">成本（全量）</div><strong style="font-size:18px;">{{ (summary.cost or 0)|format_cost }}</strong></div>
+  <div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">利润（全量）</div><strong style="font-size:18px;">{{ (summary.profit or 0)|format_cost }}</strong></div>{% endif %}
+  <div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">归属数量（全量）</div><strong style="font-size:18px;">{{ (summary.attributed_quantity or 0)|format_qty }}</strong></div>
+  {% if can_view_summary_money %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">归属销售额（全量）</div><strong style="font-size:18px;">{{ (summary.attributed_amount or 0)|format_cost }}</strong></div>{% endif %}
   <span style="align-self:center;font-size:12px;color:#888;">当前筛选条件下全部业绩单，排除草稿和已取消业绩单；不受分页影响</span>
 </div>
 
@@ -100,14 +100,14 @@
         <td>{{ r.company_name }}</td>
         <td>{{ r.product_name }}</td>
         <td>{{ r.product_specification or "-" }}</td>
-        <td style="text-align:right;">{{ r.quantity }}</td>
+        <td style="text-align:right;">{{ r.quantity|format_qty }}</td>
         <td>{{ r.unit or "" }}</td>
-        <td style="text-align:right;">{% if can_view_sales_performance_money() %}{{ r.unit_price }}{% else %}—{% endif %}</td>
-        <td style="text-align:right;color:#2440b3;">{% if can_view_sales_performance_money() %}{{ r.amount }}{% else %}—{% endif %}</td>
-        <td style="text-align:right;color:#ef6c00;">{% if can_view_sales_performance_cost() %}{{ r.cost }}{% else %}—{% endif %}</td>
-        <td style="text-align:right;color:#2e7d32;">{% if can_view_sales_performance_cost() %}{{ r.profit }}{% else %}—{% endif %}</td>
-        <td style="text-align:right;">{{ r.attributed_quantity }}</td>
-        <td style="text-align:right;color:#2440b3;">{% if can_view_sales_performance_money() %}{{ r.attributed_amount }}{% else %}—{% endif %}</td>
+        <td style="text-align:right;">{% if can_view_sales_performance_money() %}{{ r.unit_price|format_cost }}{% else %}—{% endif %}</td>
+        <td style="text-align:right;color:#2440b3;">{% if can_view_sales_performance_money() %}{{ r.amount|format_cost }}{% else %}—{% endif %}</td>
+        <td style="text-align:right;color:#ef6c00;">{% if can_view_sales_performance_cost() %}{{ r.cost|format_cost }}{% else %}—{% endif %}</td>
+        <td style="text-align:right;color:#2e7d32;">{% if can_view_sales_performance_cost() %}{{ r.profit|format_cost }}{% else %}—{% endif %}</td>
+        <td style="text-align:right;">{{ r.attributed_quantity|format_qty }}</td>
+        <td style="text-align:right;color:#2440b3;">{% if can_view_sales_performance_money() %}{{ r.attributed_amount|format_cost }}{% else %}—{% endif %}</td>
         <td style="text-align:right;">{{ r.salesperson_name }}</td>
         <td style="text-align:right;">{{ r.is_joint_sales }}</td>
         <td style="text-align:right;">{{ r.co_salesperson_name }}</td>
@@ -248,21 +248,21 @@
   <tfoot>
     <tr style="background:#fafafa;font-weight:600;">
       <td colspan="5" style="text-align:right;">本页合计：</td>
-      <td style="text-align:right;">{{ rows|sum(attribute='quantity') }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='quantity')|format_qty }}</td>
       <td></td>
       <td></td>
       <td style="text-align:right;color:#2440b3;">
-        {% if can_view_sales_performance_money() %}{{ rows|sum(attribute='amount') }}{% else %}—{% endif %}
+        {% if can_view_sales_performance_money() %}{{ rows|sum(attribute='amount')|format_cost }}{% else %}—{% endif %}
       </td>
       <td style="text-align:right;color:#ef6c00;">
-        {% if can_view_sales_performance_cost() %}{{ rows|sum(attribute='cost') }}{% else %}—{% endif %}
+        {% if can_view_sales_performance_cost() %}{{ rows|sum(attribute='cost')|format_cost }}{% else %}—{% endif %}
       </td>
       <td style="text-align:right;color:#2e7d32;">
-        {% if can_view_sales_performance_cost() %}{{ rows|sum(attribute='profit') }}{% else %}—{% endif %}
+        {% if can_view_sales_performance_cost() %}{{ rows|sum(attribute='profit')|format_cost }}{% else %}—{% endif %}
       </td>
-      <td style="text-align:right;">{{ rows|sum(attribute='attributed_quantity') }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='attributed_quantity')|format_qty }}</td>
       <td style="text-align:right;color:#2440b3;">
-        {% if can_view_sales_performance_money() %}{{ rows|sum(attribute='attributed_amount') }}{% else %}—{% endif %}
+        {% if can_view_sales_performance_money() %}{{ rows|sum(attribute='attributed_amount')|format_cost }}{% else %}—{% endif %}
       </td>
       <td></td>
       <td></td>

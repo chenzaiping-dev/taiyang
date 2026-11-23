@@ -57,10 +57,10 @@
 
 
 <div class="list-summary" style="display:flex;gap:12px;flex-wrap:wrap;margin:14px 0;">
-  <div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">原始数量</div><strong style="font-size:18px;">{{ summary.original_qty or 0 }}</strong></div>
-  {% if can_view_cost %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">原始成本</div><strong style="font-size:18px;">{{ summary.original_cost or 0 }}</strong></div>{% endif %}
-  <div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">剩余数量</div><strong style="font-size:18px;">{{ summary.remaining_qty or 0 }}</strong></div>
-  {% if can_view_cost %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">剩余成本</div><strong style="font-size:18px;">{{ summary.remaining_cost or 0 }}</strong></div>{% endif %}
+  <div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">原始数量</div><strong style="font-size:18px;">{{ (summary.original_qty or 0)|format_qty }}</strong></div>
+  {% if can_view_cost %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">原始成本</div><strong style="font-size:18px;">{{ (summary.original_cost or 0)|format_cost }}</strong></div>{% endif %}
+  <div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">剩余数量</div><strong style="font-size:18px;">{{ (summary.remaining_qty or 0)|format_qty }}</strong></div>
+  {% if can_view_cost %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">剩余成本</div><strong style="font-size:18px;">{{ (summary.remaining_cost or 0)|format_cost }}</strong></div>{% endif %}
   <span style="align-self:center;font-size:12px;color:#888;">当前筛选条件下全部有效成本层，不受分页影响</span>
 </div>
 
@@ -109,13 +109,13 @@
         </td>
         <td>{{ r.effective_time.strftime("%Y-%m-%d %H:%M:%S")
                if r.effective_time else "-" }}</td>
-        <td style="text-align:right;">{% if can_view_inventory_cost() %}{{ r.unit_cost }}{% else %}—{% endif %}</td>
-        <td style="text-align:right;">{{ r.original_qty }}</td>
-        <td style="text-align:right;">{% if can_view_inventory_cost() %}{{ r.original_cost }}{% else %}—{% endif %}</td>
+        <td style="text-align:right;">{% if can_view_inventory_cost() %}{{ r.unit_cost|format_cost }}{% else %}—{% endif %}</td>
+        <td style="text-align:right;">{{ r.original_qty|format_qty }}</td>
+        <td style="text-align:right;">{% if can_view_inventory_cost() %}{{ r.original_cost|format_cost }}{% else %}—{% endif %}</td>
         <td style="text-align:right;color:#2440b3;font-weight:600;">
-          {{ r.remaining_qty }}
+          {{ r.remaining_qty|format_qty }}
         </td>
-        <td style="text-align:right;color:#ef6c00;">{% if can_view_inventory_cost() %}{{ r.remaining_cost }}{% else %}—{% endif %}</td>
+        <td style="text-align:right;color:#ef6c00;">{% if can_view_inventory_cost() %}{{ r.remaining_cost|format_cost }}{% else %}—{% endif %}</td>
       </tr>
       {% endfor %}
     {% else %}
@@ -139,16 +139,16 @@
         <td colspan="7" style="text-align:right;">本页合计：</td>
       {% endif %}
       <td style="text-align:right;">
-        {{ rows|sum(attribute='original_qty') }}
+        {{ rows|sum(attribute='original_qty')|format_qty }}
       </td>
       <td style="text-align:right;">
-        {% if can_view_inventory_cost() %}{{ rows|sum(attribute='original_cost') }}{% else %}—{% endif %}
+        {% if can_view_inventory_cost() %}{{ rows|sum(attribute='original_cost')|format_cost }}{% else %}—{% endif %}
       </td>
       <td style="text-align:right;color:#2440b3;">
-        {{ rows|sum(attribute='remaining_qty') }}
+        {{ rows|sum(attribute='remaining_qty')|format_qty }}
       </td>
       <td style="text-align:right;color:#ef6c00;">
-        {% if can_view_inventory_cost() %}{{ rows|sum(attribute='remaining_cost') }}{% else %}—{% endif %}
+        {% if can_view_inventory_cost() %}{{ rows|sum(attribute='remaining_cost')|format_cost }}{% else %}—{% endif %}
       </td>
     </tr>
   </tfoot>

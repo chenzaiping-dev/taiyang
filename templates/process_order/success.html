@@ -22,7 +22,7 @@
       <td>{{ m.id }}</td>
       <td>{{ m.material_id }}</td>
       <td>{{ m.ratio_value }}</td>
-      <td>{{ m.quantity }}</td>
+      <td>{{ m.quantity|format_qty }}</td>
       <td>{% if can_view_production_cost() %}{{ m.cost }}{% else %}—{% endif %}</td>
       <td>{{ m.remark }}</td>
     </tr>
@@ -40,14 +40,14 @@
         <td><span style="color:#999;">—</span></td>
         <td>水 <span style="color:#999;font-size:12px;">(虚拟行)</span></td>
         <td>{{ "%.6f"|format(water_ratio) }}</td>
-        <td>{{ "%.4f"|format(water_qty) }}</td>
+        <td>{{ water_qty|format_qty }}</td>
         <td>0.0000</td>
         <td><span style="color:#999;">按计划数量补足</span></td>
       </tr>
       <tr style="font-weight:bold;background:#f0f0f0;">
         <td colspan="2" style="text-align:right;">合计</td>
         <td>{{ "%.4f"|format(ns.sum_ratio + water_ratio) }}</td>
-        <td>{{ "%.4f"|format(ns.sum_qty + water_qty) }}</td>
+        <td>{{ (ns.sum_qty + water_qty)|format_qty }}</td>
         <td>{% if can_view_production_cost() %}{{ result.materials | sum(attribute='cost') }}{% else %}—{% endif %}</td>
         <td></td>
       </tr>

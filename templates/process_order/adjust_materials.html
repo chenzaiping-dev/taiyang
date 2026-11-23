@@ -48,7 +48,7 @@
     </div>
     <div class="form-row">
       <label>计划数量：</label>
-      <strong>{{ order.planned_quantity }}</strong>
+      <strong>{{ order.planned_quantity|format_qty }}</strong>
       {% if order.unit %} {{ order.unit }}{% endif %}
       <label style="margin-left:24px;">状态：</label>
       <span class="status-badge status-{{ order.status|lower }}">
@@ -109,7 +109,7 @@
               {{ "%.6f"|format(m.ratio_value) }}
             </td>
             <td style="text-align:right;color:#888;">
-              {{ "%.4f"|format(m.quantity) }}
+              {{ m.quantity|format_qty }}
             </td>
             <td>
               <input type="number" step="0.000001" min="0" max="1"

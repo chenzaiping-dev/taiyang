@@ -20,6 +20,11 @@ def create_app(test_config=None):
     db.init_app(app)
     csrf.init_app(app)
 
+    # 数量仅在模板展示时格式化为两位小数；Service/数据库仍保留原始精度。
+    from app.utils.formatters import format_qty, format_cost
+    app.jinja_env.filters["format_qty"] = format_qty
+    app.jinja_env.filters["format_cost"] = format_cost
+
     with app.app_context():
         # 反射现有 taiyang 数据库，不会自动创建或修改任何业务表
         reflect_database(db)

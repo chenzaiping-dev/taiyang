@@ -119,12 +119,12 @@
           单位：{{ line.unit }}
         </span>
         <span style="margin-left:12px;">
-          计划数量：<strong>{{ line.quantity }}</strong>
+          计划数量：<strong>{{ line.quantity|format_qty }}</strong>
         </span>
         <span style="margin-left:12px;">
           已发数量：
           <strong style="color:{{ '#2e7d32' if line.shipped_quantity >= line.quantity else '#ef6c00' }};">
-            {{ line.shipped_quantity }}
+            {{ line.shipped_quantity|format_qty }}
           </strong>
         </span>
         <span style="margin-left:12px;color:#888;">
@@ -148,8 +148,8 @@
             <td>{{ loop.index }}</td>
             <td>{{ a.warehouse_code }} - {{ a.warehouse_name }}</td>
             <td>{{ a.batch_no }}</td>
-            <td style="text-align:right;">{{ a.planned_quantity }}</td>
-            <td style="text-align:right;">{{ a.shipped_quantity }}</td>
+            <td style="text-align:right;">{{ a.planned_quantity|format_qty }}</td>
+            <td style="text-align:right;">{{ a.shipped_quantity|format_qty }}</td>
           </tr>
           {% else %}
           <tr><td colspan="5" style="text-align:center;color:#999;padding:12px;">

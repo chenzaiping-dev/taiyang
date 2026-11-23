@@ -45,19 +45,19 @@
 <div style="margin:12px 0 16px;padding:12px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:6px;">
   <div style="font-weight:600;margin-bottom:10px;">当前筛选条件下全量数量统计（不受分页影响）</div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:10px;">
-    <div><div style="font-size:12px;color:#666;">累计入库</div><strong>{{ summary.total_in }}</strong></div>
-    <div><div style="font-size:12px;color:#666;">累计出库</div><strong>{{ summary.total_out }}</strong></div>
-    <div><div style="font-size:12px;color:#666;">净库存变动</div><strong>{{ summary.net_qty }}</strong></div>
-    <div><div style="font-size:12px;color:#666;">采购入</div><strong>{{ summary.in_purchase }}</strong></div>
-    <div><div style="font-size:12px;color:#666;">盘盈入</div><strong>{{ summary.in_gain }}</strong></div>
-    <div><div style="font-size:12px;color:#666;">退货入</div><strong>{{ summary.in_return }}</strong></div>
-    <div><div style="font-size:12px;color:#666;">撤销出库-回补入</div><strong>{{ summary.in_out_reverse }}</strong></div>
-    <div><div style="font-size:12px;color:#666;">领料出</div><strong>{{ summary.out_production }}</strong></div>
-    <div><div style="font-size:12px;color:#666;">盘亏出</div><strong>{{ summary.out_loss }}</strong></div>
-    <div><div style="font-size:12px;color:#666;">退货出</div><strong>{{ summary.out_return }}</strong></div>
-    <div><div style="font-size:12px;color:#666;">配比调整红冲</div><strong>{{ summary.out_adjust_red }}</strong></div>
-    <div><div style="font-size:12px;color:#666;">配比调整蓝补</div><strong>{{ summary.out_adjust_blue }}</strong></div>
-    <div><div style="font-size:12px;color:#666;">撤销入库-冲减出</div><strong>{{ summary.out_in_reverse }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">累计入库</div><strong>{{ summary.total_in|format_qty }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">累计出库</div><strong>{{ summary.total_out|format_qty }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">净库存变动</div><strong>{{ summary.net_qty|format_qty }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">采购入</div><strong>{{ summary.in_purchase|format_qty }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">盘盈入</div><strong>{{ summary.in_gain|format_qty }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">退货入</div><strong>{{ summary.in_return|format_qty }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">撤销入库-冲减出</div><strong>{{ summary.out_in_reverse|format_qty }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">领料出</div><strong>{{ summary.out_production|format_qty }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">盘亏出</div><strong>{{ summary.out_loss|format_qty }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">退货出</div><strong>{{ summary.out_return|format_qty }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">配比调整红冲</div><strong>{{ summary.out_adjust_red|format_qty }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">配比调整蓝补</div><strong>{{ summary.out_adjust_blue|format_qty }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">撤销出库-回补入</div><strong>{{ summary.in_out_reverse|format_qty }}</strong></div>
   </div>
 </div>
 
@@ -97,23 +97,23 @@
           <td>{{ r.warehouse_code }} - {{ r.warehouse_name }}</td>
         {% endif %}
         <td style="text-align:right;color:#2e7d32;font-weight:600;">
-          {{ r.total_in }}
+          {{ r.total_in|format_qty }}
         </td>
         <td style="text-align:right;color:#c62828;font-weight:600;">
-          {{ r.total_out }}
+          {{ r.total_out|format_qty }}
         </td>
-        <td style="text-align:right;">{{ r.net_qty }}</td>
-        <td style="text-align:right;color:#666;">{{ r.in_purchase }}</td>
-        <td style="text-align:right;color:#666;">{{ r.in_gain }}</td>
-        <td style="text-align:right;color:#666;">{{ r.in_return }}</td>
-        <td style="text-align:right;color:#666;">{{ r.out_in_reverse }}</td>
+        <td style="text-align:right;">{{ r.net_qty|format_qty }}</td>
+        <td style="text-align:right;color:#666;">{{ r.in_purchase|format_qty }}</td>
+        <td style="text-align:right;color:#666;">{{ r.in_gain|format_qty }}</td>
+        <td style="text-align:right;color:#666;">{{ r.in_return|format_qty }}</td>
+        <td style="text-align:right;color:#666;">{{ r.out_in_reverse|format_qty }}</td>
         <td style="text-align:right;color:#666;"></td>
-        <td style="text-align:right;color:#666;">{{ r.out_production }}</td>
-        <td style="text-align:right;color:#666;">{{ r.out_loss }}</td>
-        <td style="text-align:right;color:#666;">{{ r.out_return }}</td>
-        <td style="text-align:right;color:#666;">{{ r.out_adjust_red }}</td>
-        <td style="text-align:right;color:#666;">{{ r.out_adjust_blue }}</td>
-        <td style="text-align:right;color:#666;">{{ r.in_out_reverse }}</td>
+        <td style="text-align:right;color:#666;">{{ r.out_production|format_qty }}</td>
+        <td style="text-align:right;color:#666;">{{ r.out_loss|format_qty }}</td>
+        <td style="text-align:right;color:#666;">{{ r.out_return|format_qty }}</td>
+        <td style="text-align:right;color:#666;">{{ r.out_adjust_red|format_qty }}</td>
+        <td style="text-align:right;color:#666;">{{ r.out_adjust_blue|format_qty }}</td>
+        <td style="text-align:right;color:#666;">{{ r.in_out_reverse|format_qty }}</td>
       </tr>
       {% endfor %}
     {% else %}
@@ -128,20 +128,20 @@
   <tfoot>
     <tr style="background:#fafafa;font-weight:600;">
       <td colspan="{{ 5 if warehouse_id else 4 }}" style="text-align:right;">本页合计：</td>
-      <td style="text-align:right;color:#2e7d32;">{{ rows|sum(attribute='total_in') }}</td>
-      <td style="text-align:right;color:#c62828;">{{ rows|sum(attribute='total_out') }}</td>
-      <td style="text-align:right;">{{ rows|sum(attribute='net_qty') }}</td>
-      <td style="text-align:right;">{{ rows|sum(attribute='in_purchase') }}</td>
-      <td style="text-align:right;">{{ rows|sum(attribute='in_gain') }}</td>
-      <td style="text-align:right;">{{ rows|sum(attribute='in_return') }}</td>
-      <td style="text-align:right;">{{ rows|sum(attribute='out_in_reverse') }}</td>
+      <td style="text-align:right;color:#2e7d32;">{{ rows|sum(attribute='total_in')|format_qty }}</td>
+      <td style="text-align:right;color:#c62828;">{{ rows|sum(attribute='total_out')|format_qty }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='net_qty')|format_qty }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='in_purchase')|format_qty }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='in_gain')|format_qty }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='in_return')|format_qty }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='out_in_reverse')|format_qty }}</td>
       <td></td>
-      <td style="text-align:right;">{{ rows|sum(attribute='out_production') }}</td>
-      <td style="text-align:right;">{{ rows|sum(attribute='out_loss') }}</td>
-      <td style="text-align:right;">{{ rows|sum(attribute='out_return') }}</td>
-      <td style="text-align:right;">{{ rows|sum(attribute='out_adjust_red') }}</td>
-      <td style="text-align:right;">{{ rows|sum(attribute='out_adjust_blue') }}</td>
-      <td style="text-align:right;">{{ rows|sum(attribute='in_out_reverse') }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='out_production')|format_qty }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='out_loss')|format_qty }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='out_return')|format_qty }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='out_adjust_red')|format_qty }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='out_adjust_blue')|format_qty }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='in_out_reverse')|format_qty }}</td>
     </tr>
   </tfoot>
 </table>

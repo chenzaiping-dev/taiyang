@@ -260,7 +260,7 @@ class InventoryQueryService:
                 InventoryCostLayer.unit_cost,
                 InventoryCostLayer.original_cost,
                 # 剩余金额 = 剩余数量 × 单价
-                (InventoryCostLayer.remaining_qty * InventoryCostLayer.unit_cost)
+                func.round(InventoryCostLayer.remaining_qty * InventoryCostLayer.unit_cost, 4)
                     .label("remaining_cost"),
             )
             .join(Material, Material.id == InventoryCostLayer.material_id)

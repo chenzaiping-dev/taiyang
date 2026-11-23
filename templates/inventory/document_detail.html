@@ -117,10 +117,10 @@
     <div class="form-row"><label>备注：</label>{{ doc.remark or "-" }}</div>
     <div class="form-row"><label>合计：</label>
       {% if doc.status == 'DRAFT' %}
-      草稿数量 {{ detail.total_qty }}, 成本待计算
+      草稿数量 {{ detail.total_qty|format_qty }}, 成本待计算
       {% else %}
-      数量变动 {{ '+' if detail.total_qty > 0 }}{{ detail.total_qty }}
-      {% if can_view_inventory_cost() %}, 成本金额 {{ '+' if detail.total_cost > 0 }}{{ detail.total_cost }}{% endif %}
+      数量变动 {{ '+' if detail.total_qty > 0 }}{{ detail.total_qty|format_qty }}
+      {% if can_view_inventory_cost() %}, 成本金额 {{ '+' if detail.total_cost > 0 }}{{ detail.total_cost|format_cost }}{% endif %}
       {% endif %}
     </div>
   </fieldset>
@@ -159,7 +159,7 @@
             {% if l.quantity_delta is none %}
               <span style="color:#999;">—</span>
             {% else %}
-              {{ '+' if l.quantity_delta > 0 }}{{ l.quantity_delta }}
+              {{ '+' if l.quantity_delta > 0 }}{{ l.quantity_delta|format_qty }}
             {% endif %}
           </td>
           <td style="text-align:right;">{% if can_view_inventory_cost() %}{{ l.unit_cost or "-" }}{% else %}—{% endif %}</td>
@@ -192,8 +192,8 @@
                   （{{ layer_type_labels.get(a.layer_type, a.layer_type) }}，
                   {{ a.effective_time.strftime("%Y-%m-%d")
                      if a.effective_time else "-" }}）：
-                  {% if can_view_inventory_cost() %}{{ a.quantity|abs }} × {{ a.unit_cost }}
-                  = <strong>{{ a.cost_amount|abs }}</strong>{% endif %}
+                  {% if can_view_inventory_cost() %}{{ a.quantity|abs|format_qty }} × {{ a.unit_cost|format_cost }}
+                  = <strong>{{ a.cost_amount|abs|format_cost }}</strong>{% endif %}
                 </div>
               {% endfor %}
             </td>
@@ -215,9 +215,9 @@
                   （{{ layer_type_labels.get(layer.layer_type, layer.layer_type) }}，
                   {{ layer.effective_time.strftime("%Y-%m-%d")
                      if layer.effective_time else "-" }}）：
-                  {% if can_view_inventory_cost() %}{{ layer.original_qty }} × {{ layer.unit_cost }}
-                  = <strong>{{ layer.original_cost }}</strong>{% endif %}
-                  （剩余 {{ layer.remaining_qty }}）
+                  {% if can_view_inventory_cost() %}{{ layer.original_qty|format_qty }} × {{ layer.unit_cost|format_cost }}
+                  = <strong>{{ layer.original_cost|format_cost }}</strong>{% endif %}
+                  （剩余 {{ layer.remaining_qty|format_qty }}）
                 </div>
               {% endfor %}
             </td>

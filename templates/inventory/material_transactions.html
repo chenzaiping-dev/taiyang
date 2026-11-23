@@ -43,8 +43,8 @@
 
 
 <div class="list-summary" style="display:flex;gap:12px;flex-wrap:wrap;margin:14px 0;">
-  <div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:150px;"><div style="font-size:12px;color:#666;">全量数量变动</div><strong style="font-size:18px;">{{ summary.quantity_delta or 0 }}</strong></div>
-  {% if can_view_cost %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:150px;"><div style="font-size:12px;color:#666;">全量成本金额</div><strong style="font-size:18px;">{{ summary.total_cost or 0 }}</strong></div>{% endif %}
+  <div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:150px;"><div style="font-size:12px;color:#666;">全量数量变动</div><strong style="font-size:18px;">{{ (summary.quantity_delta or 0)|format_qty }}</strong></div>
+  {% if can_view_cost %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:150px;"><div style="font-size:12px;color:#666;">全量成本金额</div><strong style="font-size:18px;">{{ (summary.total_cost or 0)|format_cost }}</strong></div>{% endif %}
   <span style="align-self:center;font-size:12px;color:#888;">包含冲销流水，按正负数抵消；不受分页影响</span>
 </div>
 
@@ -86,11 +86,11 @@
         <td>{{ r.warehouse_code }} - {{ r.warehouse_name }}</td>
         <td style="text-align:right;font-weight:600;
                    color:{{ '#2e7d32' if r.quantity_delta > 0 else '#c62828' }};">
-          {{ '+' if r.quantity_delta > 0 }}{{ r.quantity_delta }}
+          {{ '+' if r.quantity_delta > 0 }}{{ r.quantity_delta|format_qty }}
         </td>
         {% if can_view_inventory_cost() %}
-        <td style="text-align:right;">{{ r.unit_cost }}</td>
-        <td style="text-align:right;">{{ r.total_cost }}</td>
+        <td style="text-align:right;">{{ r.unit_cost|format_cost }}</td>
+        <td style="text-align:right;">{{ r.total_cost|format_cost }}</td>
         {% endif %}
         <td>
           <a href="{{ url_for('inventory_query.document_detail_page',
@@ -135,10 +135,10 @@
   <tfoot>
     <tr style="background:#fafafa;font-weight:600;">
       <td colspan="5" style="text-align:right;">本页合计：</td>
-      <td style="text-align:right;color:#2440b3;">{{ rows|sum(attribute='quantity_delta') }}</td>
+      <td style="text-align:right;color:#2440b3;">{{ rows|sum(attribute='quantity_delta')|format_qty }}</td>
       {% if can_view_inventory_cost() %}
       <td></td>
-      <td style="text-align:right;">{{ rows|sum(attribute='total_cost') }}</td>
+      <td style="text-align:right;">{{ rows|sum(attribute='total_cost')|format_cost }}</td>
       {% endif %}
       <td></td>
       <td></td>
