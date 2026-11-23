@@ -55,7 +55,9 @@
       <th style="width:100px;">下单时间</th>
       <th style="width:40px;">跟单人</th>
       <th style="width:40px;">创建人</th>
-      <th style="width:40px;">{{ "实际单位成本" if can_view_production_cost() else "" }}</th>
+      {% if can_view_production_cost() %}
+      <th style="width:40px;">实际单位成本</th>
+      {% endif %}
       <th style="width:50px;">状态</th>
       <th style="width:200px;">操作</th>
     </tr>
@@ -102,15 +104,15 @@
         <td>{{ it.order_time.strftime("%Y-%m-%d %H:%M") if it.order_time else "-" }}</td>
         <td>{{ it.followup_employee_name or "-" }}</td>
         <td>{{ it.created_by_name or "-" }}</td>
+        {% if can_view_production_cost() %}
         <td style="text-align:right;">
-          {% if can_view_production_cost() %}
-            {% if it.completed_quantity > 0 %}
-              {{ it.actual_total_cost / it.completed_quantity }}
-            {% else %}
-              -
-            {% endif %}
-          {% else %}—{% endif %}
+          {% if it.completed_quantity > 0 %}
+            {{ it.actual_total_cost / it.completed_quantity }}
+          {% else %}
+            -
+          {% endif %}
         </td>
+        {% endif %}
         <td>
           <span class="status-badge status-{{ it.status|lower }}">
             {{ status_labels.get(it.status, it.status) }}
@@ -211,7 +213,7 @@
       {% endfor %}
     {% else %}
       <tr>
-        <td colspan="13" style="text-align:center;color:#999;padding:24px;">
+        <td colspan="{{ 13 if can_view_production_cost() else 12 }}" style="text-align:center;color:#999;padding:24px;">
           暂无数据
         </td>
       </tr>
