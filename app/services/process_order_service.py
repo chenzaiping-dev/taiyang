@@ -1,5 +1,5 @@
 from decimal import Decimal
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from datetime import datetime
 from flask import flash, abort
 
@@ -23,6 +23,10 @@ from app.generated.models.finished_goods_batches import FinishedGoodsBatch
 from app.services.inventory_service import StockOutService, InventoryError, OUTBOUND_TYPE_LABELS, _rm_warehouses
 
 from app.utils.decimal_utils import _q3, _q6, RATIO_TOLERANCE
+from app.services.batch_validation_service import (
+    BatchValidationService,
+    BatchNoDuplicateError,
+)
 
 # ---------- 状态机 ----------
 # 允许的动作：当前状态 -> 目标状态
@@ -170,6 +174,12 @@ class ProcessOrderService:
         product_specification=None, unit="KG", planned_cost_price=0, planned_total_cost=0,
         remark=None, process_order_no=None, status="DRAFT",
     ) -> dict:
+        # 先检查批号，重复时直接终止，不创建主表或原料明细。
+        try:
+            batch_no = BatchValidationService.ensure_batch_no_unique(batch_no)
+        except BatchNoDuplicateError as exc:
+            raise ProcessOrderError(str(exc))
+
         q, normalized = ProcessOrderService._validate_and_normalize(
             factory_id, performance_id, followup_employee_id, created_by,
             batch_no, product_name, planned_quantity, materials,
@@ -275,6 +285,11 @@ class ProcessOrderService:
         # 状态限制（可选）
         if not allow_status_edit and order.status not in ("DRAFT", "ORDERED"):
             raise ProcessOrderError(f"当前状态 {order.status} 不允许编辑")
+
+        try:
+            batch_no = BatchValidationService.ensure_batch_no_unique(batch_no, exclude_order_id=order.id)
+        except BatchNoDuplicateError as exc:
+            raise ProcessOrderError(str(exc))
 
         q, normalized = ProcessOrderService._validate_and_normalize(
             factory_id, performance_id, followup_employee_id,

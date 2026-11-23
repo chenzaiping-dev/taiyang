@@ -23,6 +23,10 @@ from app.generated.models.finished_goods_transactions import FinishedGoodsTransa
 from app.generated.models.finished_goods_reservations import FinishedGoodsReservation
 from app.utils.datetime_utils import now_beijing, now_beijing_naive, SUMMARY_EXCLUDED_STATUSES
 from app.utils.decimal_utils import _q3, _q6
+from app.services.batch_validation_service import (
+    BatchValidationService,
+    BatchNoDuplicateError,
+)
 
 def gen_plan_no() -> str:
     ts = now_beijing().strftime("%Y%m%d%H%M%S")
@@ -408,6 +412,13 @@ class ProductionPlanService:
 
                 # 批次号同步（可选）
                 if po.get("batch_no") and po["batch_no"] != (order.batch_no or ""):
+                    # 检查成品批次档案中是否已经存在
+                    try:
+                        batch_no = BatchValidationService.ensure_batch_no_unique(
+                            po["batch_no"], exclude_order_id=order.id
+                        )
+                    except BatchNoDuplicateError as exc:
+                        raise ProductionPlanError(str(exc))
                     order.batch_no = po["batch_no"]
 
                 total_planned += locked_qty
@@ -463,6 +474,12 @@ class ProductionPlanService:
             import random
             po_no = f"PO{ts}{random.randint(0, 9999):04d}"
             batch_no = po.get("batch_no") or f"B{ts}{random.randint(0, 99):02d}"
+
+            # 检查成品批次档案中是否已经存在
+            try:
+                batch_no = BatchValidationService.ensure_batch_no_unique(batch_no)
+            except BatchNoDuplicateError as exc:
+                raise ProductionPlanError(str(exc))
 
             order = ProcessOrder(
                 process_order_no=po_no,
