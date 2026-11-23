@@ -44,7 +44,7 @@ def build_xlsx(rows, columns, sheet_name="数据"):
             elif isinstance(value, date):
                 cell.number_format = "yyyy-mm-dd"
             elif isinstance(value, (int, float)) and not isinstance(value, bool):
-                if any(token in col["key"] for token in ("cost", "price", "amount", "profit")):
+                if any(token in col["key"] for token in ("cost", "price", "amount", "profit", "quantity")):
                     cell.number_format = '#,##0.00;[Red]-#,##0.00'
                 else:
                     cell.number_format = '#,##0.######;[Red]-#,##0.######'

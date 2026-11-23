@@ -50,8 +50,10 @@
       <th>原料</th>
       <th>仓库</th>
       <th style="width:100px;text-align:right;">数量变动</th>
-      <th style="width:90px;text-align:right;">{{ "单价" if can_view_inventory_cost() else "" }}</th>
-      <th style="width:100px;text-align:right;">{{ "成本金额" if can_view_inventory_cost() else "" }}</th>
+      {% if can_view_inventory_cost() %}
+      <th style="width:90px;text-align:right;">单价</th>
+      <th style="width:100px;text-align:right;">成本金额</th>
+      {% endif %}
       <th style="width:200px;">单据号</th>
       <th style="width:90px;">单据类型</th>
       <th>供应商 / 工艺单</th>
@@ -79,8 +81,10 @@
                    color:{{ '#2e7d32' if r.quantity_delta > 0 else '#c62828' }};">
           {{ '+' if r.quantity_delta > 0 }}{{ r.quantity_delta }}
         </td>
-        <td style="text-align:right;">{% if can_view_inventory_cost() %}{{ r.unit_cost if r.unit_cost is not none else '-' }}{% else %}—{% endif %}</td>
-        <td style="text-align:right;">{% if can_view_inventory_cost() %}{{ r.total_cost if r.total_cost is not none else '-' }}{% else %}—{% endif %}</td>
+        {% if can_view_inventory_cost() %}
+        <td style="text-align:right;">{{ r.unit_cost }}</td>
+        <td style="text-align:right;">{{ r.total_cost }}</td>
+        {% endif %}
         <td>
           <a href="{{ url_for('inventory_query.document_detail_page',
                      direction=transaction_directions.get(r.transaction_type, r.transaction_type), document_id=r.document_id) }}">
@@ -115,12 +119,27 @@
       {% endfor %}
     {% else %}
       <tr>
-        <td colspan="13" style="text-align:center;color:#999;padding:24px;">
+        <td colspan="{{ 13 if can_view_inventory_cost() else 11 }}" style="text-align:center;color:#999;padding:24px;">
           没有符合条件的流水记录
         </td>
       </tr>
     {% endif %}
   </tbody>
+  <tfoot>
+    <tr style="background:#fafafa;font-weight:600;">
+      <td colspan="5" style="text-align:right;">本页合计：</td>
+      <td style="text-align:right;color:#2440b3;">{{ rows|sum(attribute='quantity_delta') }}</td>
+      {% if can_view_inventory_cost() %}
+      <td></td>
+      <td style="text-align:right;">{{ rows|sum(attribute='total_cost') }}</td>
+      {% endif %}
+      <td></td>
+      <td></td>
+      <td></td>
+      <td></td>
+      <td></td>
+    </tr>
+  </tfoot>
 </table>
 
 <!-- 分页 -->

@@ -74,7 +74,8 @@ EXPORT_COLUMNS = {
         ("amount","销售金额",14,"sales_performance.money.view"),
         ("cost","成本",14,"sales_performance.cost.view"),
         ("profit","利润",14,"sales_performance.cost.view"),
-        ("attributed_quantity", "归属数量", 14, None), ("attributed_amount", "归属销售额", 16, "sales_performance.money.view"),
+        ("attributed_quantity", "归属数量", 14, None),
+        ("attributed_amount", "归属销售额", 16, "sales_performance.money.view"),
     ],
 }
 

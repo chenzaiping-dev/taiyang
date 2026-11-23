@@ -60,9 +60,9 @@
       <th style="width:120px;">{{ '入库时间' if direction == 'in' else '出库时间' }}</th>
       <th style="width:70px;text-align:right;">明细行数</th>
       <th style="width:110px;text-align:right;">数量变动</th>
-      <th style="width:120px;text-align:right;">
-        {% if can_view_inventory_cost() %}成本金额{% endif %}
-      </th>
+      {% if can_view_inventory_cost() %}
+      <th style="width:120px;text-align:right;">成本金额</th>
+      {% endif %}
       <th style="width:90px;">状态</th>
       <th style="width:40px;">创建人</th>
       <th style="width:110px;">创建时间</th>
@@ -87,7 +87,9 @@
                if r.document_time else "-" }}</td>
         <td style="text-align:right;">{{ r.line_count }}</td>
         <td style="text-align:right;">{{ r.total_qty }}</td>
-        <td style="text-align:right;">{% if can_view_inventory_cost() %}{{ r.total_cost }}{% else %}—{% endif %}</td>
+        {% if can_view_inventory_cost() %}
+        <td style="text-align:right;">{{ r.total_cost }}</td>
+        {% endif %}
         <td>
           <span class="status-badge status-{{ r.status|lower }}">
             {{ status_labels.get(r.status, r.status) }}
@@ -146,7 +148,7 @@
       </tr>
       {% endfor %}
     {% else %}
-      <tr><td colspan="13" style="text-align:center;color:#999;padding:24px;">
+      <tr><td colspan="{{ 13 if can_view_inventory_cost() else 12 }}" style="text-align:center;color:#999;padding:24px;">
         暂无{{ '入库单' if direction == 'in' else '出库单' }}
       </td></tr>
     {% endif %}
@@ -155,9 +157,9 @@
     <tr style="background:#fafafa;font-weight:600;">
       <td colspan="5" style="text-align:right;">本页合计：</td>
       <td style="text-align:right;color:#2440b3;">{{ rows|sum(attribute='total_qty') }}</td>
-      <td style="text-align:right;color:#ef6c00;">
-        {% if can_view_inventory_cost() %}{{ rows|sum(attribute='total_cost') }}{% else %}—{% endif %}
-      </td>
+      {% if can_view_inventory_cost() %}
+      <td style="text-align:right;color:#ef6c00;">{{ rows|sum(attribute='total_cost') }}</td>
+      {% endif %}
       <td></td>
       <td></td>
       <td></td>

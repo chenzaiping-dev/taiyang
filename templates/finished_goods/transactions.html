@@ -111,8 +111,21 @@
       <tr><td colspan="{{ 15 if can_view_cost else 13 }}" style="text-align:center;color:#999;padding:24px;">暂无记录</td></tr>
     {% endif %}
   </tbody>
+  <tfoot>
+    <tr style="background:#fafafa;font-weight:600;">
+      <td colspan="7" style="text-align:right;">本页合计：</td>
+      <td style="text-align:right;color:#2440b3;">{{ rows|sum(attribute='quantity_delta') }}</td>
+      {% if can_view_cost %}
+      <td></td>
+      <td style="text-align:right;">{{ rows|sum(attribute='total_cost') }}</td>
+      {% endif %}
+      <td></td>
+      <td></td>
+      <td></td>
+      <td></td>
+    </tr>
+  </tfoot>
 </table>
-
 <div style="margin-top:16px;display:flex;gap:8px;align-items:center;">
   <span>共 {{ total }} 条，第 {{ page }}/{{ total_pages }} 页</span>
   {% if page > 1 %}<a class="btn" href="{{ url_for('finished_goods.transactions_page',

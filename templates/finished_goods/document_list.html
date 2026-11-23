@@ -54,7 +54,8 @@
      href="{{ url_for('finished_goods.document_list_page', direction=direction) }}">
     重置
   </a>
-  {% if (direction == 'in' and has_permission('finished_goods.inbound.create')) or (direction == 'out' and has_permission('finished_goods.outbound.create')) %}
+  {% if (direction == 'in' and has_permission('finished_goods.inbound.create') and has_permission('finished_goods.cost.edit'))
+        or (direction == 'out' and has_permission('finished_goods.outbound.create')) %}
   <a class="btn btn-primary" style="float:right;" href="{{ new_doc_url }}">
     + 新建{{ '入库单' if direction == 'in' else '出库单' }}
   </a>
@@ -160,7 +161,9 @@
     <tr style="background:#fafafa;font-weight:600;">
       <td colspan="5" style="text-align:right;">本页合计：</td>
       <td style="text-align:right;color:#2440b3;">{{ rows|sum(attribute='total_qty') }}</td>
-      {% if can_view_cost %}<td style="text-align:right;">{{ rows|sum(attribute='total_cost') }}</td>{% endif %}
+      {% if can_view_cost %}
+      <td style="text-align:right;">{{ rows|sum(attribute='total_cost') }}</td>
+      {% endif %}
       <td></td>
       <td></td>
       <td></td>
