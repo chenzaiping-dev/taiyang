@@ -213,6 +213,7 @@ class ShipmentPlanService:
                 SalesPerformance.performance_no,
                 SalesPerformance.company_name,
                 SalesPerformance.product_name.label("product_name"),
+                SalesPerformance.product_specification,
                 ShipmentPlan.destination,
                 ShipmentPlan.planned_ship_time,
                 ShipmentPlan.status,

@@ -43,7 +43,8 @@
       <th>发货计划单号</th>
       <th style="width:110px;">业绩单号</th>
       <th>公司名称</th>
-      <th>关联产品名称</th>
+      <th>产品名称</th>
+      <th>规格</th>
       <th style="width:120px;">计划发货时间</th>
       <th style="width:100px;text-align:right;">计划发货数量</th>
       <th style="width:100px;text-align:right;">已发货数量</th>
@@ -72,6 +73,7 @@
 
         <td>{{ r.company_name or "-" }}</td>
         <td>{{ r.product_name or "-" }}</td>
+        <td>{{ r.product_specification or "-" }}</td>
         <td>
           {{ r.planned_ship_time.strftime("%Y-%m-%d %H:%M")
              if r.planned_ship_time else "-" }}
@@ -145,7 +147,7 @@
       </tr>
       {% endfor %}
     {% else %}
-      <tr><td colspan="12" style="text-align:center;color:#999;padding:24px;">
+      <tr><td colspan="13" style="text-align:center;color:#999;padding:24px;">
         暂无发货计划
       </td></tr>
     {% endif %}
