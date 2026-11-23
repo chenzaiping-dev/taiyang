@@ -233,6 +233,8 @@ class SalesPerformanceService:
         perf = db.session.get(SalesPerformance, perf_id)
         if not perf:
             raise SalesPerformanceError("业绩单不存在")
+        if perf.return_of_performance_id is not None:
+            raise SalesPerformanceError("退货单请使用退货单编辑流程")
 
         n = SalesPerformanceService._normalize_and_validate(
             data, is_create=False
@@ -252,16 +254,232 @@ class SalesPerformanceService:
             raise SalesPerformanceError(f"更新失败: {e}")
         return perf
 
+    # ---------- 退货单 ----------
+    RETURNABLE_ORIGINAL_STATUSES = {"CONFIRMED", "PRODUCED", "SHIPPED", "COMPLETED"}
+
+    @staticmethod
+    def _return_totals(original_id, lock_original=False):
+        """只统计已提交退货单；草稿和取消单不占用退货额度。"""
+        original = db.session.get(SalesPerformance, original_id)
+        if not original:
+            raise SalesPerformanceError("原销售业绩单不存在")
+        rows = db.session.query(
+            func.coalesce(func.sum(SalesPerformance.quantity), 0),
+            func.coalesce(func.sum(SalesPerformance.amount), 0),
+            func.coalesce(func.sum(SalesPerformance.cost), 0),
+        ).filter(
+            SalesPerformance.return_of_performance_id == original_id,
+            SalesPerformance.status == "CONFIRMED",
+        ).one()
+        qty_used, amount_used, cost_used = (Decimal(str(v or 0)) for v in rows)
+        return {
+            "original": original,
+            "returned_quantity": qty_used,
+            "returned_amount": amount_used,
+            "returned_cost": cost_used,
+            "available_quantity": Decimal(str(original.quantity or 0)) + qty_used,
+            "available_amount": Decimal(str(original.amount or 0)) + amount_used,
+            "available_cost": Decimal(str(original.cost or 0)) + cost_used,
+        }
+
+    @staticmethod
+    def get_return_context(original_id):
+        """获取原销售单及退货额度、退货记录。"""
+        summary = SalesPerformanceService._return_totals(original_id)
+        returns = SalesPerformance.query.filter_by(
+            return_of_performance_id=original_id
+        ).order_by(SalesPerformance.id.desc()).all()
+        return {**summary, "returns": returns}
+
+    @staticmethod
+    def _validate_return_values(original, quantity, unit_price, amount, cost,
+                                exclude_return_id=None):
+        try:
+            qty_abs = abs(_q6(quantity))
+            price = _q6(unit_price)
+            amount_value = _q6(amount)
+            cost_value = _q6(cost)
+        except Exception:
+            raise SalesPerformanceError("退货数量、单价、金额或成本格式错误")
+
+        if qty_abs <= 0:
+            raise SalesPerformanceError("退货数量必须大于 0")
+        if price < 0:
+            raise SalesPerformanceError("退货单价不能为负数")
+        if amount_value > 0:
+            raise SalesPerformanceError("退货金额必须为负数或 0")
+        if cost_value > 0:
+            raise SalesPerformanceError("退货成本必须为负数或 0")
+
+        ctx = SalesPerformanceService._return_totals(original.id)
+        if exclude_return_id:
+            old = db.session.get(SalesPerformance, exclude_return_id)
+            if old and old.status == "CONFIRMED":
+                ctx["available_quantity"] -= Decimal(str(old.quantity or 0))
+                ctx["available_amount"] -= Decimal(str(old.amount or 0))
+                ctx["available_cost"] -= Decimal(str(old.cost or 0))
+
+        if qty_abs > ctx["available_quantity"]:
+            raise SalesPerformanceError(
+                f"退货数量超过剩余可退数量 {ctx['available_quantity']}"
+            )
+        if abs(amount_value) > max(ctx["available_amount"], Decimal("0")):
+            raise SalesPerformanceError(
+                f"退款金额超过剩余可冲减金额 {ctx['available_amount']}"
+            )
+        if abs(cost_value) > max(ctx["available_cost"], Decimal("0")):
+            raise SalesPerformanceError(
+                f"退货成本超过剩余可冲减成本 {ctx['available_cost']}"
+            )
+        return -qty_abs, price, amount_value, cost_value
+
+    @staticmethod
+    def create_return(original_id, data, created_by=None,
+                      can_edit_money=True, can_edit_cost=True):
+        """创建退货草稿。数量以正数录入，落库统一转换为负数。"""
+        original = SalesPerformance.query.filter_by(id=original_id).with_for_update().first()
+        if not original:
+            raise SalesPerformanceError("原销售业绩单不存在")
+        if original.return_of_performance_id is not None:
+            raise SalesPerformanceError("退货单不能再次创建退货单")
+        if original.status not in SalesPerformanceService.RETURNABLE_ORIGINAL_STATUSES:
+            raise SalesPerformanceError("原销售单必须已确认或已进入生产/发货/完成状态才能退货")
+
+        try:
+            qty = abs(_q6(data.get("quantity") or 0))
+            unit_price_raw = data.get("unit_price")
+            unit_price = _q6(
+                unit_price_raw if can_edit_money and unit_price_raw not in (None, "")
+                else original.unit_price
+            )
+            quantity = -qty
+            default_amount = (
+                Decimal(str(original.amount or 0)) * quantity /
+                Decimal(str(original.quantity or 1))
+            ) if Decimal(str(original.quantity or 0)) else Decimal("0")
+            amount_raw = data.get("amount")
+            amount = _q6((amount_raw if amount_raw not in (None, "") else default_amount)
+                         if can_edit_money else default_amount)
+            if not can_edit_money:
+                amount = default_amount
+            default_cost = (
+                Decimal(str(original.cost or 0)) * quantity /
+                Decimal(str(original.quantity or 1))
+            ) if Decimal(str(original.quantity or 0)) else Decimal("0")
+            cost_raw = data.get("cost")
+            cost = _q6((cost_raw if cost_raw not in (None, "") else default_cost)
+                       if can_edit_cost else default_cost)
+            if not can_edit_cost:
+                cost = _q6(default_cost)
+        except Exception:
+            raise SalesPerformanceError("退货数量或金额格式错误")
+
+        quantity, unit_price, amount, cost = SalesPerformanceService._validate_return_values(
+            original, quantity, unit_price, amount, cost
+        )
+        perf = SalesPerformance(
+            performance_no=SalesPerformanceService.generate_performance_no("TH"),
+            sales_order_no=original.sales_order_no,
+            performance_date=data.get("performance_date") or date.today(),
+            company_name=original.company_name,
+            product_name=original.product_name,
+            product_specification=original.product_specification,
+            unit=original.unit,
+            unit_price=unit_price,
+            quantity=quantity,
+            amount=amount,
+            payment_status=original.payment_status,
+            cost=cost,
+            profit=amount - cost,
+            main_salesperson_id=original.main_salesperson_id,
+            is_changzhou_factory=original.is_changzhou_factory,
+            is_joint_sales=original.is_joint_sales,
+            co_salesperson_id=original.co_salesperson_id,
+            expected_delivery_date=None,
+            status="DRAFT",
+            remark=(data.get("remark") or "").strip() or None,
+            return_of_performance_id=original.id,
+            created_by=created_by,
+            updated_by=created_by,
+            created_at=now_beijing_naive(),
+            updated_at=now_beijing_naive(),
+        )
+        db.session.add(perf)
+        try:
+            db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            raise SalesPerformanceError(f"创建退货单失败：{exc}")
+        return perf
+
+    @staticmethod
+    def update_return(return_id, data, updated_by=None,
+                      can_edit_money=True, can_edit_cost=True):
+        ret = SalesPerformance.query.filter_by(id=return_id).with_for_update().first()
+        if not ret or ret.return_of_performance_id is None:
+            raise SalesPerformanceError("退货单不存在")
+        if ret.status != "DRAFT":
+            raise SalesPerformanceError("只有草稿退货单可以编辑")
+        original = SalesPerformance.query.filter_by(
+            id=ret.return_of_performance_id
+        ).with_for_update().first()
+        if not original:
+            raise SalesPerformanceError("原销售单不存在")
+        if original.status not in SalesPerformanceService.RETURNABLE_ORIGINAL_STATUSES:
+            raise SalesPerformanceError("原销售单状态已不允许编辑或提交退货")
+
+        try:
+            qty = -abs(_q6(data.get("quantity") or 0))
+            unit_price_raw = data.get("unit_price")
+            unit_price = _q6(
+                unit_price_raw if can_edit_money and unit_price_raw not in (None, "")
+                else original.unit_price
+            )
+            default_amount = (
+                Decimal(str(original.amount or 0)) * qty /
+                Decimal(str(original.quantity or 1))
+            ) if Decimal(str(original.quantity or 0)) else Decimal("0")
+            default_cost = (
+                Decimal(str(original.cost or 0)) * qty /
+                Decimal(str(original.quantity or 1))
+            ) if Decimal(str(original.quantity or 0)) else Decimal("0")
+            amount = _q6(data.get("amount") if can_edit_money and data.get("amount") not in (None, "")
+                         else default_amount)
+            cost = _q6(data.get("cost") if can_edit_cost and data.get("cost") not in (None, "")
+                       else default_cost)
+        except Exception:
+            raise SalesPerformanceError("退货数量或金额格式错误")
+        qty, unit_price, amount, cost = SalesPerformanceService._validate_return_values(
+            original, qty, unit_price, amount, cost
+        )
+        ret.payment_status = original.payment_status
+        ret.performance_date = data.get("performance_date") or ret.performance_date
+        ret.quantity = qty
+        ret.unit_price = unit_price
+        ret.amount = amount
+        ret.cost = cost
+        ret.profit = amount - cost
+        ret.remark = (data.get("remark") or "").strip() or None
+        ret.updated_by = updated_by
+        ret.updated_at = now_beijing_naive()
+        try:
+            db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            raise SalesPerformanceError(f"更新退货单失败：{exc}")
+        return ret
+
     # ---------- 列表 ----------
     @staticmethod
-    def list_performances(performance_no=None, company_name=None, product_name = None,
-                          status=None, payment_status=None,
-                          date_from=None, date_to=None, salesperson_id=None,
+    def list_performances(performance_no=None, company_name=None, product_name=None,
+                          status=None, payment_status=None, date_from=None,
+                          date_to=None, salesperson_id=None, doc_type=None,
                           exclude_drafts=False, page=1, page_size=20,
                           include_summary=False):
         creator = db.aliased(Employee)
         sales = db.aliased(Employee)
         co_sales = db.aliased(Employee)
+        original_perf = db.aliased(SalesPerformance)
 
         # ⭐ 发货计划是否存在：相关子查询（避免主查询出现多行）
         has_shipment_sq = (
@@ -273,6 +491,10 @@ class SalesPerformanceService:
             select(
                 SalesPerformance.id,
                 SalesPerformance.performance_no,
+                SalesPerformance.return_of_performance_id,
+                case((SalesPerformance.return_of_performance_id.isnot(None), "RETURN"),
+                     else_="SALE").label("document_type"),
+                original_perf.performance_no.label("original_performance_no"),
                 SalesPerformance.company_name,
                 SalesPerformance.product_name,
                 SalesPerformance.product_specification,
@@ -313,6 +535,9 @@ class SalesPerformanceService:
                 isouter=True)
             .join(co_sales, co_sales.id == SalesPerformance.co_salesperson_id,
                 isouter=True)
+            .join(original_perf,
+                original_perf.id == SalesPerformance.return_of_performance_id,
+                isouter=True)
             .join(ProductionPlan,
                 ProductionPlan.performance_id == SalesPerformance.id,
                 isouter=True)
@@ -324,6 +549,11 @@ class SalesPerformanceService:
             SalesPerformance,
             permission_code="sales_performance.view",
         )
+
+        if doc_type == "RETURN":
+            base = base.where(SalesPerformance.return_of_performance_id.isnot(None))
+        elif doc_type == "SALE":
+            base = base.where(SalesPerformance.return_of_performance_id.is_(None))
 
         if performance_no:
             base = base.where(SalesPerformance.performance_no.like(f"%{performance_no}%"))
@@ -388,9 +618,24 @@ class SalesPerformanceService:
         if not rule:
             raise SalesPerformanceError(f"不支持的操作: {action}")
 
-        perf = db.session.get(SalesPerformance, perf_id)
+        perf = db.session.query(SalesPerformance).filter_by(id=perf_id).with_for_update().first()
         if not perf:
             raise SalesPerformanceError("业绩单不存在")
+
+        if perf.return_of_performance_id is not None:
+            if action not in ("confirm", "cancel"):
+                raise SalesPerformanceError("退货单只能提交或取消，不能生产、发货或完成")
+            if action == "confirm":
+                original = SalesPerformance.query.filter_by(
+                    id=perf.return_of_performance_id
+                ).with_for_update().first()
+                if not original or original.status not in SalesPerformanceService.RETURNABLE_ORIGINAL_STATUSES:
+                    raise SalesPerformanceError("原销售单状态不允许提交退货")
+                SalesPerformanceService._validate_return_values(
+                    original, perf.quantity, perf.unit_price, perf.amount, perf.cost
+                )
+        elif action == "confirm" and perf.return_of_performance_id is None:
+            pass
 
         if perf.status not in rule["from"]:
             cur = STATUS_LABELS.get(perf.status, perf.status)
@@ -413,8 +658,18 @@ class SalesPerformanceService:
                     f"生产计划【{plan.plan_no}】状态为【{plan_label}】，"
                     f"必须为【已完成】才能发货"
                 )
+        # 原销售单存在已提交退货单时，必须先取消退货单，避免原单取消后负数退货继续冲减统计。
+        if action == "cancel" and perf.return_of_performance_id is None:
+            active_return = SalesPerformance.query.filter_by(
+                return_of_performance_id=perf.id, status="CONFIRMED"
+            ).first()
+            if active_return:
+                raise SalesPerformanceError(
+                    f"存在已提交退货单 {active_return.performance_no}，请先取消退货单再取消原销售单"
+                )
+
         # 取消提示，不强制拦截，因为取消业绩单本身可能先于计划清理
-        if action == "cancel":
+        if action == "cancel" and perf.return_of_performance_id is None:
             active_plan = ProductionPlan.query.filter(
                 ProductionPlan.performance_id == perf.id,
                 ProductionPlan.status.in_(["CONFIRMED", "IN_PROGRESS", "COMPLETED"]),
@@ -459,6 +714,8 @@ class SalesPerformanceService:
         perf = db.session.get(SalesPerformance, perf_id)
         if not perf:
             raise SalesPerformanceError("业绩单不存在")
+        if perf.return_of_performance_id is not None:
+            raise SalesPerformanceError("退货单取消后不能重新打开，请重新创建退货单")
         if perf.status != "CANCELLED":
             raise SalesPerformanceError(
                 f"当前状态【{STATUS_LABELS.get(perf.status, perf.status)}】"

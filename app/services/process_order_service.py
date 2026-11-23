@@ -174,6 +174,14 @@ class ProcessOrderService:
         product_specification=None, unit="KG", planned_cost_price=0, planned_total_cost=0,
         remark=None, process_order_no=None, status="DRAFT",
     ) -> dict:
+        # 退货业绩单不能作为工艺单的来源。
+        if performance_id:
+            linked_performance = db.session.get(SalesPerformance, int(performance_id))
+            if not linked_performance:
+                raise ProcessOrderError("关联业绩单不存在")
+            if linked_performance.return_of_performance_id is not None:
+                raise ProcessOrderError("退货业绩单不能创建工艺单")
+
         # 先检查批号，重复时直接终止，不创建主表或原料明细。
         try:
             batch_no = BatchValidationService.ensure_batch_no_unique(batch_no)
@@ -281,6 +289,12 @@ class ProcessOrderService:
         order = db.session.get(ProcessOrder, order_id)
         if not order:
             raise ProcessOrderError("工艺单不存在")
+        if performance_id:
+            linked_performance = db.session.get(SalesPerformance, int(performance_id))
+            if not linked_performance:
+                raise ProcessOrderError("关联业绩单不存在")
+            if linked_performance.return_of_performance_id is not None:
+                raise ProcessOrderError("退货业绩单不能关联工艺单")
 
         # 状态限制（可选）
         if not allow_status_edit and order.status not in ("DRAFT", "ORDERED"):

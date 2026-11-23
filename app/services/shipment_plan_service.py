@@ -449,6 +449,8 @@ class ShipmentPlanService:
         perf = db.session.get(SalesPerformance, performance_id)
         if not perf:
             raise ShipmentPlanError("业绩单不存在")
+        if perf.return_of_performance_id is not None:
+            raise ShipmentPlanError("退货业绩单不能创建发货计划")
         if not destination:
             raise ShipmentPlanError("目的地必填")
         if not lines:
@@ -502,8 +504,8 @@ class ShipmentPlanService:
             raise ShipmentPlanError("至少需要一条发货明细")
 
         perf = db.session.get(SalesPerformance, plan.performance_id)
-        if not perf:
-            raise ShipmentPlanError("业绩单丢失")
+        if not perf or perf.return_of_performance_id is not None:
+            raise ShipmentPlanError("退货业绩单不能创建或编辑发货计划")
 
         plan.destination = destination
         plan.transport_method = transport_method

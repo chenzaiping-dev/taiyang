@@ -46,7 +46,7 @@
     <div><div style="font-size:12px;color:#666;">退货入</div><strong>{{ summary.in_return|format_qty }}</strong></div>
     <div><div style="font-size:12px;color:#666;">盘盈入</div><strong>{{ summary.in_stocktake|format_qty }}</strong></div>
     <div><div style="font-size:12px;color:#666;">调拨入</div><strong>{{ summary.in_transfer|format_qty }}</strong></div>
-    <div><div style="font-size:12px;color:#666;">撤销入库-冲减出</div><strong>{{ summary.in_reverse }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">撤销入库-冲减出</div><strong>{{ summary.in_reverse|format_qty }}</strong></div>
     <div><div style="font-size:12px;color:#666;">销售出</div><strong>{{ summary.out_outbound|format_qty }}</strong></div>
     <div><div style="font-size:12px;color:#666;">退货出</div><strong>{{ summary.out_return|format_qty }}</strong></div>
     <div><div style="font-size:12px;color:#666;">盘亏出</div><strong>{{ summary.out_stocktake|format_qty }}</strong></div>

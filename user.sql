@@ -272,6 +272,8 @@ CREATE TABLE sales_performance (
 
     remark VARCHAR(1000) NULL COMMENT '备注',
 
+    return_of_performance_id BIGINT UNSIGNED NULL COMMENT '原销售业绩单ID，非NULL表示退货单',
+
     created_by BIGINT UNSIGNED NULL COMMENT '创建人ID',
     updated_by BIGINT UNSIGNED NULL COMMENT '修改人ID',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -284,11 +286,18 @@ CREATE TABLE sales_performance (
     KEY idx_status (status),
     KEY idx_delivery_date (expected_delivery_date),
     KEY idx_sales_order_no (sales_order_no),
+    KEY idx_return_of_performance_id (return_of_performance_id),
 
-    CHECK (unit_price >= 0),
-    CHECK (quantity > 0),
-    CHECK (amount >= 0),
-    CHECK (cost >= 0),
+    CONSTRAINT fk_sales_performance_return_of
+        FOREIGN KEY (return_of_performance_id) REFERENCES sales_performance(id),
+
+    CONSTRAINT chk_sales_performance_signs CHECK (
+        (return_of_performance_id IS NULL
+            AND unit_price >= 0 AND quantity > 0 AND amount >= 0 AND cost >= 0)
+        OR
+        (return_of_performance_id IS NOT NULL
+            AND unit_price >= 0 AND quantity < 0 AND amount <= 0 AND cost <= 0)
+    ),
     CONSTRAINT fk_sales_perf_created_by
         FOREIGN KEY (created_by) REFERENCES employees(id),
     CONSTRAINT fk_sales_perf_updated_by

@@ -196,6 +196,12 @@ class DraftDeleteService:
             raise DraftDeleteError("业绩单不存在")
         if perf.status != "DRAFT":
             raise DraftDeleteError("只有草稿状态的业绩单可以删除")
+        if perf.return_of_performance_id is None:
+            linked_returns = SalesPerformance.query.filter_by(
+                return_of_performance_id=perf.id
+            ).first()
+            if linked_returns:
+                raise DraftDeleteError("该销售单已有退货记录，不能直接删除原销售单")
 
         plans = ProductionPlan.query.filter_by(performance_id=perf.id).all()
         shipments = ShipmentPlan.query.filter_by(performance_id=perf.id).all()

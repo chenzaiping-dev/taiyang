@@ -84,6 +84,9 @@ def new_page():
     perf = db.session.get(SalesPerformance, performance_id)
     if not perf:
         abort(404)
+    if perf.return_of_performance_id is not None:
+        flash("退货业绩单不能创建发货计划", "error")
+        return redirect(url_for("sales_performance.detail_page", perf_id=perf.id))
 
     reservations = ShipmentPlanService.get_available_reservations(performance_id)
 

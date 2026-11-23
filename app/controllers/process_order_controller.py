@@ -49,9 +49,9 @@ def _load_options(exclude_order_id=None):
     )
     return {
         "factories": Factory.query.filter_by(status=1).order_by(Factory.id).all(),
-        "performances": SalesPerformance.query.order_by(
-            SalesPerformance.id.desc()
-        ).limit(200).all(),
+        "performances": SalesPerformance.query.filter(
+            SalesPerformance.return_of_performance_id.is_(None)
+        ).order_by(SalesPerformance.id.desc()).limit(200).all(),
         "employees": Employee.query.filter_by(status=1).order_by(Employee.id).all(),
         "materials": Material.query.filter_by(status=1).order_by(
             Material.material_code

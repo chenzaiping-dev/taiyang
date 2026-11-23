@@ -61,6 +61,8 @@ class ProductionPlanService:
         perf = db.session.get(SalesPerformance, performance_id)
         if not perf:
             raise ProductionPlanError("业绩单不存在")
+        if perf.return_of_performance_id is not None:
+            raise ProductionPlanError("退货业绩单不能创建生产计划")
 
         if ProductionPlan.query.filter_by(performance_id=performance_id).first():
             raise ProductionPlanError("该业绩单已存在生产计划，请使用编辑")
@@ -142,6 +144,8 @@ class ProductionPlanService:
             )
 
         perf = db.session.get(SalesPerformance, plan.performance_id)
+        if not perf or perf.return_of_performance_id is not None:
+            raise ProductionPlanError("退货业绩单不能创建或编辑生产计划")
         total = _q6(total_quantity)
         process = _q6(process_quantity)
         if total <= 0:

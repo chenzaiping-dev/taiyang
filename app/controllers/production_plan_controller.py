@@ -159,6 +159,9 @@ def new_page():
     perf = db.session.get(SalesPerformance, performance_id)
     if not perf:
         abort(404)
+    if perf.return_of_performance_id is not None:
+        flash("退货业绩单不能创建生产计划", "error")
+        return redirect(url_for("sales_performance.detail_page", perf_id=perf.id))
 
     # 若已存在计划 → 跳到编辑页
     existing = ProductionPlan.query.filter_by(performance_id=performance_id).first()

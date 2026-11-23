@@ -66,6 +66,8 @@ EXPORT_COLUMNS = {
     ],
     "sales_performances": [
         ("id","记录ID",12,None), ("performance_no","业绩单号",22,None),
+        ("document_type","单据类型",12,None),
+        ("original_performance_no","原销售单号",22,None),
         ("company_name","客户公司",22,None), ("product_name","产品名称",20,None),
         ("product_specification","产品规格",20,None), ("unit","单位",10,None),
         ("quantity","数量",14,None), ("payment_status","收款状态",14,None),

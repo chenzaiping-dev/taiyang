@@ -31,6 +31,7 @@ LABELS = {
     "document_status": {
         "DRAFT": "草稿", "CONFIRMED": "已确认", "CANCELLED": "已取消",
     },
+    "document_type": {"SALE": "普通销售单", "RETURN": "退货单"},
     "status": {
         "DRAFT": "草稿", "CONFIRMED": "已确认",
         "PARTIALLY_SHIPPED": "部分发货", "SHIPPED": "已发货",
@@ -141,6 +142,7 @@ def sales_performances(params):
         date_from=util_parse_date(params.get("date_from")),
         date_to=util_parse_date_end(params.get("date_to")),
         salesperson_id=_positive_int(params.get("salesperson_id")),
+        doc_type=(params.get("doc_type") or "").strip() or None,
         # 跟单员可能同时拥有其他角色；只要包含 order_followup 角色，
         # 就不展示业务员尚未提交的草稿业绩单。该规则同时作用于列表和 Excel。
         exclude_drafts=has_role("order_followup"),

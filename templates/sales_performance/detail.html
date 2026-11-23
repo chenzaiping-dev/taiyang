@@ -1,10 +1,19 @@
 {% extends "inventory/base.html" %}
-{% block title %}业绩单详情{% endblock %}
+{% block title %}{{ '退货单详情' if perf.return_of_performance_id else '业绩单详情' }}{% endblock %}
 {% block content %}
 <h2>
-  业绩单详情
+  {% if perf.return_of_performance_id %}退货单详情{% else %}业绩单详情{% endif %}
   <span style="color:#888;font-size:14px;">#{{ perf.performance_no }}</span>
-    {% if perf.status == 'CANCELLED' and has_permission('sales_performance.reopen') %}
+    {% if perf.return_of_performance_id and perf.status == 'DRAFT' and has_permission('sales_performance.status.change') %}
+      <form method="post" style="display:inline;float:right;margin-right:8px;" action="{{ url_for('sales_performance.change_status', perf_id=perf.id, action='confirm') }}" onsubmit="return confirm('确认提交退货单？提交后将冲减销售收入、成本和利润。');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-primary">提交退货</button>
+      </form>
+    {% elif perf.return_of_performance_id and perf.status == 'CONFIRMED' and has_permission('sales_performance.status.change') %}
+      <form method="post" style="display:inline;float:right;margin-right:8px;" action="{{ url_for('sales_performance.change_status', perf_id=perf.id, action='cancel') }}" onsubmit="return confirm('确认取消该退货单？将释放退货额度。');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-danger">取消退货</button>
+      </form>
+    {% endif %}
+    {% if perf.status == 'CANCELLED' and not perf.return_of_performance_id and has_permission('sales_performance.reopen') %}
     <form method="post" style="float:right;margin-right:8px;"
           action="{{ url_for('sales_performance.reopen', perf_id=perf.id) }}"
           onsubmit="return confirm('确认重新打开为草稿？将复用已有生产/发货计划。');">
@@ -13,7 +22,7 @@
     </form>
   {% elif perf.status == 'DRAFT' and has_permission('sales_performance.edit') %}
     <a class="btn" style="float:right;margin-right:8px;"
-       href="{{ url_for('sales_performance.edit_page', perf_id=perf.id) }}">编辑</a>
+       href="{% if perf.return_of_performance_id %}{{ url_for('sales_performance.edit_return_page', return_id=perf.id) }}{% else %}{{ url_for('sales_performance.edit_page', perf_id=perf.id) }}{% endif %}">编辑</a>
   {% endif %}
   {% if perf.status == 'DRAFT' and has_permission('sales_performance.delete') %}
     <form method="post" style="display:inline;float:right;margin-right:8px;"
@@ -54,32 +63,73 @@
   </table>
 </fieldset>
 
-{% if can_view_sales_performance_money() %}
+{% if perf.return_of_performance_id and original_performance %}
+<fieldset>
+  <legend>关联原销售单</legend>
+  <a href="{{ url_for('sales_performance.detail_page', perf_id=original_performance.id) }}">{{ original_performance.performance_no }}</a>
+  <span style="margin-left:12px;color:#666;">原销售单金额：{% if can_view_sales_performance_money() %}{{ original_performance.amount }}{% else %}—{% endif %}</span>
+</fieldset>
+{% elif return_context %}
+<fieldset>
+  <legend>退货记录</legend>
+  <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px;">
+    <span>累计退货数量：<strong>{{ (return_context.returned_quantity * -1)|format_qty }}</strong></span>
+    {% if can_view_money %}<span>累计冲减金额：<strong>{{ return_context.returned_amount|format_cost }}</strong></span>{% endif %}
+    <span>剩余可退数量：<strong>{{ return_context.available_quantity|format_qty }}</strong></span>
+    {% if can_view_money %}<span>剩余可冲减金额：<strong>{{ return_context.available_amount|format_cost }}</strong></span>{% endif %}
+    {% if can_view_cost %}<span>剩余可冲减成本：<strong>{{ return_context.available_cost|format_cost }}</strong></span>{% endif %}
+  </div>
+  {% if return_context.returns %}
+  <table class="table" style="width:100%;">
+    <thead><tr><th>退货单号</th><th>日期</th><th>数量</th>{% if can_view_money %}<th>退款金额</th>{% endif %}{% if can_view_cost %}<th>退货成本</th>{% endif %}<th>状态</th></tr></thead>
+    <tbody>
+    {% for r in return_context.returns %}
+      <tr>
+        <td><a href="{{ url_for('sales_performance.detail_page', perf_id=r.id) }}">{{ r.performance_no }}</a></td>
+        <td>{{ r.performance_date.strftime('%Y-%m-%d') if r.performance_date else '-' }}</td>
+        <td>{{ r.quantity|format_qty }}</td>
+        {% if can_view_money %}<td>{{ r.amount|format_cost }}</td>{% endif %}
+        {% if can_view_cost %}<td>{{ r.cost|format_cost }}</td>{% endif %}
+        <td><span class="status-badge status-{{ r.status|lower }}">{{ status_labels.get(r.status, r.status) }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p style="color:#888;">暂无退货记录</p>{% endif %}
+  {% if has_permission('sales_performance.create') and perf.status in ('CONFIRMED','PRODUCED','SHIPPED','COMPLETED') and return_context.available_quantity > 0 and return_context.available_amount >= 0 %}
+    <a class="btn btn-primary" href="{{ url_for('sales_performance.new_return_page', perf_id=perf.id) }}">新建退货单</a>
+  {% endif %}
+</fieldset>
+{% endif %}
+
+{% if can_view_money or can_view_cost %}
 <fieldset>
   <legend>金额信息</legend>
   <table class="detail-table">
+    {% if can_view_money %}
     <tr>
-      <th>销售单价</th><td>{% if can_view_sales_performance_money() %}{{ perf.unit_price|format_cost }}{% else %}—{% endif %}</td>
-      <th>销售金额</th><td>{% if can_view_sales_performance_money() %}{{ perf.amount|format_cost }}{% else %}—{% endif %}</td>
+      <th>{{ '退货单价' if perf.return_of_performance_id else '销售单价' }}</th><td>{{ perf.unit_price|format_cost }}</td>
+      <th>{{ '退款金额' if perf.return_of_performance_id else '销售金额' }}</th><td>{{ perf.amount|format_cost }}</td>
     </tr>
+    {% endif %}
+    {% if can_view_cost %}
     <tr>
-      <th>成本</th><td>{% if can_view_sales_performance_cost() %}{{ perf.cost|format_cost }}{% else %}—{% endif %}</td>
-      <th>利润</th><td>{% if can_view_sales_performance_cost() %}{{ perf.profit|format_cost }}{% else %}—{% endif %}</td>
+      <th>{{ '退货成本' if perf.return_of_performance_id else '成本' }}</th><td>{{ perf.cost|format_cost }}</td>
+      <th>利润</th><td>{{ perf.profit|format_cost }}</td>
     </tr>
+    {% endif %}
+    {% if can_view_money %}
     <tr>
-      <th>收款状态</th>
+      <th>{{ '原销售收款状态' if perf.return_of_performance_id else '收款状态' }}</th>
       <td>
         <span class="pay-badge pay-{{ perf.payment_status|lower }}">
           {{ payment_labels.get(perf.payment_status, perf.payment_status) }}
         </span>
       </td>
       <th>状态</th>
-      <td>
-        <span class="status-badge status-{{ perf.status|lower }}">
-          {{ status_labels.get(perf.status, perf.status) }}
-        </span>
-      </td>
+      <td><span class="status-badge status-{{ perf.status|lower }}">{{ status_labels.get(perf.status, perf.status) }}</span></td>
     </tr>
+    {% endif %}
   </table>
 </fieldset>
 {% endif %}
@@ -121,6 +171,7 @@
 </fieldset>
 {% endif %}
 
+{% if not perf.return_of_performance_id %}
 <fieldset>
   <legend>关联计划</legend>
   <div style="display:flex;gap:12px;flex-wrap:wrap;">
@@ -140,6 +191,7 @@
     {% endif %}
   </div>
 </fieldset>
+{% endif %}
 
 <div style="margin-top:16px;color:#999;font-size:12px;">
   创建时间：{{ perf.created_at.strftime("%Y-%m-%d %H:%M") if perf.created_at else "-" }}

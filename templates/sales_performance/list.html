@@ -27,6 +27,11 @@
         {% if payment_status == code %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
   </select>
+  <select name="doc_type">
+    <option value="">-- 全部单据类型 --</option>
+    <option value="SALE" {% if doc_type == 'SALE' %}selected{% endif %}>普通销售单</option>
+    <option value="RETURN" {% if doc_type == 'RETURN' %}selected{% endif %}>退货单</option>
+  </select>
   <select name="status">
     <option value="">-- 全部状态 --</option>
     {% for code, label in status_labels.items() %}
@@ -49,11 +54,11 @@
 
 
 <div class="list-summary" style="display:flex;gap:12px;flex-wrap:wrap;margin:14px 0;">
-  {% if can_view_summary_money %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">销售额（全量）</div><strong style="font-size:18px;">{{ (summary.amount or 0)|format_cost }}</strong></div>{% endif %}
-  {% if can_view_summary_cost %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">成本（全量）</div><strong style="font-size:18px;">{{ (summary.cost or 0)|format_cost }}</strong></div>
-  <div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">利润（全量）</div><strong style="font-size:18px;">{{ (summary.profit or 0)|format_cost }}</strong></div>{% endif %}
-  <div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">归属数量（全量）</div><strong style="font-size:18px;">{{ (summary.attributed_quantity or 0)|format_qty }}</strong></div>
-  {% if can_view_summary_money %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">归属销售额（全量）</div><strong style="font-size:18px;">{{ (summary.attributed_amount or 0)|format_cost }}</strong></div>{% endif %}
+  {% if can_view_summary_money %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">净销售额（全量）</div><strong style="font-size:18px;">{{ (summary.amount or 0)|format_cost }}</strong></div>{% endif %}
+  {% if can_view_summary_cost %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">净成本（全量）</div><strong style="font-size:18px;">{{ (summary.cost or 0)|format_cost }}</strong></div>
+  <div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">净利润（全量）</div><strong style="font-size:18px;">{{ (summary.profit or 0)|format_cost }}</strong></div>{% endif %}
+  <div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">净归属数量（全量）</div><strong style="font-size:18px;">{{ (summary.attributed_quantity or 0)|format_qty }}</strong></div>
+  {% if can_view_summary_money %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">归属净销售额（全量）</div><strong style="font-size:18px;">{{ (summary.attributed_amount or 0)|format_cost }}</strong></div>{% endif %}
   <span style="align-self:center;font-size:12px;color:#888;">当前筛选条件下全部业绩单，排除草稿和已取消业绩单；不受分页影响</span>
 </div>
 
@@ -62,6 +67,8 @@
     <tr style="background:#f5f5f5;">
       <th style="width:20px;">ID</th>
       <th>业绩单号</th>
+      <th>类型</th>
+      <th>原销售单</th>
       <th style="width:100px;text-align:right;">公司名称</th>
       <th style="width:130px;text-align:right;">产品名称</th>
       <th>规格</th>
@@ -78,7 +85,7 @@
       <th style="width:60px;text-align:right;">副销售</th>
       <th style="min-width:30px;text-align:right;">常州工厂</th>
       <th style="min-width:30px;text-align:right;">期待发货</th>
-      <th style="min-width:30px;">收款状态</th>
+      <th style="min-width:30px;">收款状态/原单状态</th>
       <th style="width:100px;">创建于</th>
       {% if not is_sales_role %}
       <th style="width:100px;">创建计划</th>
@@ -97,6 +104,8 @@
             {{ r.performance_no }}
           </a>
         </td>
+        <td>{% if r.return_of_performance_id %}<span class="status-badge status-cancelled">退货单</span>{% else %}<span class="status-badge status-completed">销售单</span>{% endif %}</td>
+        <td>{% if r.original_performance_no %}<a href="{{ url_for('sales_performance.detail_page', perf_id=r.return_of_performance_id) }}">{{ r.original_performance_no }}</a>{% else %}-{% endif %}</td>
         <td>{{ r.company_name }}</td>
         <td>{{ r.product_name }}</td>
         <td>{{ r.product_specification or "-" }}</td>
@@ -116,9 +125,9 @@
         <td>{{ payment_labels.get(r.payment_status, r.payment_status) }}</td>
         <td>{{ r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "-" }}</td>
         {% if not is_sales_role %}
-        <!-- ⭐ 生产计划：有则跳详情，无则跳新建 -->
+        <!-- 退货单不参与生产和发货流程 -->
         <td style="text-align:center;white-space:nowrap;">
-          {% if r.production_plan_id and has_permission('production_plan.view') %}
+          {% if r.return_of_performance_id %}-{% elif r.production_plan_id and has_permission('production_plan.view') %}
             <a class="btn btn-sm"
               href="{{ url_for('production_plan.detail_page', plan_id=r.production_plan_id) }}"
               title="查看已有生产计划">生产</a>
@@ -149,7 +158,21 @@
           {% set is_done = r.status in ('COMPLETED', 'CANCELLED') %}
 
           {% if has_permission('sales_performance.status.change') %}
-          {# ====== 主按钮：按状态确定 ====== #}
+          {# 退货单仅允许提交/取消，不参与生产、发货、完成 #}
+          {% if r.return_of_performance_id %}
+            {% if r.status == 'DRAFT' %}
+              <form method="post" style="display:inline;" action="{{ url_for('sales_performance.change_status', perf_id=r.id, action='confirm') }}" onsubmit="return confirm('确认提交退货单？提交后将冲减销售收入、成本和利润。');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm btn-primary">提交退货</button>
+              </form>
+            {% elif r.status == 'CONFIRMED' %}
+              <form method="post" style="display:inline;" action="{{ url_for('sales_performance.change_status', perf_id=r.id, action='cancel') }}" onsubmit="return confirm('确认取消该退货单？将释放退货额度。');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm btn-danger">取消退货</button>
+              </form>
+            {% else %}<span style="color:#bbb;">——</span>{% endif %}
+          {% else %}
+          {# ====== 普通销售单主按钮：按状态确定 ====== #}
           {% if r.status == 'DRAFT' %}
             <form method="post" style="display:inline;"
                   action="{{ url_for('sales_performance.change_status', perf_id=r.id, action='confirm') }}"
@@ -192,25 +215,30 @@
           {% else %}
             <span style="color:#bbb;">——</span>
           {% endif %}
+          {% endif %}
 
           {% endif %}
 
           {# ====== 更多操作：下拉 ====== #}
-          {% if r.status == 'CANCELLED' and has_permission('sales_performance.reopen') %}
+          {% if r.status == 'CANCELLED' and not r.return_of_performance_id and has_permission('sales_performance.reopen') %}
             <form method="post" style="display:inline;"
                   action="{{ url_for('sales_performance.reopen', perf_id=r.id) }}"
                   onsubmit="return confirm('确认重新打开为草稿？将复用已有生产/发货计划。');">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn btn-sm btn-primary">重新编辑</button>
             </form>
-          {% elif not is_done %}
+          {% elif not is_done and not (r.return_of_performance_id and r.status == 'CONFIRMED') %}
           <div class="op-more">
             <button type="button" class="op-more-btn" title="更多操作"
                     onclick="toggleOpMenu(this)">⋮</button>
             <div class="op-more-menu">
               {# 编辑：仅 DRAFT #}
               {% if r.status == 'DRAFT' and has_permission('sales_performance.edit') %}
-                <a href="{{ url_for('sales_performance.edit_page', perf_id=r.id) }}">编辑</a>
+                {% if r.return_of_performance_id %}
+                  <a href="{{ url_for('sales_performance.edit_return_page', return_id=r.id) }}">编辑退货单</a>
+                {% else %}
+                  <a href="{{ url_for('sales_performance.edit_page', perf_id=r.id) }}">编辑</a>
+                {% endif %}
               {% endif %}
 
               {# 删除：仅 DRAFT #}
@@ -240,14 +268,14 @@
       </tr>
       {% endfor %}
     {% else %}
-      <tr><td colspan="{{ 20 if is_sales_role else 21 }}" style="text-align:center;color:#999;padding:24px;">
+      <tr><td colspan="{{ 24 if is_sales_role else 25 }}" style="text-align:center;color:#999;padding:24px;">
         暂无业绩单
       </td></tr>
     {% endif %}
   </tbody>
   <tfoot>
     <tr style="background:#fafafa;font-weight:600;">
-      <td colspan="5" style="text-align:right;">本页合计：</td>
+      <td colspan="7" style="text-align:right;">本页合计：</td>
       <td style="text-align:right;">{{ rows|sum(attribute='quantity')|format_qty }}</td>
       <td></td>
       <td></td>
@@ -271,7 +299,7 @@
       <td></td>
       <td></td>
       <td></td>
-      <td></td>
+      {% if not is_sales_role %}<td></td>{% endif %}
       <td></td>
       <td></td>
     </tr>
@@ -285,7 +313,7 @@
          performance_no=performance_no, status=status, payment_status=payment_status,
          company_name=company_name, product_name=product_name,
          date_from=date_from, date_to=date_to,
-         salesperson_id=salesperson_id,
+         salesperson_id=salesperson_id, doc_type=doc_type,
          page=page-1) }}">上一页</a>
   {% endif %}
   {% if page < total_pages %}
@@ -293,7 +321,7 @@
          performance_no=performance_no, status=status, payment_status=payment_status,
          company_name=company_name, product_name=product_name,
          date_from=date_from, date_to=date_to,
-         salesperson_id=salesperson_id,
+         salesperson_id=salesperson_id, doc_type=doc_type,
          page=page+1) }}">下一页</a>
   {% endif %}
 </div>

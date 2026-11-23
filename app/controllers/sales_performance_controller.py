@@ -16,8 +16,9 @@ from app.utils.datetime_utils import util_parse_date, util_parse_date_end
 from app.exports.queries import run_query
 from app.services.permission_service import (
     can_view_sales_performance_money, can_view_sales_performance_cost,
-    can_edit_sales_performance_money, has_role
+    can_edit_sales_performance_money, can_edit_sales_performance_cost, has_role
 )
+from app.services.sales_performance_access_service import can_access_sales_performance
 
 bp = Blueprint("sales_performance", __name__, url_prefix="/sales-performances")
 
@@ -127,6 +128,7 @@ def list_page():
     date_to_raw = request.args.get("date_to", "").strip() or None
     sp_raw = request.args.get("salesperson_id", "").strip()
     salesperson_id = int(sp_raw) if sp_raw.isdigit() else None
+    doc_type = request.args.get("doc_type", "").strip() or None
 
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 20
@@ -140,6 +142,7 @@ def list_page():
         date_from=util_parse_date(date_from_raw),
         date_to=util_parse_date_end(date_to_raw),
         salesperson_id=salesperson_id,
+        doc_type=doc_type,
         exclude_drafts=has_role("order_followup"),
         page=page,
         page_size=page_size,
@@ -167,6 +170,7 @@ def list_page():
         date_from=date_from_raw or "",
         date_to=date_to_raw or "",
         salesperson_id=salesperson_id or "",
+        doc_type=doc_type or "",
         employees=_sales_employees(),          # ⭐ 销售员下拉用
         status_labels=STATUS_LABELS,
         payment_labels=PAYMENT_LABELS,
@@ -227,6 +231,10 @@ def edit_page(perf_id):
     perf = db.session.get(SalesPerformance, perf_id)
     if not perf:
         abort(404)
+    if perf.return_of_performance_id is not None:
+        return redirect(url_for("sales_performance.edit_return_page", return_id=perf_id))
+    if not can_access_sales_performance(perf_id):
+        abort(404)
 
     form_data = {
         "performance_no": perf.performance_no,
@@ -276,6 +284,10 @@ def update_submit(perf_id):
     perf = db.session.get(SalesPerformance, perf_id)
     if not perf:
         abort(404)
+    if perf.return_of_performance_id is not None:
+        abort(400)
+    if not can_access_sales_performance(perf_id):
+        abort(404)
 
     try:
         data = _parse_form(request.form)
@@ -314,6 +326,8 @@ def detail_page(perf_id):
     perf = db.session.get(SalesPerformance, perf_id)
     if not perf:
         abort(404)
+    if not can_access_sales_performance(perf_id):
+        abort(404)
     main_sales = (db.session.get(Employee, perf.main_salesperson_id)
                   if perf.main_salesperson_id else None)
     co_sales = (db.session.get(Employee, perf.co_salesperson_id)
@@ -321,6 +335,12 @@ def detail_page(perf_id):
 
     production_plan = ProductionPlan.query.filter_by(performance_id=perf_id).first()
     shipment_plan = ShipmentPlan.query.filter_by(performance_id=perf_id).first()
+    return_context = None
+    original_performance = None
+    if perf.return_of_performance_id:
+        original_performance = db.session.get(SalesPerformance, perf.return_of_performance_id)
+    else:
+        return_context = SalesPerformanceService.get_return_context(perf_id)
 
     return render_template(
         "sales_performance/detail.html",
@@ -331,12 +351,139 @@ def detail_page(perf_id):
         payment_labels=PAYMENT_LABELS,
         production_plan=production_plan,
         shipment_plan=shipment_plan,
+        return_context=return_context,
+        original_performance=original_performance,
+        can_view_money=can_view_sales_performance_money(),
+        can_view_cost=can_view_sales_performance_cost(),
     )
+
+@bp.get("/<int:perf_id>/returns/new")
+def new_return_page(perf_id):
+    original = db.session.get(SalesPerformance, perf_id)
+    if not original:
+        abort(404)
+    if not can_access_sales_performance(perf_id):
+        abort(404)
+    if original.return_of_performance_id is not None:
+        abort(400)
+    if original.status not in SalesPerformanceService.RETURNABLE_ORIGINAL_STATUSES:
+        flash("原销售单必须已确认或已进入生产/发货/完成状态才能退货", "error")
+        return redirect(url_for("sales_performance.detail_page", perf_id=perf_id))
+    context = SalesPerformanceService.get_return_context(perf_id)
+    return render_template(
+        "sales_performance/return_form.html", mode="create", ret=None,
+        original=original, context=context,
+        form_data={"performance_date": datetime.now().strftime("%Y-%m-%d"),
+                   "quantity": "", "unit_price": str(original.unit_price or 0),
+                   "amount": "", "cost": "", "remark": ""},
+        can_edit_money=can_edit_sales_performance_money(),
+        can_edit_cost=can_edit_sales_performance_cost(),
+        can_view_money=can_view_sales_performance_money(),
+        can_view_cost=can_view_sales_performance_cost(), errors=[],
+    )
+
+
+@bp.post("/<int:perf_id>/returns/new")
+def create_return_submit(perf_id):
+    original = db.session.get(SalesPerformance, perf_id)
+    if not original or not can_access_sales_performance(perf_id):
+        abort(404)
+    data = {
+        "performance_date": util_parse_date(request.form.get("performance_date", "")),
+        "quantity": request.form.get("quantity", "0"),
+        "unit_price": request.form.get("unit_price", "0"),
+        "amount": request.form.get("amount", "0"),
+        "cost": request.form.get("cost", "0"),
+        "remark": request.form.get("remark", ""),
+    }
+    try:
+        ret = SalesPerformanceService.create_return(
+            perf_id, data, created_by=session.get("employee_id"),
+            can_edit_money=can_edit_sales_performance_money(),
+            can_edit_cost=can_edit_sales_performance_cost(),
+        )
+        flash(f"退货单创建成功：{ret.performance_no}", "success")
+        return redirect(url_for("sales_performance.detail_page", perf_id=ret.id))
+    except SalesPerformanceError as exc:
+        context = SalesPerformanceService.get_return_context(perf_id)
+        return render_template(
+            "sales_performance/return_form.html", mode="create", ret=None,
+            original=original, context=context, form_data=data,
+            can_edit_money=can_edit_sales_performance_money(),
+            can_edit_cost=can_edit_sales_performance_cost(),
+            can_view_money=can_view_sales_performance_money(),
+            can_view_cost=can_view_sales_performance_cost(), errors=[str(exc)],
+        ), 400
+
+
+@bp.get("/returns/<int:return_id>/edit")
+def edit_return_page(return_id):
+    ret = db.session.get(SalesPerformance, return_id)
+    if not ret or ret.return_of_performance_id is None:
+        abort(404)
+    if not can_access_sales_performance(return_id):
+        abort(404)
+    if ret.status != "DRAFT":
+        flash("只有草稿退货单可以编辑", "error")
+        return redirect(url_for("sales_performance.detail_page", perf_id=return_id))
+    original = db.session.get(SalesPerformance, ret.return_of_performance_id)
+    context = SalesPerformanceService.get_return_context(original.id)
+    return render_template(
+        "sales_performance/return_form.html", mode="edit", ret=ret,
+        original=original, context=context,
+        form_data={"performance_date": ret.performance_date.strftime("%Y-%m-%d"),
+                   "quantity": str(abs(ret.quantity)), "unit_price": str(ret.unit_price),
+                   "amount": str(ret.amount), "cost": str(ret.cost),
+                   "remark": ret.remark or ""},
+        can_edit_money=can_edit_sales_performance_money(),
+        can_edit_cost=can_edit_sales_performance_cost(),
+        can_view_money=can_view_sales_performance_money(),
+        can_view_cost=can_view_sales_performance_cost(), errors=[],
+    )
+
+
+@bp.post("/returns/<int:return_id>/edit")
+def update_return_submit(return_id):
+    ret = db.session.get(SalesPerformance, return_id)
+    if not ret or ret.return_of_performance_id is None:
+        abort(404)
+    if not can_access_sales_performance(return_id):
+        abort(404)
+    data = {
+        "performance_date": util_parse_date(request.form.get("performance_date", "")),
+        "quantity": request.form.get("quantity", "0"),
+        "unit_price": request.form.get("unit_price", "0"),
+        "amount": request.form.get("amount", "0"),
+        "cost": request.form.get("cost", "0"),
+        "remark": request.form.get("remark", ""),
+    }
+    try:
+        SalesPerformanceService.update_return(
+            return_id, data, updated_by=session.get("employee_id"),
+            can_edit_money=can_edit_sales_performance_money(),
+            can_edit_cost=can_edit_sales_performance_cost(),
+        )
+        flash("退货单已更新", "success")
+        return redirect(url_for("sales_performance.detail_page", perf_id=return_id))
+    except SalesPerformanceError as exc:
+        original = db.session.get(SalesPerformance, ret.return_of_performance_id)
+        context = SalesPerformanceService.get_return_context(original.id)
+        return render_template(
+            "sales_performance/return_form.html", mode="edit", ret=ret,
+            original=original, context=context, form_data=data,
+            can_edit_money=can_edit_sales_performance_money(),
+            can_edit_cost=can_edit_sales_performance_cost(),
+            can_view_money=can_view_sales_performance_money(),
+            can_view_cost=can_view_sales_performance_cost(), errors=[str(exc)],
+        ), 400
+
 
 @bp.post("/<int:perf_id>/<action>")
 def change_status(perf_id, action):
     # {'confirm', 'produce', 'ship', 'complete', 'cancel'}
     if action not in ("confirm", "produce", "ship", "complete", "cancel"):
+        abort(404)
+    if not can_access_sales_performance(perf_id):
         abort(404)
     try:
         perf = SalesPerformanceService.change_status(
@@ -360,6 +507,8 @@ def change_status(perf_id, action):
 
 @bp.post("/<int:perf_id>/delete")
 def delete_draft(perf_id):
+    if not can_access_sales_performance(perf_id):
+        abort(404)
     try:
         DraftDeleteService.delete_sales_performance(perf_id)
         flash("业绩表草稿及其关联的草稿计划已删除", "success")
@@ -374,6 +523,8 @@ def delete_draft(perf_id):
 
 @bp.post("/<int:perf_id>/reopen")
 def reopen(perf_id):
+    if not can_access_sales_performance(perf_id):
+        abort(404)
     try:
         SalesPerformanceService.reopen(perf_id, operator_id=session.get("employee_id"))
         flash("业绩单已重新打开为草稿，可继续编辑", "success")

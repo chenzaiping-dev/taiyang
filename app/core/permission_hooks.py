@@ -109,6 +109,10 @@ ENDPOINT_REQUIREMENTS = {
     "sales_performance.update_submit": ("sales_performance.edit",),
     "sales_performance.delete_draft": ("sales_performance.delete",),
     "sales_performance.detail_page": ("sales_performance.view",),
+    "sales_performance.new_return_page": ("sales_performance.create",),
+    "sales_performance.create_return_submit": ("sales_performance.create",),
+    "sales_performance.edit_return_page": ("sales_performance.edit",),
+    "sales_performance.update_return_submit": ("sales_performance.edit",),
     "sales_performance.change_status": ("sales_performance.status.change",),
     "sales_performance.reopen": ("sales_performance.reopen",),
 }
