@@ -1,0 +1,35 @@
+{% extends "inventory/base.html" %}
+{% block title %}{{ '编辑退货单' if mode == 'edit' else '新建退货单' }}{% endblock %}
+{% block content %}
+<h2>{{ '编辑退货单' if mode == 'edit' else '新建退货单' }}</h2>
+{% for error in errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
+<fieldset>
+  <legend>原销售单信息</legend>
+  <p>原销售单：<a href="{{ url_for('sales_performance.detail_page', perf_id=original.id) }}">{{ original.performance_no }}</a></p>
+  <p>客户：{{ original.company_name }}　产品：{{ original.product_name }}　规格：{{ original.product_specification or '-' }}</p>
+  <p>原销售数量：{{ original.quantity|format_qty }}　剩余可退数量：<strong>{{ context.available_quantity|format_qty }}</strong></p>
+  {% if can_view_money %}<p>原销售金额：{{ original.amount }}　剩余可冲减金额：<strong>{{ context.available_amount }}</strong></p>{% endif %}
+</fieldset>
+<form method="post" action="{% if mode == 'edit' %}{{ url_for('sales_performance.update_return_submit', return_id=ret.id) }}{% else %}{{ url_for('sales_performance.create_return_submit', perf_id=original.id) }}{% endif %}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <fieldset>
+    <legend>退货信息</legend>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:12px;max-width:900px;">
+      <label>退货日期<br><input type="date" name="performance_date" value="{{ form_data.performance_date }}" required></label>
+      <label>退货数量（填写正数）<br><input type="number" name="quantity" min="0.0001" step="0.0001" value="{{ form_data.quantity }}" required></label>
+      {% if can_view_money %}
+      <label>退货单价（正数）<br><input type="number" name="unit_price" min="0" step="0.0001" value="{{ form_data.unit_price }}" {% if not can_edit_money %}readonly{% endif %}></label>
+      <label>退款金额（负数）<br><input type="number" name="amount" max="0" step="0.0001" value="{{ form_data.amount }}" {% if not can_edit_money %}readonly{% endif %} placeholder="留空时按原销售金额比例计算"></label>
+      {% endif %}
+      {% if can_view_cost %}<label>退货成本总额（负数）<br><input type="number" name="cost" max="0" step="0.0001" value="{{ form_data.cost }}" {% if not can_edit_cost %}readonly{% endif %} placeholder="留空时按原成本比例计算"></label>{% endif %}
+      <label>退货利润<br><input type="text" value="提交后自动计算" readonly></label>
+    </div>
+    <p style="color:#777;font-size:12px;">退货数量录入正数，保存后系统以负数入账。退款金额和退货成本必须为负数；允许退款金额与退货数量不成比例，但累计冲减不能超过原销售单额度。</p>
+    <label>退货原因 / 备注<br><textarea name="remark" rows="3" style="width:100%;max-width:900px;">{{ form_data.remark }}</textarea></label>
+  </fieldset>
+  <div style="margin-top:16px;display:flex;gap:10px;">
+    <button type="submit" class="btn btn-primary">保存草稿</button>
+    <a class="btn" href="{{ url_for('sales_performance.detail_page', perf_id=ret.id if ret else original.id) }}">返回</a>
+  </div>
+</form>
+{% endblock %}
