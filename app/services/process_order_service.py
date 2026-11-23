@@ -681,7 +681,7 @@ class ProcessOrderService:
 
         actual_total_cost = Decimal("0")
         for m in materials:
-            real_cost = cost_by_material.get(m.material_id, Decimal("0"))
+            real_cost = abs(cost_by_material.get(m.material_id, Decimal("0")))
             m.cost = real_cost
             actual_total_cost += real_cost
 
