@@ -4,7 +4,7 @@ from datetime import datetime
 from flask import flash, abort
 
 from app.extensions import db
-from app.utils.datetime_utils import now_beijing_naive
+from app.utils.datetime_utils import now_beijing_naive, SUMMARY_EXCLUDED_STATUSES
 
 from app.generated.models.process_orders import ProcessOrder
 from app.generated.models.process_order_materials import ProcessOrderMaterial
@@ -360,6 +360,7 @@ class ProcessOrderService:
         date_to=None,
         page: int = 1,
         page_size: int = 20,
+        include_summary: bool = False,
     ):
         """
         列表查询：一次 JOIN 出加工厂/业绩单/跟单人/创建人/生产计划。
@@ -438,12 +439,26 @@ class ProcessOrderService:
             stmt = stmt.where(ProcessOrder.order_time < date_to)
 
         from sqlalchemy import func
+        summary = None
+        if include_summary:
+            summary_sq = stmt.where(
+                ProcessOrder.status.notin_(SUMMARY_EXCLUDED_STATUSES)
+            ).order_by(None).subquery()
+            summary = db.session.execute(
+                select(
+                    func.coalesce(func.sum(summary_sq.c.planned_quantity), 0)
+                    .label("planned_quantity")
+                )
+            ).mappings().one()
+            summary = dict(summary)
+
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = db.session.execute(count_stmt).scalar() or 0
 
         stmt = stmt.offset((page - 1) * page_size).limit(page_size)
         rows = db.session.execute(stmt).mappings().all()
-        return [dict(r) for r in rows], total
+        rows = [dict(r) for r in rows]
+        return (rows, total, summary) if include_summary else (rows, total)
 
     @staticmethod
     def change_status(order_id: int, action: str) -> dict:

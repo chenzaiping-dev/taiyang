@@ -8,6 +8,7 @@ from app.generated.models.warehouses import Warehouse
 from app.generated.models.inventory_cost_layers import InventoryCostLayer
 from app.generated.models.inventory_documents import InventoryDocument
 from app.services.inventory_query_service import InventoryQueryService
+from app.services.permission_service import can_view_inventory_cost
 from app.exports.queries import run_query
 from app.services.draft_delete_service import DraftDeleteService, DraftDeleteError
 from app.services.inventory_service import (
@@ -80,13 +81,17 @@ def material_stock_page():
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 50
 
-    rows, total = InventoryQueryService.query_material_stock(
+    rows, total, summary = InventoryQueryService.query_material_stock(
         material_code=material_code,
         warehouse_id=warehouse_id,
         group_by_warehouse=group_by_warehouse,
         page=page,
         page_size=page_size,
+        include_summary=True,
     )
+    can_view_cost = can_view_inventory_cost()
+    if not can_view_cost:
+        summary["total_cost"] = None
     total_pages = max((total + page_size - 1) // page_size, 1)
 
     # 当前选中的仓库对象（用于顶部信息条）
@@ -128,6 +133,8 @@ def material_stock_page():
         group_by_warehouse=group_by_warehouse,
         warehouses=_rm_warehouses(),
         available_materials=available_materials,
+        summary=summary,
+        can_view_cost=can_view_cost,
     )
 
 @bp.get("/material-stock-with-cost-layers")
@@ -145,7 +152,18 @@ def material_stock_with_cost_layers_page():
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 50
 
-    rows, total = run_query("material_stock_layers", request.args, page=page, page_size=page_size)
+    rows, total, summary = InventoryQueryService.query_material_stock_with_cost_layers(
+        material_code=material_code,
+        warehouse_id=warehouse_id,
+        group_by_warehouse=group_by_warehouse,
+        page=page,
+        page_size=page_size,
+        include_summary=True,
+    )
+    can_view_cost = can_view_inventory_cost()
+    if not can_view_cost:
+        summary["original_cost"] = None
+        summary["remaining_cost"] = None
     total_pages = max((total + page_size - 1) // page_size, 1)
 
     # 当前选中的仓库对象（用于顶部信息条）
@@ -188,6 +206,8 @@ def material_stock_with_cost_layers_page():
         warehouses=_rm_warehouses(),
         available_materials=available_materials,
         layer_type_labels=LAYER_TYPE_LABELS,
+        summary=summary,
+        can_view_cost=can_view_cost,
     )
 
 from datetime import datetime
@@ -203,13 +223,14 @@ def material_io_summary_page():
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 50
 
-    rows, total = InventoryQueryService.query_material_io_summary(
+    rows, total, summary = InventoryQueryService.query_material_io_summary(
         material_code=material_code,
         warehouse_id=warehouse_id,
         date_from=util_parse_date(date_from_raw),
         date_to=util_parse_date_end(date_to_raw),
         page=page,
         page_size=page_size,
+        include_summary=True,
     )
     total_pages = max((total + page_size - 1) // page_size, 1)
 
@@ -225,6 +246,7 @@ def material_io_summary_page():
         date_to=date_to_raw or "",
         current_wh=current_wh,
         warehouses=_rm_warehouses(),
+        summary=summary,
     )
 
 @bp.get("/material-transactions")
@@ -240,7 +262,20 @@ def material_transactions_page():
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 50
 
-    rows, total = run_query("material_transactions", request.args, page=page, page_size=page_size)
+    rows, total, summary = InventoryQueryService.list_transactions(
+        material_code=material_code,
+        warehouse_id=warehouse_id,
+        transaction_type=transaction_type,
+        document_no=document_no,
+        date_from=util_parse_date(date_from_raw),
+        date_to=util_parse_date_end(date_to_raw),
+        page=page,
+        page_size=page_size,
+        include_summary=True,
+    )
+    can_view_cost = can_view_inventory_cost()
+    if not can_view_cost:
+        summary["total_cost"] = None
     total_pages = max((total + page_size - 1) // page_size, 1)
 
     return render_template(
@@ -257,6 +292,8 @@ def material_transactions_page():
         transaction_types=TRANSACTION_TYPE_LABELS,
         transaction_directions=TRANSACTION_TYPE_DIRECTION,
         document_types=DOC_TYPE_LABELS,
+        summary=summary,
+        can_view_cost=can_view_cost,
     )
 
 # ==================== 通用列表 ====================
@@ -279,15 +316,18 @@ def document_list_page(direction):
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 50
 
-    rows, total = InventoryQueryService.list_documents(
+    rows, total, summary = InventoryQueryService.list_documents(
         direction=direction_code,
         keyword=keyword, status=status,
         inbound_type=inbound_type,
         outbound_type=outbound_type,
         date_from=util_parse_date(date_from_raw),
         date_to=util_parse_date_end(date_to_raw),
-        page=page, page_size=page_size,
+        page=page, page_size=page_size, include_summary=True,
     )
+    can_view_cost = can_view_inventory_cost()
+    if not can_view_cost:
+        summary["total_cost"] = None
     total_pages = max((total + page_size - 1) // page_size, 1)
 
     return render_template(
@@ -311,6 +351,8 @@ def document_list_page(direction):
             if direction == "in"
             else url_for("stock_out.stock_out_page")
         ),
+        summary=summary,
+        can_view_cost=can_view_cost,
         confirm_endpoint=(
             "inventory_query.purchase_in_confirm"
             if direction == "in"

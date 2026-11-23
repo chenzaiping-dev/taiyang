@@ -21,7 +21,7 @@ from app.generated.models.finished_goods_document_lines import FinishedGoodsDocu
 from app.generated.models.finished_goods_inventory import FinishedGoodsInventory
 from app.generated.models.finished_goods_transactions import FinishedGoodsTransaction
 from app.generated.models.finished_goods_reservations import FinishedGoodsReservation
-from app.utils.datetime_utils import now_beijing, now_beijing_naive
+from app.utils.datetime_utils import now_beijing, now_beijing_naive, SUMMARY_EXCLUDED_STATUSES
 from app.utils.decimal_utils import _q3, _q6
 
 def gen_plan_no() -> str:
@@ -502,7 +502,7 @@ class ProductionPlanService:
     @staticmethod
     def list_plans(plan_no=None, performance_no=None, product_name=None,
                    status=None, performance_id=None,
-                   page=1, page_size=20):
+                   page=1, page_size=20, include_summary=False):
         """
         生产计划列表。
         额外聚合：锁定总数量（ACTIVE 预留 remaining_quantity 之和）
@@ -560,6 +560,19 @@ class ProductionPlanService:
         if performance_id:
             base = base.where(ProductionPlan.performance_id == performance_id)
 
+        summary = None
+        if include_summary:
+            summary_sq = base.where(
+                ProductionPlan.status.notin_(SUMMARY_EXCLUDED_STATUSES)
+            ).order_by(None).subquery()
+            summary = db.session.execute(
+                select(
+                    func.coalesce(func.sum(summary_sq.c.total_quantity), 0)
+                    .label("total_quantity")
+                )
+            ).mappings().one()
+            summary = dict(summary)
+
         total = db.session.execute(
             select(func.count()).select_from(base.subquery())
         ).scalar() or 0
@@ -576,7 +589,7 @@ class ProductionPlanService:
                         (_q6(x["lock_qty"]) for x in plan.draft_reservations),
                         Decimal("0"),
                     )
-        return rows, total
+        return (rows, total, summary) if include_summary else (rows, total)
 
     @staticmethod
     def get_detail(plan_id: int) -> dict:

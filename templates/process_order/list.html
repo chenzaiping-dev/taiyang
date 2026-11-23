@@ -42,6 +42,11 @@
   {% endif %}
 </form>
 
+<div class="list-summary" style="display:flex;gap:12px;flex-wrap:wrap;margin:14px 0;">
+  <div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:170px;">
+    <div style="font-size:12px;color:#666;">计划数量（全量）</div><strong style="font-size:18px;">{{ summary.planned_quantity or 0 }}</strong></div>
+  <span style="align-self:center;font-size:12px;color:#888;">当前筛选条件下全部工艺单，排除草稿和已取消；不受分页影响</span>
+</div>
 <table style="width:100%;border-collapse:collapse;font-size:13px;">
   <thead>
     <tr style="background:#f5f5f5;">

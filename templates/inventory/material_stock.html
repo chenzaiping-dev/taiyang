@@ -61,6 +61,16 @@
   </div>
 {% endif %}
 
+<div style="margin:12px 0 16px;padding:12px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:6px;">
+  <div style="font-weight:600;margin-bottom:10px;">当前筛选条件下全量库存统计（不受分页影响）</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
+    <div><div style="font-size:12px;color:#666;">库存数量</div><strong style="font-size:20px;color:#2440b3;">{{ summary.total_qty }}</strong></div>
+    {% if can_view_cost %}
+    <div><div style="font-size:12px;color:#666;">库存金额</div><strong style="font-size:20px;color:#ef6c00;">{{ summary.total_cost }}</strong></div>
+    {% endif %}
+  </div>
+</div>
+
 <table style="width:100%;border-collapse:collapse;font-size:13px;">
   <thead>
     <tr style="background:#f5f5f5;">

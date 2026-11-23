@@ -52,7 +52,7 @@ class FinishedGoodsQueryService:
 
     @staticmethod
     def list_warehouse_stock(warehouse_id=None, batch_keyword=None,
-                             page=1, page_size=50):
+                             page=1, page_size=50, include_summary=False):
         """成品库仓库列表：按 (warehouse, batch) 展示现存 + 锁定 + 可用"""
         # ⭐ 锁定汇总子查询
         locked_subq = (
@@ -122,18 +122,30 @@ class FinishedGoodsQueryService:
                 FinishedGoodsBatch.product_name.like(like),
             ))
 
+        summary = None
+        if include_summary:
+            summary_sq = stmt.order_by(None).subquery()
+            summary = db.session.execute(
+                select(
+                    func.coalesce(func.sum(summary_sq.c.total_qty), 0).label("total_qty"),
+                    func.coalesce(func.sum(summary_sq.c.locked_qty), 0).label("locked_qty"),
+                    func.coalesce(func.sum(summary_sq.c.available_qty), 0).label("available_qty"),
+                    func.coalesce(func.sum(summary_sq.c.total_cost), 0).label("total_cost"),
+                )
+            ).mappings().one()
+
         total = db.session.execute(
             select(func.count()).select_from(stmt.subquery())
         ).scalar() or 0
         stmt = stmt.offset((page - 1) * page_size).limit(page_size)
 
         rows = [dict(r) for r in db.session.execute(stmt).mappings().all()]
-        return rows, total
+        return (rows, total, dict(summary)) if include_summary else (rows, total)
 
     @staticmethod
     def list_transactions(warehouse_id=None, batch_keyword=None, tx_type=None,
                           document_no=None, date_from=None, date_to=None,
-                          page=1, page_size=50):
+                          page=1, page_size=50, include_summary=False):
         creator = db.aliased(Employee)   # ⭐ 单据制单人
 
         stmt = (
@@ -208,6 +220,16 @@ class FinishedGoodsQueryService:
         if date_to:
             stmt = stmt.where(FinishedGoodsTransaction.transaction_time < date_to)
 
+        summary = None
+        if include_summary:
+            summary_sq = stmt.order_by(None).subquery()
+            summary = db.session.execute(
+                select(
+                    func.coalesce(func.sum(summary_sq.c.quantity_delta), 0).label("quantity_delta"),
+                    func.coalesce(func.sum(summary_sq.c.total_cost), 0).label("total_cost"),
+                )
+            ).mappings().one()
+
         total = db.session.execute(
             select(func.count()).select_from(stmt.subquery())
         ).scalar() or 0
@@ -218,7 +240,7 @@ class FinishedGoodsQueryService:
         # ⭐ 在 Python 里推断"操作入口"
         for r in rows:
             r["source_entry"] = _infer_source_entry(r)
-        return rows, total
+        return (rows, total, dict(summary)) if include_summary else (rows, total)
 
     @staticmethod
     def list_available_batches(warehouse_id):
@@ -277,6 +299,7 @@ class FinishedGoodsQueryService:
         group_by: str = "batch",     # 'batch' | 'product'
         page: int = 1,
         page_size: int = 50,
+        include_summary: bool = False,
     ):
         """
         成品库累计出入库汇总。
@@ -438,6 +461,63 @@ class FinishedGoodsQueryService:
             #stmt = stmt.order_by(FinishedGoodsBatch.batch_no.asc())
             stmt = stmt.order_by(FinishedGoodsBatch.id.desc())
 
+        summary = None
+        if include_summary:
+            summary_sq = stmt.order_by(None).subquery()
+            movement_fields = (
+                "in_production", "in_return", "in_stocktake", "in_transfer",
+                "out_reverse", "out_outbound", "out_return", "out_stocktake",
+                "out_transfer", "in_reverse", "total_in", "total_out", "net_qty",
+            )
+            summary_stmt = select(*[
+                func.coalesce(func.sum(getattr(summary_sq.c, field)), 0).label(field)
+                for field in movement_fields
+            ])
+            summary = dict(db.session.execute(summary_stmt).mappings().one())
+
+            # 当前库存只统计本次筛选结果包含的批次/产品组，口径与列表 current_qty 一致。
+            if group_by == "product":
+                group_keys = (
+                    select(
+                        summary_sq.c.warehouse_id,
+                        summary_sq.c.product_name,
+                        summary_sq.c.product_specification,
+                        summary_sq.c.unit,
+                    ).distinct().subquery()
+                )
+                current_stmt = (
+                    select(func.coalesce(func.sum(FinishedGoodsInventory.quantity), 0))
+                    .join(FinishedGoodsBatch,
+                          FinishedGoodsBatch.id == FinishedGoodsInventory.batch_id)
+                    .join(
+                        group_keys,
+                        (group_keys.c.warehouse_id == FinishedGoodsInventory.warehouse_id)
+                        & (group_keys.c.product_name == FinishedGoodsBatch.product_name)
+                        & (func.coalesce(group_keys.c.product_specification, "")
+                           == func.coalesce(FinishedGoodsBatch.product_specification, ""))
+                        & (func.coalesce(group_keys.c.unit, "")
+                           == func.coalesce(FinishedGoodsBatch.unit, "")),
+                    )
+                )
+            else:
+                group_keys = (
+                    select(summary_sq.c.batch_id, summary_sq.c.warehouse_id)
+                    .distinct().subquery()
+                )
+                current_stmt = (
+                    select(func.coalesce(func.sum(FinishedGoodsInventory.quantity), 0))
+                    .join(
+                        group_keys,
+                        (group_keys.c.batch_id == FinishedGoodsInventory.batch_id)
+                        & (group_keys.c.warehouse_id == FinishedGoodsInventory.warehouse_id),
+                    )
+                )
+            summary["current_qty"] = db.session.execute(current_stmt).scalar() or 0
+            summary["diff"] = (
+                Decimal(str(summary.get("net_qty") or 0))
+                - Decimal(str(summary.get("current_qty") or 0))
+            )
+
         total = db.session.execute(
             select(func.count()).select_from(stmt.subquery())
         ).scalar() or 0
@@ -456,6 +536,8 @@ class FinishedGoodsQueryService:
                     .filter(
                         FinishedGoodsInventory.warehouse_id == r["warehouse_id"],
                         FinishedGoodsBatch.product_name == r["product_name"],
+                        FinishedGoodsBatch.product_specification == r["product_specification"],
+                        FinishedGoodsBatch.unit == r["unit"],
                     )
                     .scalar()
                 )
@@ -473,7 +555,7 @@ class FinishedGoodsQueryService:
             r["diff"] = (Decimal(str(r["net_qty"] or 0))
                          - Decimal(str(r["current_qty"] or 0)))
 
-        return rows, total
+        return (rows, total, summary) if include_summary else (rows, total)
 
     @staticmethod
     def get_batch_available_qty(warehouse_id: int, batch_id: int):
@@ -582,7 +664,7 @@ class FinishedGoodsQueryService:
         outbound_type=None,       # 仅 OUT 方向过滤
         warehouse_id=None,
         date_from=None, date_to=None,
-        page=1, page_size=50,
+        page=1, page_size=50, include_summary=False,
     ):
         """
         成品库入库/出库单列表（方向维度）。
@@ -726,13 +808,26 @@ class FinishedGoodsQueryService:
         if biz_type:
             stmt = stmt.where(FinishedGoodsDocument.business_type == biz_type)
 
+        summary = None
+        if include_summary:
+            # 排除已取消单据；流水统计本身仍保留冲销正负记录。
+            summary_sq = stmt.where(
+                FinishedGoodsDocument.status != "CANCELLED"
+            ).order_by(None).subquery()
+            summary = db.session.execute(
+                select(
+                    func.coalesce(func.sum(summary_sq.c.total_qty), 0).label("quantity_delta"),
+                    func.coalesce(func.sum(summary_sq.c.total_cost), 0).label("total_cost"),
+                )
+            ).mappings().one()
+
         total = db.session.execute(
             select(func.count()).select_from(stmt.subquery())
         ).scalar() or 0
 
         stmt = stmt.offset((page - 1) * page_size).limit(page_size)
         rows = [dict(r) for r in db.session.execute(stmt).mappings().all()]
-        return rows, total
+        return (rows, total, dict(summary)) if include_summary else (rows, total)
 
     @staticmethod
     def get_fg_document_detail(document_id: int):

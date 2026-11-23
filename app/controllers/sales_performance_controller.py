@@ -12,10 +12,11 @@ from app.generated.models.shipment_plans import ShipmentPlan
 from app.services.sales_performance_service import (
     SalesPerformanceService, SalesPerformanceError, STATUS_LABELS, PAYMENT_LABELS,
 )
-from app.utils.datetime_utils import util_parse_date
+from app.utils.datetime_utils import util_parse_date, util_parse_date_end
 from app.exports.queries import run_query
 from app.services.permission_service import (
-    can_view_sales_performance_money, can_edit_sales_performance_money, has_role
+    can_view_sales_performance_money, can_view_sales_performance_cost,
+    can_edit_sales_performance_money, has_role
 )
 
 bp = Blueprint("sales_performance", __name__, url_prefix="/sales-performances")
@@ -130,7 +131,28 @@ def list_page():
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 20
 
-    rows, total = run_query("sales_performances", request.args, page=page, page_size=page_size)
+    rows, total, summary = SalesPerformanceService.list_performances(
+        performance_no=performance_no,
+        company_name=company_name,
+        product_name=product_name,
+        status=status,
+        payment_status=payment_status,
+        date_from=util_parse_date(date_from_raw),
+        date_to=util_parse_date_end(date_to_raw),
+        salesperson_id=salesperson_id,
+        exclude_drafts=has_role("order_followup"),
+        page=page,
+        page_size=page_size,
+        include_summary=True,
+    )
+    can_view_money = can_view_sales_performance_money()
+    can_view_cost = can_view_sales_performance_cost()
+    if not can_view_money:
+        summary["amount"] = None
+        summary["attributed_amount"] = None
+    if not can_view_cost:
+        summary["cost"] = None
+        summary["profit"] = None
     total_pages = max((total + page_size - 1) // page_size, 1)
 
     return render_template(
@@ -149,6 +171,9 @@ def list_page():
         status_labels=STATUS_LABELS,
         payment_labels=PAYMENT_LABELS,
         is_sales_role=has_role("sales"),
+        summary=summary,
+        can_view_summary_money=can_view_money,
+        can_view_summary_cost=can_view_cost,
     )
 
 

@@ -72,7 +72,7 @@ def list_page():
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 20
 
-    items, total = ProcessOrderService.list_orders(
+    items, total, summary = ProcessOrderService.list_orders(
         order_no=order_no,
         batch_keyword=batch_keyword,
         performance_plan_no=performance_plan_no,
@@ -81,6 +81,7 @@ def list_page():
         date_from=util_parse_date(date_from_raw),
         date_to=util_parse_date_end(date_to_raw),
         page=page, page_size=page_size,
+        include_summary=True,
     )
 
     total_pages = max((total + page_size - 1) // page_size, 1)
@@ -101,6 +102,7 @@ def list_page():
         plan_status_labels=PLAN_STATUS_LABELS,
         warehouses=_rm_warehouses(),
         fg_warehouses=_fg_warehouses(),
+        summary=summary,
     )
 
 

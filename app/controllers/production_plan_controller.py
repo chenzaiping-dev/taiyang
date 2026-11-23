@@ -429,10 +429,10 @@ def list_page():
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 20
 
-    rows, total = ProductionPlanService.list_plans(
+    rows, total, summary = ProductionPlanService.list_plans(
         plan_no=plan_no, performance_no=performance_no, product_name=product_name,
         status=status, performance_id=performance_id,
-        page=page, page_size=page_size,
+        page=page, page_size=page_size, include_summary=True,
     )
     total_pages = max((total + page_size - 1) // page_size, 1)
 
@@ -452,6 +452,7 @@ def list_page():
         performance_id=performance_id or "",
         perf_filter=perf_filter,
         status_labels=PLAN_STATUS_LABELS,
+        summary=summary,
     )
 
 

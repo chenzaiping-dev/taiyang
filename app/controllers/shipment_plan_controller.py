@@ -10,7 +10,6 @@ from app.generated.models.warehouses import Warehouse
 
 from app.services.shipment_plan_service import ShipmentPlanService, ShipmentPlanError
 from app.services.permission_service import can_edit_shipment_money
-from app.exports.queries import run_query
 
 bp = Blueprint("shipment_plan", __name__, url_prefix="/shipment-plans")
 
@@ -234,7 +233,12 @@ def list_page():
     # ⭐ 支持两种输入：数字 → 直接当 ID；非数字 → 按业绩单号反查
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 20
-    rows, total = run_query("shipment_plans", request.args, page=page, page_size=page_size)
+    rows, total, summary = ShipmentPlanService.list_plans_query(
+        params=request.args,
+        page=page,
+        page_size=page_size,
+        include_summary=True,
+    )
 
     total_pages = max((total + page_size - 1) // page_size, 1)
     return render_template(
@@ -250,6 +254,7 @@ def list_page():
         ship_time_from=ship_time_from_raw or "",
         ship_time_to=ship_time_to_raw or "",
         status_labels=SP_STATUS_LABELS,
+        summary=summary,
     )
 
 
@@ -268,8 +273,8 @@ def detail_list_page():
 
     page = max(request.args.get("page", 1, type=int) or 1, 1)
     page_size = 20
-    rows, total = run_query(
-        "shipment_plan_details", request.args, page=page, page_size=page_size
+    rows, total, summary = ShipmentPlanService.list_plan_details_query(
+        params=request.args, page=page, page_size=page_size, include_summary=True
     )
     total_pages = max((total + page_size - 1) // page_size, 1)
     detail_status_labels = {
@@ -292,7 +297,7 @@ def detail_list_page():
         product_name=product_name, warehouse_id=warehouse_id,
         batch_keyword=batch_keyword, ship_time_from=ship_time_from,
         ship_time_to=ship_time_to, status_labels=detail_status_labels,
-        warehouses=warehouses,
+        warehouses=warehouses, summary=summary,
     )
 
 

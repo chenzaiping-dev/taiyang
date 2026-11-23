@@ -47,6 +47,16 @@
 </form>
 <a class="btn" href="{{ url_for('exports.download', export_name='sales-performances', **request.args.to_dict()) }}">导出 Excel</a>
 
+
+<div class="list-summary" style="display:flex;gap:12px;flex-wrap:wrap;margin:14px 0;">
+  {% if can_view_summary_money %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">销售额（全量）</div><strong style="font-size:18px;">{{ summary.amount or 0 }}</strong></div>{% endif %}
+  {% if can_view_summary_cost %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">成本（全量）</div><strong style="font-size:18px;">{{ summary.cost or 0 }}</strong></div>
+  <div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">利润（全量）</div><strong style="font-size:18px;">{{ summary.profit or 0 }}</strong></div>{% endif %}
+  <div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">归属数量（全量）</div><strong style="font-size:18px;">{{ summary.attributed_quantity or 0 }}</strong></div>
+  {% if can_view_summary_money %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">归属销售额（全量）</div><strong style="font-size:18px;">{{ summary.attributed_amount or 0 }}</strong></div>{% endif %}
+  <span style="align-self:center;font-size:12px;color:#888;">当前筛选条件下全部业绩单，排除草稿和已取消业绩单；不受分页影响</span>
+</div>
+
 <table style="width:100%;border-collapse:collapse;font-size:13px;">
   <thead>
     <tr style="background:#f5f5f5;">

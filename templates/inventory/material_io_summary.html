@@ -42,6 +42,25 @@
   </div>
 {% endif %}
 
+<div style="margin:12px 0 16px;padding:12px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:6px;">
+  <div style="font-weight:600;margin-bottom:10px;">当前筛选条件下全量数量统计（不受分页影响）</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:10px;">
+    <div><div style="font-size:12px;color:#666;">累计入库</div><strong>{{ summary.total_in }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">累计出库</div><strong>{{ summary.total_out }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">净库存变动</div><strong>{{ summary.net_qty }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">采购入</div><strong>{{ summary.in_purchase }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">盘盈入</div><strong>{{ summary.in_gain }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">退货入</div><strong>{{ summary.in_return }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">撤销出库-回补入</div><strong>{{ summary.in_out_reverse }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">领料出</div><strong>{{ summary.out_production }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">盘亏出</div><strong>{{ summary.out_loss }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">退货出</div><strong>{{ summary.out_return }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">配比调整红冲</div><strong>{{ summary.out_adjust_red }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">配比调整蓝补</div><strong>{{ summary.out_adjust_blue }}</strong></div>
+    <div><div style="font-size:12px;color:#666;">撤销入库-冲减出</div><strong>{{ summary.out_in_reverse }}</strong></div>
+  </div>
+</div>
+
 <table style="width:100%;border-collapse:collapse;font-size:13px;">
   <thead>
     <tr style="background:#f5f5f5;">

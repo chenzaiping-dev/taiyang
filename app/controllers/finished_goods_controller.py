@@ -323,7 +323,16 @@ def warehouses_page():
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 50
 
-    rows, total = run_query("finished_goods_stock", request.args, page=page, page_size=page_size)
+    rows, total, summary = FinishedGoodsQueryService.list_warehouse_stock(
+        warehouse_id=warehouse_id,
+        batch_keyword=keyword,
+        page=page,
+        page_size=page_size,
+        include_summary=True,
+    )
+    can_view_cost = can_view_finished_goods_cost()
+    if not can_view_cost:
+        summary["total_cost"] = None
     total_pages = max((total + page_size - 1) // page_size, 1)
     print("can_view_finished_goods_cost", can_view_finished_goods_cost())
 
@@ -335,7 +344,8 @@ def warehouses_page():
         batch_keyword=keyword or "",
         warehouses=_fg_warehouses(),
         quality_labels={"PENDING": "待检", "QUALIFIED": "合格", "REJECTED": "不合格"},
-        can_view_cost=can_view_finished_goods_cost(),
+        can_view_cost=can_view_cost,
+        summary=summary,
     )
 
 
@@ -353,7 +363,20 @@ def transactions_page():
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 50
 
-    rows, total = run_query("finished_goods_transactions", request.args, page=page, page_size=page_size)
+    rows, total, summary = FinishedGoodsQueryService.list_transactions(
+        warehouse_id=warehouse_id,
+        batch_keyword=keyword,
+        tx_type=tx_type,
+        document_no=document_no,
+        date_from=util_parse_date(date_from_raw),
+        date_to=util_parse_date_end(date_to_raw),
+        page=page,
+        page_size=page_size,
+        include_summary=True,
+    )
+    can_view_cost = can_view_finished_goods_cost()
+    if not can_view_cost:
+        summary["total_cost"] = None
     total_pages = max((total + page_size - 1) // page_size, 1)
 
     return render_template(
@@ -369,7 +392,8 @@ def transactions_page():
         warehouses=_fg_warehouses(),
         tx_types=FG_TX_TYPE_LABELS,
         transaction_directions=FG_TRANSACTION_TYPE_DIRECTION,
-        can_view_cost=can_view_finished_goods_cost(),
+        can_view_cost=can_view_cost,
+        summary=summary,
     )
 
 @bp.get("/io-summary")
@@ -386,13 +410,14 @@ def io_summary_page():
     page = max(int(request.args.get("page", 1) or 1), 1)
     page_size = 50
 
-    rows, total = FinishedGoodsQueryService.query_io_summary(
+    rows, total, summary = FinishedGoodsQueryService.query_io_summary(
         warehouse_id=warehouse_id,
         batch_keyword=batch_keyword,
         date_from=util_parse_date(date_from_raw),
         date_to=util_parse_date_end(date_to_raw),
         group_by=group_by,
         page=page, page_size=page_size,
+        include_summary=True,
     )
     total_pages = max((total + page_size - 1) // page_size, 1)
 
@@ -407,6 +432,7 @@ def io_summary_page():
         group_by=group_by,
         warehouses=_fg_warehouses(),
         quality_labels={"PENDING": "待检", "QUALIFIED": "合格", "REJECTED": "不合格"},
+        summary=summary,
     )
 
 @bp.get("/documents/<direction>")
@@ -427,7 +453,7 @@ def document_list_page(direction):
     page_size = 50
     print(status, inbound_type, outbound_type)
 
-    rows, total = FinishedGoodsQueryService.list_fg_documents(
+    rows, total, summary = FinishedGoodsQueryService.list_fg_documents(
         direction=direction_code,
         keyword=keyword, status=status,
         inbound_type=inbound_type,
@@ -435,8 +461,11 @@ def document_list_page(direction):
         warehouse_id=warehouse_id,
         date_from=util_parse_date(date_from_raw),
         date_to=util_parse_date_end(date_to_raw),
-        page=page, page_size=page_size,
+        page=page, page_size=page_size, include_summary=True,
     )
+    can_view_cost = can_view_finished_goods_cost()
+    if not can_view_cost:
+        summary["total_cost"] = None
     total_pages = max((total + page_size - 1) // page_size, 1)
 
     return render_template(
@@ -457,7 +486,8 @@ def document_list_page(direction):
         inbound_types=FG_INBOUND_TYPE_LABELS,
         outbound_types=FG_OUTBOUND_TYPE_LABELS,
         warehouses=_fg_warehouses(),
-        can_view_cost=can_view_finished_goods_cost(),
+        can_view_cost=can_view_cost,
+        summary=summary,
         new_doc_url=(
             url_for("finished_goods.inbound_page")
             if direction == "in"

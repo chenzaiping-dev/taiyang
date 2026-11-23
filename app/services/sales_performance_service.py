@@ -10,7 +10,7 @@ from app.generated.models.sales_performance import SalesPerformance
 from app.generated.models.production_plans import ProductionPlan
 from app.generated.models.shipment_plans import ShipmentPlan
 from app.services.production_plan_service import PLAN_STATUS_LABELS
-from app.utils.datetime_utils import now_beijing_naive
+from app.utils.datetime_utils import now_beijing_naive, SUMMARY_EXCLUDED_STATUSES
 from app.utils.decimal_utils import _q3, _q6
 from app.services.sales_performance_access_service import (
     apply_sales_performance_scope,
@@ -257,7 +257,8 @@ class SalesPerformanceService:
     def list_performances(performance_no=None, company_name=None, product_name = None,
                           status=None, payment_status=None,
                           date_from=None, date_to=None, salesperson_id=None,
-                          exclude_drafts=False, page=1, page_size=20):
+                          exclude_drafts=False, page=1, page_size=20,
+                          include_summary=False):
         creator = db.aliased(Employee)
         sales = db.aliased(Employee)
         co_sales = db.aliased(Employee)
@@ -352,13 +353,29 @@ class SalesPerformanceService:
                 SalesPerformance.co_salesperson_id == salesperson_id,
             ))
 
+        summary = None        
+        if include_summary:
+            # 统计使用与列表相同的筛选条件和销售数据范围，排除已取消业绩单。
+            summary_sq = base.where(
+                SalesPerformance.status.notin_(SUMMARY_EXCLUDED_STATUSES)
+            ).order_by(None).subquery()
+            summary = db.session.execute(
+                select(
+                    func.coalesce(func.sum(summary_sq.c.amount), 0).label("amount"),
+                    func.coalesce(func.sum(summary_sq.c.cost), 0).label("cost"),
+                    func.coalesce(func.sum(summary_sq.c.profit), 0).label("profit"),
+                    func.coalesce(func.sum(summary_sq.c.attributed_quantity), 0).label("attributed_quantity"),
+                    func.coalesce(func.sum(summary_sq.c.attributed_amount), 0).label("attributed_amount"),
+                )
+            ).mappings().one()
+
         total = db.session.execute(
             select(func.count()).select_from(base.subquery())
         ).scalar() or 0
 
         base = base.offset((page - 1) * page_size).limit(page_size)
         rows = [dict(r) for r in db.session.execute(base).mappings().all()]
-        return rows, total
+        return (rows, total, dict(summary)) if include_summary else (rows, total)
 
     @staticmethod
     def change_status(perf_id: int, action: str,

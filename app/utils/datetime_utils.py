@@ -2,6 +2,7 @@ from datetime import datetime, timezone, timedelta
 
 BEIJING_TZ = timezone(timedelta(hours=8))
 
+SUMMARY_EXCLUDED_STATUSES = ("DRAFT", "CANCELLED")
 
 def now_beijing() -> datetime:
     """北京时间（aware）"""

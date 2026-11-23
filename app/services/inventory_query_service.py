@@ -91,6 +91,7 @@ class InventoryQueryService:
         group_by_warehouse: bool = False,
         page: int = 1,
         page_size: int = 50,
+        include_summary: bool = False,
     ):
         """
         查询原料库存。
@@ -170,6 +171,16 @@ class InventoryQueryService:
                 .order_by(Material.material_code.asc())
             )
 
+        summary = None
+        if include_summary:
+            summary_sq = stmt.order_by(None).subquery()
+            summary = db.session.execute(
+                select(
+                    func.coalesce(func.sum(summary_sq.c.total_qty), 0).label("total_qty"),
+                    func.coalesce(func.sum(summary_sq.c.total_cost), 0).label("total_cost"),
+                )
+            ).mappings().one()
+
         # 总数
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = db.session.execute(count_stmt).scalar() or 0
@@ -190,6 +201,10 @@ class InventoryQueryService:
             d["total_cost"] = _q6(d.get("total_cost"))
             rows.append(d)
 
+        if include_summary:
+            summary = dict(summary)
+            summary["total_cost"] = _q6(summary.get("total_cost"))
+            return rows, total, summary
         return rows, total
 
     @staticmethod
@@ -199,6 +214,7 @@ class InventoryQueryService:
         group_by_warehouse: bool = False,
         page: int = 1,
         page_size: int = 50,
+        include_summary: bool = False,
     ):
         """
         查询原料库存（按 FIFO 成本层逐行展示）。
@@ -259,6 +275,18 @@ class InventoryQueryService:
             )
         )
 
+        summary = None
+        if include_summary:
+            summary_sq = stmt.order_by(None).subquery()
+            summary = db.session.execute(
+                select(
+                    func.coalesce(func.sum(summary_sq.c.original_qty), 0).label("original_qty"),
+                    func.coalesce(func.sum(summary_sq.c.original_cost), 0).label("original_cost"),
+                    func.coalesce(func.sum(summary_sq.c.remaining_qty), 0).label("remaining_qty"),
+                    func.coalesce(func.sum(summary_sq.c.remaining_cost), 0).label("remaining_cost"),
+                )
+            ).mappings().one()
+
         total = db.session.execute(
             select(func.count()).select_from(stmt.subquery())
         ).scalar() or 0
@@ -272,7 +300,7 @@ class InventoryQueryService:
             d["original_cost"] = _q6(d.get("original_cost"))
             d["remaining_cost"] = _q6(d.get("remaining_cost"))
             rows.append(d)
-        return rows, total
+        return (rows, total, dict(summary)) if include_summary else (rows, total)
 
     @staticmethod
     def query_material_io_summary(
@@ -282,6 +310,7 @@ class InventoryQueryService:
         date_to=None,
         page: int = 1,
         page_size: int = 50,
+        include_summary: bool = False,
     ):
         """
         按原料（可选按仓库）汇总累计入库/出库数量。
@@ -443,6 +472,20 @@ class InventoryQueryService:
         stmt = stmt.where(*filters).group_by(*group_cols) \
                    .order_by(Material.material_code.asc())
 
+        summary = None
+        if include_summary:
+            summary_sq = stmt.order_by(None).subquery()
+            summary_fields = (
+                "in_purchase", "in_return", "in_gain", "in_out_reverse",
+                "out_production", "out_loss", "out_return", "out_adjust_red",
+                "out_adjust_blue", "out_in_reverse", "total_in", "total_out", "net_qty",
+            )
+            summary_stmt = select(*[
+                func.coalesce(func.sum(getattr(summary_sq.c, field)), 0).label(field)
+                for field in summary_fields
+            ])
+            summary = dict(db.session.execute(summary_stmt).mappings().one())
+
         # 总数
         total = db.session.execute(
             select(func.count()).select_from(stmt.subquery())
@@ -459,7 +502,7 @@ class InventoryQueryService:
                       "out_adjust_blue", "out_in_reverse", "total_in", "total_out", "net_qty"):
                 d[k] = d.get(k) or 0
             rows.append(d)
-        return rows, total
+        return (rows, total, summary) if include_summary else (rows, total)
 
     @staticmethod
     def list_transactions(
@@ -471,6 +514,7 @@ class InventoryQueryService:
         date_to=None,
         page: int = 1,
         page_size: int = 50,
+        include_summary: bool = False,
     ):
         """
         原料出入库流水查询（含单据头信息）。
@@ -548,6 +592,16 @@ class InventoryQueryService:
         if filters:
             stmt = stmt.where(*filters)
 
+        summary = None
+        if include_summary:
+            summary_sq = stmt.order_by(None).subquery()
+            summary = db.session.execute(
+                select(
+                    func.coalesce(func.sum(summary_sq.c.quantity_delta), 0).label("quantity_delta"),
+                    func.coalesce(func.sum(summary_sq.c.total_cost), 0).label("total_cost"),
+                )
+            ).mappings().one()
+
         total = db.session.execute(
             select(func.count()).select_from(stmt.subquery())
         ).scalar() or 0
@@ -558,13 +612,13 @@ class InventoryQueryService:
         # ⭐ 在 Python 里推断"操作入口"
         for r in rows:
             r["source_entry"] = _infer_source_entry(r)
-        return rows, total
+        return (rows, total, dict(summary)) if include_summary else (rows, total)
 
     @staticmethod
     def list_documents(
         direction: str, keyword=None, status=None, inbound_type=None,
         outbound_type=None, date_from=None, date_to=None,
-        page=1, page_size=50,
+        page=1, page_size=50, include_summary=False,
     ):
         """
         单据列表以 document_lines 判定方向（覆盖 DRAFT），
@@ -657,13 +711,26 @@ class InventoryQueryService:
                     InventoryDocumentLine.transaction_type == outbound_type
                 )
             ))
+        summary = None
+        if include_summary:
+            # 单据统计排除已取消单据；冲销单仍按自身正负流水金额参与统计。
+            summary_sq = stmt.where(
+                InventoryDocument.status != "CANCELLED"
+            ).order_by(None).subquery()
+            summary = db.session.execute(
+                select(
+                    func.coalesce(func.sum(summary_sq.c.total_qty), 0).label("quantity_delta"),
+                    func.coalesce(func.sum(summary_sq.c.total_cost), 0).label("total_cost"),
+                )
+            ).mappings().one()
+
         total = db.session.execute(
             select(func.count()).select_from(stmt.subquery())
         ).scalar() or 0
         rows = [dict(r) for r in db.session.execute(
             stmt.offset((page - 1) * page_size).limit(page_size)
         ).mappings().all()]
-        return rows, total
+        return (rows, total, dict(summary)) if include_summary else (rows, total)
 
     @staticmethod
     def get_document_detail(document_id: int):

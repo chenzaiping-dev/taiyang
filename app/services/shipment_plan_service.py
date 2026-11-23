@@ -18,7 +18,7 @@ from app.generated.models.process_orders import ProcessOrder
 from app.generated.models.production_plans import ProductionPlan
 from app.services.finished_goods_service import FinishedGoodsError, FinishedGoodsService
 
-from app.utils.datetime_utils import now_beijing, now_beijing_naive
+from app.utils.datetime_utils import now_beijing, now_beijing_naive, SUMMARY_EXCLUDED_STATUSES
 from app.utils.decimal_utils import _q3, _q6
 from app.utils.datetime_utils import util_parse_date, util_parse_date_end
 
@@ -179,7 +179,8 @@ class ShipmentPlanService:
         }
 
     @staticmethod
-    def list_plans_query(params=None, page: int = 1, page_size: int = 20):
+    def list_plans_query(params=None, page: int = 1, page_size: int = 20,
+                         include_summary: bool = False):
         """发货计划列表查询；HTML 列表和 Excel 导出共用此查询入口。"""
         params = params or {}
         creator = db.aliased(Employee)
@@ -251,6 +252,17 @@ class ShipmentPlanService:
         if date_to:
             stmt = stmt.where(ShipmentPlan.planned_ship_time < date_to)
 
+        summary = None
+        if include_summary:
+            summary_sq = stmt.where(
+                ShipmentPlan.status.notin_(SUMMARY_EXCLUDED_STATUSES)
+            ).order_by(None).subquery()
+            summary = db.session.execute(
+                select(
+                    func.coalesce(func.sum(summary_sq.c.planned_qty), 0).label("planned_qty")
+                )
+            ).mappings().one()
+
         page = max(int(page or 1), 1)
         page_size = max(int(page_size or 20), 1)
         total = db.session.execute(
@@ -261,10 +273,11 @@ class ShipmentPlanService:
             dict(row)
             for row in db.session.execute(stmt).mappings().all()
         ]
-        return rows, total
+        return (rows, total, dict(summary)) if include_summary else (rows, total)
 
     @staticmethod
-    def list_plan_details_query(params=None, page: int = 1, page_size: int = 20):
+    def list_plan_details_query(params=None, page: int = 1, page_size: int = 20,
+                                include_summary: bool = False):
         """发货计划明细列表查询：每条仓库/批号分配记录一行，排除草稿。"""
         params = params or {}
         creator = db.aliased(Employee)
@@ -350,6 +363,19 @@ class ShipmentPlanService:
         if date_to:
             stmt = stmt.where(ShipmentPlan.planned_ship_time < date_to)
 
+        summary = None
+        if include_summary:
+            summary_sq = stmt.where(
+                ShipmentPlan.status.notin_(SUMMARY_EXCLUDED_STATUSES)                
+            ).order_by(None).subquery()
+            summary = db.session.execute(
+                select(
+                    func.coalesce(func.sum(summary_sq.c.shipment_quantity), 0)
+                    .label("shipment_quantity")
+                )
+            ).mappings().one()
+            summary = dict(summary)
+
         page = max(int(page or 1), 1)
         page_size = max(int(page_size or 20), 1)
         total = db.session.execute(
@@ -357,7 +383,7 @@ class ShipmentPlanService:
         ).scalar() or 0
         stmt = stmt.offset((page - 1) * page_size).limit(page_size)
         rows = [dict(row) for row in db.session.execute(stmt).mappings().all()]
-        return rows, total
+        return (rows, total, summary) if include_summary else (rows, total)
 
     @staticmethod
     def get_available_reservations(performance_id: int):
