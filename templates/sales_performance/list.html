@@ -71,7 +71,6 @@
       <th>原销售单</th>
       <th style="width:100px;text-align:right;">公司名称</th>
       <th style="width:130px;text-align:right;">产品名称</th>
-      <th>规格</th>
       <th style="width:60px;text-align:right;">数量</th>
       <th style="width:20px;">单位</th>
       <th style="width:50px;text-align:right;">{{ "单价" if can_view_sales_performance_money() else "" }}</th>
@@ -108,7 +107,6 @@
         <td>{% if r.original_performance_no %}<a href="{{ url_for('sales_performance.detail_page', perf_id=r.return_of_performance_id) }}">{{ r.original_performance_no }}</a>{% else %}-{% endif %}</td>
         <td>{{ r.company_name }}</td>
         <td>{{ r.product_name }}</td>
-        <td>{{ r.product_specification or "-" }}</td>
         <td style="text-align:right;">{{ r.quantity|format_qty }}</td>
         <td>{{ r.unit or "" }}</td>
         <td style="text-align:right;">{% if can_view_sales_performance_money() %}{{ r.unit_price|format_cost }}{% else %}—{% endif %}</td>
@@ -268,14 +266,14 @@
       </tr>
       {% endfor %}
     {% else %}
-      <tr><td colspan="{{ 24 if is_sales_role else 25 }}" style="text-align:center;color:#999;padding:24px;">
+      <tr><td colspan="{{ 23 if is_sales_role else 24 }}" style="text-align:center;color:#999;padding:24px;">
         暂无业绩单
       </td></tr>
     {% endif %}
   </tbody>
   <tfoot>
     <tr style="background:#fafafa;font-weight:600;">
-      <td colspan="7" style="text-align:right;">本页合计：</td>
+      <td colspan="6" style="text-align:right;">本页合计：</td>
       <td style="text-align:right;">{{ rows|sum(attribute='quantity')|format_qty }}</td>
       <td></td>
       <td></td>

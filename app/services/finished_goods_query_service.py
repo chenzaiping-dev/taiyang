@@ -212,6 +212,7 @@ class FinishedGoodsQueryService:
                 FinishedGoodsTransaction.batch_id,
                 FinishedGoodsBatch.batch_no,
                 FinishedGoodsBatch.product_name,
+                FinishedGoodsBatch.product_specification,
                 FinishedGoodsBatch.unit,
 
                 # ⭐ 批次来源工艺单
@@ -344,7 +345,7 @@ class FinishedGoodsQueryService:
         """
         成品库累计出入库汇总。
         group_by='batch'    → 按 (批次, 仓库) 汇总
-        group_by='product'  → 按 (产品名称, 规格, 仓库) 汇总
+        group_by='product'  → 按 (产品名称, 配方号, 仓库) 汇总
         """
         in_qty = case(
             (FinishedGoodsTransaction.quantity_delta > 0,

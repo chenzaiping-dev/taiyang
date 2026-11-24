@@ -158,6 +158,8 @@ class ShipmentPlanService:
                     Warehouse.warehouse_name,
                     ShipmentPlanAllocation.batch_id,
                     FinishedGoodsBatch.batch_no,
+                    FinishedGoodsBatch.product_name.label("fg_product_name"),
+                    FinishedGoodsBatch.product_specification.label("fg_product_specification"),
                     ShipmentPlanAllocation.planned_quantity,
                     ShipmentPlanAllocation.shipped_quantity,
                 )
@@ -326,6 +328,8 @@ class ShipmentPlanService:
                 FinishedGoodsBatch.id.label("batch_id"),
                 FinishedGoodsBatch.batch_no,
                 FinishedGoodsBatch.process_order_id,
+                FinishedGoodsBatch.product_name.label("fg_product_name"),
+                FinishedGoodsBatch.product_specification.label("fg_product_specification"),
                 ProcessOrder.process_order_no.label("process_order_no"),
                 ShipmentPlanAllocation.planned_quantity.label("shipment_quantity"),
             )

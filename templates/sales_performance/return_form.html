@@ -6,7 +6,7 @@
 <fieldset>
   <legend>原销售单信息</legend>
   <p>原销售单：<a href="{{ url_for('sales_performance.detail_page', perf_id=original.id) }}">{{ original.performance_no }}</a></p>
-  <p>客户：{{ original.company_name }}　产品：{{ original.product_name }}　规格：{{ original.product_specification or '-' }}</p>
+  <p>客户：{{ original.company_name }}　产品：{{ original.product_name }}</p>
   <p>原销售数量：{{ original.quantity|format_qty }}　剩余可退数量：<strong>{{ context.available_quantity|format_qty }}</strong></p>
   {% if can_view_money %}<p>原销售金额：{{ original.amount }}　剩余可冲减金额：<strong>{{ context.available_amount }}</strong></p>{% endif %}
 </fieldset>

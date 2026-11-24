@@ -41,7 +41,6 @@
       <th>生产计划单号</th>
       <th style="width:120px;">业绩单号</th>
       <th>产品名称</th>
-      <th>规格</th>
       <th style="width:100px;text-align:right;">订单总数量</th>
       <th style="width:100px;text-align:right;">锁定总数量</th>
       <th style="width:100px;text-align:right;">草稿意向锁定</th>
@@ -70,7 +69,6 @@
           </a>
         </td>
         <td>{{ r.product_name }}</td>
-        <td>{{ r.product_specification or "-" }}</td>
         <td style="text-align:right;">{{ r.total_quantity|format_qty }}</td>
         <td style="text-align:right;">{{ r.locked_qty|format_qty }}</td>
         <td style="text-align:right;">
@@ -172,7 +170,7 @@
       </tr>
       {% endfor %}
     {% else %}
-      <tr><td colspan="13" style="text-align:center;color:#999;padding:24px;">
+      <tr><td colspan="12" style="text-align:center;color:#999;padding:24px;">
         暂无生产计划
       </td></tr>
     {% endif %}

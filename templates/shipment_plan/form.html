@@ -50,11 +50,6 @@
       <input type="text" value="{{ performance.product_name }}" readonly
              style="background:#f5f5f5;flex:1;">
     </div>
-    <div class="form-row">
-      <label>产品规格（快照）</label>
-      <input type="text" value="{{ performance.product_specification or '-' }}" readonly
-             style="background:#f5f5f5;flex:1;">
-    </div>
   </fieldset>
 
   <fieldset>
@@ -66,7 +61,7 @@
           <th>仓库</th>
           <th>批次号</th>
           <th>产品名称</th>
-          <th>规格</th>
+          <th>配方号</th>
           <th style="width:60px;">单位</th>
           <th style="width:120px;text-align:right;">可用（锁定）</th>
           {% if can_view_shipment_money() %}<th style="width:110px;text-align:right;">发货单价</th>{% endif %}

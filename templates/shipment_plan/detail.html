@@ -104,10 +104,6 @@
     <tr>
       <td style="color:#888;">产品名称（快照）</td>
       <td>{{ performance.product_name if performance else "-" }}</td>
-      <td style="color:#888;">产品规格（快照）</td>
-      <td>
-        {{ performance.product_specification or "-" if performance else "-" }}
-      </td>
     </tr>
     <tr>
       <td style="color:#888;">目的地</td>
@@ -152,9 +148,6 @@
       <div style="background:#fafafa;padding:8px 12px;border-bottom:1px solid #e0e0e0;">
         <strong>{{ line.product_name }}</strong>
         <span style="color:#888;margin-left:12px;">
-          规格：{{ line.product_specification or "-" }}
-        </span>
-        <span style="color:#888;margin-left:12px;">
           单位：{{ line.unit }}
         </span>
         <span style="margin-left:12px;">
@@ -176,6 +169,8 @@
             <th style="width:60px;">#</th>
             <th>仓库</th>
             <th>批次号</th>
+            <th>实际品名</th>
+            <th>配方号</th>
             <th style="width:120px;text-align:right;">计划数量</th>
             <th style="width:120px;text-align:right;">已发数量</th>
           </tr>
@@ -187,6 +182,8 @@
             <td>{{ loop.index }}</td>
             <td>{{ a.warehouse_code }} - {{ a.warehouse_name }}</td>
             <td>{{ a.batch_no }}</td>
+            <td>{{ a.fg_product_name }}</td>
+            <td>{{ a.fg_product_specification or "-" }}</td>
             <td style="text-align:right;">{{ a.planned_quantity|format_qty }}</td>
             <td style="text-align:right;">{{ a.shipped_quantity|format_qty }}</td>
           </tr>
