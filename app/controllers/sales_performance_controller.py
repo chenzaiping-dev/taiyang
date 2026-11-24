@@ -164,8 +164,8 @@ def list_page():
         payment_labels=PAYMENT_LABELS,
         is_sales_role=has_role("sales"),
         summary=summary,
-        can_view_summary_money=can_view_money,
-        can_view_summary_cost=can_view_cost,
+        can_view_money=can_view_money,
+        can_view_cost=can_view_cost,
     )
 
 

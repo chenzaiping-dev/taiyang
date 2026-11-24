@@ -66,7 +66,7 @@
 <fieldset>
   <legend>关联原销售单</legend>
   <a href="{{ url_for('sales_performance.detail_page', perf_id=original_performance.id) }}">{{ original_performance.performance_no }}</a>
-  <span style="margin-left:12px;color:#666;">原销售单金额：{% if can_view_sales_performance_money() %}{{ original_performance.amount }}{% else %}—{% endif %}</span>
+  <span style="margin-left:12px;color:#666;">原销售单金额：{% if can_view_money %}{{ original_performance.amount }}{% else %}—{% endif %}</span>
 </fieldset>
 {% elif return_context %}
 <fieldset>
