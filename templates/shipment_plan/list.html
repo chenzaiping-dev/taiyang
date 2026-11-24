@@ -138,7 +138,7 @@
                     {% endif %}
           {% if has_permission('shipment.cancel') %}
 {# 取消：非已发货、非已取消 #}
-          {% if r.status != 'CANCELLED' %}
+          {% if r.status != 'CANCELLED' and r.status != 'DRAFT' %}
             <form method="post" style="display:inline;"
                   action="{{ url_for('shipment_plan.cancel_plan', plan_id=r.id) }}"
                   onsubmit="return confirm('确认取消该发货计划？{% if r.status in ('PARTIALLY_SHIPPED','SHIPPED') %}将撤销已发生的成品出库并还原生产计划预留{% endif %}');">

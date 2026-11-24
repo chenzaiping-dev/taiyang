@@ -360,7 +360,7 @@ def mark_planned(plan_id):
         flash("已标记为【已确认】", "success")
     except ShipmentPlanError as e:
         flash(str(e), "error")
-    return redirect(url_for("shipment_plan.list_page"))
+    return redirect(request.referrer or url_for("shipment_plan.list_page"))
 
 
 @bp.post("/<int:plan_id>/delete")
@@ -384,7 +384,7 @@ def cancel_plan(plan_id):
         flash("发货计划已取消", "success")
     except ShipmentPlanError as e:
         flash(str(e), "error")
-    return redirect(url_for("shipment_plan.list_page"))
+    return redirect(request.referrer or url_for("shipment_plan.list_page"))
 
 
 @bp.post("/<int:plan_id>/ship")
@@ -396,4 +396,4 @@ def ship_plan(plan_id):
         flash("发货成功，已出库", "success")
     except ShipmentPlanError as e:
         flash(str(e), "error")
-    return redirect(url_for("shipment_plan.list_page"))
+    return redirect(request.referrer or url_for("shipment_plan.list_page"))

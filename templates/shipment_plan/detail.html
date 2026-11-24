@@ -6,10 +6,14 @@
   <span style="color:#888;font-size:14px;">
     {{ plan.shipment_plan_no }}
   </span>
-  {% if has_permission('shipment.edit') and plan.status == "DRAFT" %}
+
+  {# ---------- 编辑：仅 DRAFT ---------- #}
+  {% if has_permission('shipment.edit') and plan.status == 'DRAFT' %}
     <a class="btn btn-primary" style="float:right;"
        href="{{ url_for('shipment_plan.edit_page', plan_id=plan.id) }}">编辑</a>
   {% endif %}
+
+  {# ---------- 删除草稿：仅 DRAFT ---------- #}
   {% if plan.status == 'DRAFT' and has_permission('shipment.delete') %}
     <form method="post" style="display:inline;float:right;margin-right:8px;"
           action="{{ url_for('shipment_plan.delete_draft', plan_id=plan.id) }}"
@@ -18,16 +22,51 @@
       <button type="submit" class="btn btn-danger">删除草稿</button>
     </form>
   {% endif %}
-  {% if plan.status != 'CANCELLED' %}
-    {% if has_permission('shipment.cancel') %}
-<form method="post" action="{{ url_for('shipment_plan.cancel_plan', plan_id=plan.id) }}"
-          onsubmit="return confirm('确认取消该发货计划？{% if plan.status in ('PARTIALLY_SHIPPED','SHIPPED') %}将撤销已发生的成品出库并还原生产计划预留{% endif %}');"
-          style="display:inline;">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button type="submit" class="btn btn-danger">取消</button>
-    </form>
+
+  {# ---------- 确认：仅 DRAFT ---------- #}
+  {% if has_permission('shipment.confirm') %}
+    {% if plan.status == 'DRAFT' %}
+      <form method="post" style="display:inline;float:right;margin-right:8px;"
+            action="{{ url_for('shipment_plan.mark_planned', plan_id=plan.id) }}"
+            onsubmit="return confirm('确认？此操作后页面不可编辑修改。');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-primary">确认</button>
+      </form>
+    {% else %}
+      <button class="btn" style="float:right;margin-right:8px;" disabled
+              title="仅草稿可确认">确认</button>
     {% endif %}
   {% endif %}
+
+  {# ---------- 发货：仅 CONFIRMED ---------- #}
+  {% if has_permission('shipment.ship') %}
+    {% if plan.status == 'CONFIRMED' %}
+      <form method="post" style="display:inline;float:right;margin-right:8px;"
+            action="{{ url_for('shipment_plan.ship_plan', plan_id=plan.id) }}"
+            onsubmit="return confirm('确认发货并出库？此操作将扣减成品库存。');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-success">发货</button>
+      </form>
+    {% else %}
+      <button class="btn" style="float:right;margin-right:8px;" disabled
+              title="仅已确认可发货">发货</button>
+    {% endif %}
+  {% endif %}
+
+  {# ---------- 取消：非草稿、非已取消 ---------- #}
+  {% if plan.status != 'CANCELLED' and plan.status != 'DRAFT' %}
+    {% if has_permission('shipment.cancel') %}
+      <form method="post" style="display:inline;float:right;margin-right:8px;"
+            action="{{ url_for('shipment_plan.cancel_plan', plan_id=plan.id) }}"
+            onsubmit="return confirm('确认取消该发货计划？{% if plan.status in ('PARTIALLY_SHIPPED','SHIPPED') %}将撤销已发生的成品出库并还原生产计划预留{% endif %}');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-danger">取消</button>
+      </form>
+    {% endif %}
+  {% endif %}
+
+  <a class="btn" style="float:right;margin-right:8px;"
+     href="{{ url_for('shipment_plan.list_page') }}">返回列表</a>
 </h2>
 
 <fieldset>

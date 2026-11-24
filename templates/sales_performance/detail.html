@@ -96,7 +96,7 @@
     </tbody>
   </table>
   {% else %}<p style="color:#888;">暂无退货记录</p>{% endif %}
-  {% if has_permission('sales_performance.create') and perf.status in ('CONFIRMED','PRODUCED','SHIPPED','COMPLETED') and return_context.available_quantity > 0 and return_context.available_amount >= 0 %}
+  {% if has_permission('sales_performance.create') and perf.status in ('COMPLETED') and return_context.available_quantity > 0 and return_context.available_amount >= 0 %}
     <a class="btn btn-primary" href="{{ url_for('sales_performance.new_return_page', perf_id=perf.id) }}">新建退货单</a>
   {% endif %}
 </fieldset>

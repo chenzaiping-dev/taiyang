@@ -71,7 +71,7 @@
   {% endif %}
 
   {# ---------- 取消：DRAFT / ORDERED / PRODUCING / RECEIVED ---------- #}
-  {% if order.status in ['DRAFT', 'ORDERED', 'PRODUCING', 'RECEIVED'] and has_permission('process_order.cancel') %}
+  {% if order.status in ['ORDERED', 'PRODUCING', 'RECEIVED'] and has_permission('process_order.cancel') %}
   <form method="post"
         action="{{ url_for('process_order.cancel', order_id=order.id) }}"
         onsubmit="return confirm('确认取消该工艺单？{% if order.status == 'RECEIVED' %}将冲销成品入库与原料出库{% elif order.status in ['ORDERED','PRODUCING'] %}将冲销原料出库{% endif %}，取消后不可恢复。');"
