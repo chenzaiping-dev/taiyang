@@ -4,10 +4,17 @@
 {% block content %}
 <h2>
   工艺单详情
-  <a class="btn" style="float:right;"
-     href="{{ url_for('process_order.edit_page', order_id=order.id) }}">
-    编辑
-  </a>
+  <span style="color:#888;font-size:14px;">#{{ order.process_order_no }}</span>
+
+  {# ---------- 编辑：仅 DRAFT ---------- #}
+  {% if order.status == 'DRAFT' and has_permission('process_order.edit') %}
+    <a class="btn" style="float:right;"
+       href="{{ url_for('process_order.edit_page', order_id=order.id) }}">
+      编辑
+    </a>
+  {% endif %}
+
+  {# ---------- 删除草稿：仅 DRAFT ---------- #}
   {% if order.status == 'DRAFT' and has_permission('process_order.delete') %}
   <form method="post" style="display:inline;float:right;margin-right:8px;"
         action="{{ url_for('process_order.delete_draft', order_id=order.id) }}"
@@ -16,17 +23,78 @@
     <button type="submit" class="btn btn-danger">删除草稿</button>
   </form>
   {% endif %}
-{% if order.status in ('ORDERED', 'PRODUCING', 'RECEIVED') %}
-  <a class="btn btn-warn"
-     href="{{ url_for('process_order.adjust_materials_page', order_id=order.id) }}">
-    调整原料配比
-  </a>
-{% endif %}
-  {# ⭐ 新增：调整历史入口 #}
-  <a class="btn"
+
+  {# ---------- 下单：仅 DRAFT，带原料仓下拉 ---------- #}
+  {% if order.status == 'DRAFT' and has_permission('process_order.place') %}
+  <form method="post"
+        action="{{ url_for('process_order.place_order', order_id=order.id) }}"
+        onsubmit="return confirm('确认下单？将自动生成原料领料出库单。');"
+        style="display:inline-flex;float:right;margin-right:8px;gap:4px;align-items:center;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <select name="warehouse_id" required
+            style="font-size:12px;padding:3px;max-width:200px;">
+      {% for w in rm_warehouses %}
+        <option value="{{ w.id }}">
+          [{{ {'raw_material':'原料','general':'普通'}.get(w.warehouse_type, w.warehouse_type) }}]
+          {{ w.warehouse_code }} - {{ w.warehouse_name }}
+        </option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-primary">下单</button>
+  </form>
+  {% elif order.status == 'DRAFT' %}
+    <button class="btn" style="float:right;margin-right:8px;" disabled
+            title="无下单权限">下单</button>
+  {% endif %}
+
+  {# ---------- 入库：仅 ORDERED，带成品仓下拉 ---------- #}
+  {% if order.status == 'ORDERED' and has_permission('process_order.receive') %}
+  <form method="post"
+        action="{{ url_for('process_order.receive', order_id=order.id) }}"
+        onsubmit="return confirm('确认入库到成品库？批次号 {{ order.batch_no or '' }}');"
+        style="display:inline-flex;float:right;margin-right:8px;gap:4px;align-items:center;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <select name="warehouse_id" required
+            style="font-size:12px;padding:3px;max-width:200px;">
+      {% for w in fg_warehouses %}
+        <option value="{{ w.id }}">
+          [{{ {'finished_goods':'成品','general':'普通'}.get(w.warehouse_type, w.warehouse_type) }}]
+          {{ w.warehouse_code }} - {{ w.warehouse_name }}
+        </option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-primary">入库</button>
+  </form>
+  {% elif order.status == 'ORDERED' %}
+    <button class="btn" style="float:right;margin-right:8px;" disabled
+            title="无入库权限">入库</button>
+  {% endif %}
+
+  {# ---------- 取消：DRAFT / ORDERED / PRODUCING / RECEIVED ---------- #}
+  {% if order.status in ['DRAFT', 'ORDERED', 'PRODUCING', 'RECEIVED'] and has_permission('process_order.cancel') %}
+  <form method="post"
+        action="{{ url_for('process_order.cancel', order_id=order.id) }}"
+        onsubmit="return confirm('确认取消该工艺单？{% if order.status == 'RECEIVED' %}将冲销成品入库与原料出库{% elif order.status in ['ORDERED','PRODUCING'] %}将冲销原料出库{% endif %}，取消后不可恢复。');"
+        style="display:inline;float:right;margin-right:8px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-danger">取消</button>
+  </form>
+  {% endif %}
+
+  {# ---------- 调整原料配比：ORDERED / PRODUCING / RECEIVED ---------- #}
+  {% if order.status in ('ORDERED', 'PRODUCING', 'RECEIVED') %}
+    <a class="btn btn-warn""
+       href="{{ url_for('process_order.adjust_materials_page', order_id=order.id) }}">
+      调整原料配比
+    </a>
+  {% endif %}
+
+  {# ---------- 调整记录 ---------- #}
+  <a class="btn""
      href="{{ url_for('process_order.adjustments_list_page', order_id=order.id) }}">
     调整记录
   </a>
+
   <a class="btn" style="float:right;margin-right:8px;"
      href="{{ url_for('process_order.list_page') }}">
     返回列表
@@ -78,6 +146,20 @@
       {{ "-" }}
     {% endif %}
   </div>
+  {# ⭐ 新增：关联生产计划 #}
+  <div class="form-row"><label>生产计划单号：</label>
+    {% if production_plan %}
+      <a href="{{ url_for('production_plan.detail_page', plan_id=production_plan.id) }}">
+        {{ production_plan.plan_no }}
+      </a>
+      <span class="status-badge status-{{ production_plan.status|lower }}"
+            style="margin-left:6px;">
+        {{ plan_status_labels.get(production_plan.status, production_plan.status) }}
+      </span>
+    {% else %}
+      <span style="color:#999;">-（未关联生产计划）</span>
+    {% endif %}
+  </div>  
   <div class="form-row"><label>下单时间：</label>
     {{ order.order_time.strftime("%Y-%m-%d %H:%M") if order.order_time else "-" }}
   </div>

@@ -490,7 +490,10 @@ def confirm_plan(plan_id):
         flash("已确认", "success")
     except ProductionPlanError as e:
         flash(str(e), "error")
-    return redirect(url_for("production_plan.list_page"))
+    return redirect(
+        request.referrer
+        or url_for("production_plan.list_page")
+    )
 
 
 @bp.post("/<int:plan_id>/process")
@@ -500,7 +503,10 @@ def process_plan(plan_id):
         flash("已开始处理", "success")
     except ProductionPlanError as e:
         flash(str(e), "error")
-    return redirect(url_for("production_plan.list_page"))
+        return redirect(
+        request.referrer
+        or url_for("production_plan.list_page")
+    )
 
 
 @bp.post("/<int:plan_id>/complete")
@@ -513,7 +519,10 @@ def complete_plan(plan_id):
             flash(plan._cost_warning, "error")
     except ProductionPlanError as e:
         flash(str(e), "error")
-    return redirect(url_for("production_plan.list_page"))
+    return redirect(
+        request.referrer
+        or url_for("production_plan.list_page")
+    )
 
 
 @bp.post("/<int:plan_id>/cancel")
@@ -523,7 +532,10 @@ def cancel_plan(plan_id):
         flash("已取消", "success")
     except ProductionPlanError as e:
         flash(str(e), "error")
-    return redirect(url_for("production_plan.list_page"))
+    return redirect(
+        request.referrer
+        or url_for("production_plan.list_page")
+    )
 
 @bp.post("/<int:plan_id>/reopen")
 def reopen_plan(plan_id):

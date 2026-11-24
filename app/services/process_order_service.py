@@ -17,6 +17,7 @@ from app.generated.models.inventory_documents import InventoryDocument
 from app.generated.models.inventory_transactions import InventoryTransaction
 from app.generated.models.production_plans import ProductionPlan
 from app.generated.models.production_plan_process_orders import ProductionPlanProcessOrder
+from app.generated.models.finished_goods_documents import FinishedGoodsDocument
 
 from app.services.finished_goods_service import FinishedGoodsError, FinishedGoodsService
 from app.generated.models.finished_goods_batches import FinishedGoodsBatch
@@ -488,6 +489,91 @@ class ProcessOrderService:
         rows = db.session.execute(stmt).mappings().all()
         rows = [dict(r) for r in rows]
         return (rows, total, summary) if include_summary else (rows, total)
+
+    @staticmethod
+    def get_detail(order_id: int) -> dict | None:
+        """
+        返回工艺单详情页所需的全部数据：
+        {
+        'order', 'materials', 'material_warehouse', 'material_map',
+        'factory', 'performance', 'follow', 'creator',
+        'document', 'raw_document',
+        'production_plan',            # 关联的生产计划（可为 None）
+        }
+        工艺单不存在返回 None。
+        """
+        order = db.session.get(ProcessOrder, order_id)
+        if not order:
+            return None
+
+        # 1. 原料配比明细
+        materials = (
+            ProcessOrderMaterial.query
+            .filter_by(process_order_id=order_id)
+            .order_by(ProcessOrderMaterial.id.asc())
+            .all()
+        )
+
+        # 2. 领料仓库
+        material_warehouse = (
+            db.session.get(Warehouse, order.material_warehouse_id)
+            if order.material_warehouse_id else None
+        )
+
+        # 3. 原料批量取（避免 N+1）
+        material_map = {}
+        if materials:
+            mat_ids = {m.material_id for m in materials}
+            for mat in Material.query.filter(Material.id.in_(mat_ids)).all():
+                material_map[mat.id] = mat
+
+        # 4. 关联基础资料
+        factory = db.session.get(Factory, order.factory_id)
+        performance = (
+            db.session.get(SalesPerformance, order.performance_id)
+            if order.performance_id else None
+        )
+        follow = (
+            db.session.get(Employee, order.followup_employee_id)
+            if order.followup_employee_id else None
+        )
+        creator = (
+            db.session.get(Employee, order.created_by)
+            if order.created_by else None
+        )
+
+        # 5. 成品入库单 / 原料出库单
+        document = FinishedGoodsDocument.query.filter_by(
+            document_no="FG-IN-" + order.process_order_no
+        ).first()
+        raw_document = InventoryDocument.query.filter_by(
+            document_no="PROD-OUT-" + order.process_order_no
+        ).first()
+
+        # 6. 关联的生产计划（一个工艺单只能挂一个计划，uk_process_order_single_plan）
+        production_plan = (
+            db.session.query(ProductionPlan)
+            .join(
+                ProductionPlanProcessOrder,
+                ProductionPlanProcessOrder.production_plan_id == ProductionPlan.id,
+            )
+            .filter(ProductionPlanProcessOrder.process_order_id == order.id)
+            .first()
+        )
+
+        return {
+            "order": order,
+            "materials": materials,
+            "material_warehouse": material_warehouse,
+            "material_map": material_map,
+            "factory": factory,
+            "performance": performance,
+            "follow": follow,
+            "creator": creator,
+            "document": document,
+            "raw_document": raw_document,
+            "production_plan": production_plan,
+        }
 
     @staticmethod
     def change_status(order_id: int, action: str) -> dict:

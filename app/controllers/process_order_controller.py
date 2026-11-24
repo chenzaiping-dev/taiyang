@@ -108,52 +108,17 @@ def list_page():
 
 @bp.get("/<int:order_id>")
 def detail_page(order_id: int):
-    order = db.session.get(ProcessOrder, order_id)
-    if not order:
+    detail = ProcessOrderService.get_detail(order_id)
+    if not detail:
         abort(404)
-
-    materials = (
-        ProcessOrderMaterial.query
-        .filter_by(process_order_id=order_id)
-        .order_by(ProcessOrderMaterial.id.asc())
-        .all()
-    )
-    material_warehouse = (
-        db.session.get(Warehouse, order.material_warehouse_id)
-        if order.material_warehouse_id else None
-    )
-
-    # ⭐ 一次性批量取原料编码 + 名称，避免 N+1
-    material_map = {}
-    if materials:
-        mat_ids = [m.material_id for m in materials]
-        for mat in Material.query.filter(Material.id.in_(mat_ids)).all():
-            material_map[mat.id] = mat
-
-    factory = db.session.get(Factory, order.factory_id)
-    performance = db.session.get(SalesPerformance, order.performance_id)
-    follow = db.session.get(Employee, order.followup_employee_id)
-    creator = db.session.get(Employee, order.created_by)
-
-    document_no = "FG-IN-" + order.process_order_no
-    document = FinishedGoodsDocument.query.filter_by(document_no=document_no).first()
-
-    raw_document_no = "PROD-OUT-" + order.process_order_no
-    raw_document = InventoryDocument.query.filter_by(document_no=raw_document_no).first()
 
     return render_template(
         "process_order/detail.html",
-        order=order,
-        materials=materials,
-        material_warehouse=material_warehouse,
-        material_map=material_map,   # ⭐ 传给模板
+        **detail,                       # order / materials / material_map / factory / ...
         status_labels=PO_STATUS_LABELS,
-        factory=factory,
-        document=document,
-        raw_document=raw_document,
-        performance=performance,
-        follow=follow,
-        creator=creator,
+        plan_status_labels=PLAN_STATUS_LABELS,
+        rm_warehouses=_rm_warehouses(),   # 若上一步已加，保留
+        fg_warehouses=_fg_warehouses(),   # 若上一步已加，保留
     )
 
 # ---------- JSON API ----------
@@ -484,11 +449,8 @@ def receive(order_id: int):
         if can_view_production_cost():
             message += f"，单位成本 {result['unit_cost']}"
         flash(message, "success")
-        return redirect(url_for("finished_goods.document_detail_page",
-            direction="in", document_id=result["finished_goods"]["document_id"]))
     except ProcessOrderError as e:
         flash(str(e), "error")
-
     return redirect(request.referrer or url_for("process_order.list_page"))
 
 @bp.post("/<int:order_id>/cancel")

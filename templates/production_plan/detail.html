@@ -6,18 +6,73 @@
   生产计划详情
   <span style="color:#888;font-size:14px;">#{{ plan.plan_no }}</span>
 
+  {# ---------- 状态操作按钮（按状态显示） ---------- #}
   {% if plan.status == 'DRAFT' %}
-    <a class="btn" style="float:right;"
-       href="{{ url_for('production_plan.edit_page', plan_id=plan.id) }}">编辑</a>
-  {% endif %}
+    {# 编辑 #}
+    {% if has_permission('production_plan.edit') %}
+      <a class="btn" style="float:right;"
+         href="{{ url_for('production_plan.edit_page', plan_id=plan.id) }}">编辑</a>
+    {% endif %}
+    {# 确认 #}
+    {% if has_permission('production_plan.confirm') %}
+      <form method="post" style="float:right;margin-right:8px;"
+            action="{{ url_for('production_plan.confirm_plan', plan_id=plan.id) }}"
+            onsubmit="return confirm('确认该生产计划？确认后草稿意向锁定将落地为正式预留。');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-primary">确认</button>
+      </form>
+    {% endif %}
+    {# 取消 #}
+    {% if has_permission('production_plan.cancel') %}
+      <form method="post" style="float:right;margin-right:8px;"
+            action="{{ url_for('production_plan.cancel_plan', plan_id=plan.id) }}"
+            onsubmit="return confirm('确认取消该生产计划？');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-danger">取消</button>
+      </form>
+    {% endif %}
 
-  {% if plan.status == 'CANCELLED' %}
-    <form method="post" style="float:right;margin-right:8px;"
-          action="{{ url_for('production_plan.reopen_plan', plan_id=plan.id) }}"
-          onsubmit="return confirm('重新打开为草稿后可继续编辑，是否继续？');">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button type="submit" class="btn btn-primary">重新编辑</button>
-    </form>
+  {% elif plan.status == 'CONFIRMED' %}
+    {# 完成 #}
+    {% if has_permission('production_plan.complete') %}
+      <form method="post" style="float:right;margin-right:8px;"
+            action="{{ url_for('production_plan.complete_plan', plan_id=plan.id) }}"
+            onsubmit="return confirm('确认完成？将检查所有工艺单是否已入库，并为成品批次创建预留。');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-success">完成</button>
+      </form>
+    {% endif %}
+    {# 取消 #}
+    {% if has_permission('production_plan.cancel') %}
+      <form method="post" style="float:right;margin-right:8px;"
+            action="{{ url_for('production_plan.cancel_plan', plan_id=plan.id) }}"
+            onsubmit="return confirm('确认取消该生产计划？');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-danger">取消</button>
+      </form>
+    {% endif %}
+
+  {% elif plan.status == 'CANCELLED' %}
+    {# 重新编辑 #}
+    {% if has_permission('production_plan.reopen') %}
+      <form method="post" style="float:right;margin-right:8px;"
+            action="{{ url_for('production_plan.reopen_plan', plan_id=plan.id) }}"
+            onsubmit="return confirm('重新打开为草稿后可继续编辑，是否继续？');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-primary">重新编辑</button>
+      </form>
+    {% endif %}
+
+  {% elif plan.status == 'COMPLETED' %}
+    {# 完成态也允许取消（与列表页口径一致：DRAFT/CONFIRMED/COMPLETED 可取消） #}
+    {% if has_permission('production_plan.cancel') %}
+      <form method="post" style="float:right;margin-right:8px;"
+            action="{{ url_for('production_plan.cancel_plan', plan_id=plan.id) }}"
+            onsubmit="return confirm('确认取消该生产计划？');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-danger">取消</button>
+      </form>
+    {% endif %}
   {% endif %}
 
   <a class="btn" style="float:right;margin-right:8px;"
