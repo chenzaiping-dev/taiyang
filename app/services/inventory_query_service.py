@@ -14,6 +14,7 @@ from app.generated.models.inventory_cost_allocations import InventoryCostAllocat
 
 from app.generated.models.process_orders import ProcessOrder
 from app.utils.decimal_utils import _q3, _q6
+from app.utils.datetime_utils import util_parse_date, util_parse_date_end
 
 
 def _infer_source_entry(row: dict) -> str:
@@ -208,13 +209,8 @@ class InventoryQueryService:
         return rows, total
 
     @staticmethod
-    def query_material_stock_with_cost_layers(
-        material_code: str = None,
-        warehouse_id: int = None,
-        group_by_warehouse: bool = False,
-        page: int = 1,
-        page_size: int = 50,
-        include_summary: bool = False,
+    def query_material_stock_with_cost_layers(params=None, page: int = 1, page_size: int = 50,
+                                              include_summary: bool = False,
     ):
         """
         查询原料库存（按 FIFO 成本层逐行展示）。
@@ -229,6 +225,13 @@ class InventoryQueryService:
             original_qty, remaining_qty, unit_cost,
             remaining_cost, original_cost
         """
+        material_code = (params.get("material_code") or "").strip() or None
+        try:
+            warehouse_id = int(params.get("warehouse_id") or 0) or None
+        except (TypeError, ValueError):
+            warehouse_id = None
+        group_by_warehouse = params.get("group_by_warehouse") == "1" or warehouse_id is not None
+
         # 只统计 remaining_qty > 0 的成本层
         base_filter = [InventoryCostLayer.remaining_qty > 0]
 
@@ -505,23 +508,24 @@ class InventoryQueryService:
         return (rows, total, summary) if include_summary else (rows, total)
 
     @staticmethod
-    def list_transactions(
-        material_code: str = None,
-        warehouse_id: int = None,
-        transaction_type: str = None,
-        document_no: str = None,
-        date_from=None,
-        date_to=None,
-        page: int = 1,
-        page_size: int = 50,
-        include_summary: bool = False,
-    ):
+    def list_transactions(params=None, page: int = 1, page_size: int = 50,
+                          include_summary: bool = False):
         """
         原料出入库流水查询（含单据头信息）。
         返回 (rows, total)
         """
-        creator = db.aliased(Employee)
+        params = params or {}
+        material_code = (params.get("material_code") or "").strip() or None
+        transaction_type = (params.get("transaction_type") or "").strip() or None
+        document_no = (params.get("document_no") or "").strip() or None
+        date_from = util_parse_date(params.get("date_from"))
+        date_to = util_parse_date_end(params.get("date_to"))
+        try:
+            warehouse_id = int(params.get("warehouse_id") or 0) or None
+        except (TypeError, ValueError):
+            warehouse_id = None
 
+        creator = db.aliased(Employee)
         # 关联：原料 / 仓库 / 单据 / 供应商 / 工艺单
         stmt = (
             select(

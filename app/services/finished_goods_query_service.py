@@ -15,6 +15,7 @@ from app.services.finished_goods_service import (
     FG_INBOUND_TYPE_LABELS, FG_OUTBOUND_TYPE_LABELS, FG_TX_TYPE_LABELS
 )
 from app.utils.decimal_utils import _q3, _q6
+from app.utils.datetime_utils import util_parse_date, util_parse_date_end
 
 def _infer_source_entry(row: dict) -> str:
     doc_no = row.get("document_no") or ""
@@ -51,10 +52,17 @@ def _infer_source_entry(row: dict) -> str:
 class FinishedGoodsQueryService:
 
     @staticmethod
-    def list_warehouse_stock(warehouse_id=None, batch_keyword=None,
-                             page=1, page_size=50, include_summary=False):
+    def list_warehouse_stock(params=None, page: int = 1, page_size: int = 50,
+                             include_summary=False):
         """成品库批次列表：以批次档案为主，显示所有批次及其各仓库库存（含零库存）。"""
         # 锁定数量按仓库 + 批次汇总；没有预留时通过 COALESCE 显示为 0。
+        params = params or {}
+        batch_keyword = (params.get("batch_keyword") or "").strip() or None
+        try:
+            warehouse_id = int(params.get("warehouse_id") or 0) or None
+        except (TypeError, ValueError):
+            warehouse_id = None
+
         locked_subq = (
             select(
                 FinishedGoodsReservation.warehouse_id.label("wh_id"),
@@ -164,9 +172,20 @@ class FinishedGoodsQueryService:
         return (rows, total, dict(summary)) if include_summary else (rows, total)
 
     @staticmethod
-    def list_transactions(warehouse_id=None, batch_keyword=None, tx_type=None,
-                          document_no=None, date_from=None, date_to=None,
-                          page=1, page_size=50, include_summary=False):
+    def list_transactions(params=None, page: int = 1, page_size: int = 50,
+                          include_summary=False):
+
+        params = params or {}
+        batch_keyword = (params.get("batch_keyword") or "").strip() or None
+        tx_type = (params.get("transaction_type") or "").strip() or None
+        document_no = (params.get("document_no") or "").strip() or None
+        date_from = util_parse_date(params.get("date_from"))
+        date_to = util_parse_date_end(params.get("date_to"))
+        try:
+            warehouse_id = int(params.get("warehouse_id") or 0) or None
+        except (TypeError, ValueError):
+            warehouse_id = None
+
         creator = db.aliased(Employee)   # ⭐ 单据制单人
 
         stmt = (

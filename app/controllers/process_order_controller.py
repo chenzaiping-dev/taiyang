@@ -12,7 +12,8 @@ from app.generated.models.sales_performance import SalesPerformance
 from app.generated.models.employees import Employee
 from app.generated.models.process_orders import ProcessOrder
 from app.generated.models.process_order_materials import ProcessOrderMaterial
-from app.generated.models.finished_goods_documents import FinishedGoodsDocument
+from app.generated.models.inventory_documents import InventoryDocument
+from app.generated.models.process_order_material_adjustments import ProcessOrderMaterialAdjustment
 
 from app.schemas.process_order_schema import ProcessOrderRequestSchema
 from app.services.process_order_service import (
@@ -24,8 +25,6 @@ from app.services.process_order_adjustment_service import (
 )
 from app.services.form_parser import parse_process_order_form, FormParseError
 from app.services.inventory_service import _rm_warehouses, InventoryError
-from app.generated.models.inventory_documents import InventoryDocument
-from app.generated.models.process_order_material_adjustments import ProcessOrderMaterialAdjustment
 from app.services.permission_service import can_view_production_cost, can_edit_production_cost
 from app.core.money_redaction import redact_money_fields
 from app.utils.datetime_utils import util_parse_date, util_parse_date_end

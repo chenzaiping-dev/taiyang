@@ -12,7 +12,7 @@ from app.generated.models.shipment_plans import ShipmentPlan
 from app.services.sales_performance_service import (
     SalesPerformanceService, SalesPerformanceError, STATUS_LABELS, PAYMENT_LABELS,
 )
-from app.utils.datetime_utils import util_parse_date, util_parse_date_end
+from app.utils.datetime_utils import util_parse_date
 from app.exports.queries import run_query
 from app.services.permission_service import (
     can_view_sales_performance_money, can_view_sales_performance_cost,
@@ -134,19 +134,7 @@ def list_page():
     page_size = 20
 
     rows, total, summary = SalesPerformanceService.list_performances(
-        performance_no=performance_no,
-        company_name=company_name,
-        product_name=product_name,
-        status=status,
-        payment_status=payment_status,
-        date_from=util_parse_date(date_from_raw),
-        date_to=util_parse_date_end(date_to_raw),
-        salesperson_id=salesperson_id,
-        doc_type=doc_type,
-        exclude_drafts=has_role("order_followup"),
-        page=page,
-        page_size=page_size,
-        include_summary=True,
+        params=request.args, page=page, page_size=page_size, include_summary=True
     )
     can_view_money = can_view_sales_performance_money()
     can_view_cost = can_view_sales_performance_cost()

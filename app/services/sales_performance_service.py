@@ -12,9 +12,11 @@ from app.generated.models.shipment_plans import ShipmentPlan
 from app.services.production_plan_service import PLAN_STATUS_LABELS
 from app.utils.datetime_utils import now_beijing_naive, SUMMARY_EXCLUDED_STATUSES
 from app.utils.decimal_utils import _q3, _q6
+from app.utils.datetime_utils import util_parse_date, util_parse_date_end
 from app.services.sales_performance_access_service import (
     apply_sales_performance_scope,
 )
+from app.services.permission_service import has_role
 
 PAYMENT_LABELS = {"UNPAID": "未收款", "PAID": "已收款"}
 
@@ -471,11 +473,26 @@ class SalesPerformanceService:
 
     # ---------- 列表 ----------
     @staticmethod
-    def list_performances(performance_no=None, company_name=None, product_name=None,
-                          status=None, payment_status=None, date_from=None,
-                          date_to=None, salesperson_id=None, doc_type=None,
-                          exclude_drafts=False, page=1, page_size=20,
+    def list_performances(params=None, page: int = 1, page_size: int = 20,
                           include_summary=False):
+
+        params = params or {}
+        performance_no = (params.get("performance_no") or "").strip() or None
+        company_name = (params.get("company_name") or "").strip() or None
+        product_name = (params.get("product_name") or "").strip() or None
+        status = (params.get("status") or "").strip() or None
+        payment_status = (params.get("payment_status") or "").strip() or None
+        date_from = util_parse_date(params.get("date_from"))
+        date_to = util_parse_date_end(params.get("date_to"))
+        doc_type = (params.get("doc_type") or "").strip() or None
+        # 跟单员可能同时拥有其他角色；只要包含 order_followup 角色，
+        # 就不展示业务员尚未提交的草稿业绩单。该规则同时作用于列表和 Excel。
+        exclude_drafts = has_role("order_followup")
+        try:
+            salesperson_id = int(params.get("salesperson_id") or 0) or None
+        except (TypeError, ValueError):
+            salesperson_id = None
+
         creator = db.aliased(Employee)
         sales = db.aliased(Employee)
         co_sales = db.aliased(Employee)

@@ -6,21 +6,24 @@
 
 <form method="get" action="{{ url_for('inventory_query.material_stock_page') }}"
       style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-    {% if available_materials %}
-    <select name="material_id">
-        <option value="">-- 全部原料 --</option>
-        {% for m in available_materials %}
+  {% if available_materials %}
+    {# 仓库内已有库存的原料：下拉快速选择（回填到 material_code） #}
+    <select id="material-picker" style="max-width:320px;">
+      <option value="">-- 从当前仓库已有库存中选择 --</option>
+      {% for m in available_materials %}
         <option value="{{ m.material_code }}"
-            {% if material_code == m.material_code %}selected{% endif %}>
-            {{ m.material_code }} - {{ m.material_name }}
+          {% if material_code == m.material_code %}selected{% endif %}>
+          {{ m.material_code }} - {{ m.material_name }}
         </option>
-        {% endfor %}
+      {% endfor %}
     </select>
-    <input type="hidden" name="material_code" value="{{ material_code }}">
-    {% else %}
-    <input type="text" name="material_code" value="{{ material_code }}"
-            placeholder="原料编码/名称" maxlength="50">
-    {% endif %}
+  {% endif %}
+
+  {# 始终保留的模糊搜索输入框 #}
+  <input type="text" name="material_code" id="material-code-input"
+        value="{{ material_code }}"
+        placeholder="原料编码/名称（模糊）" maxlength="50"
+        style="width:180px;">
 
   <select name="warehouse_id" onchange="this.form.submit()">
     <option value="">-- 全部仓库 --</option>
@@ -156,4 +159,15 @@
          page=page+1) }}">下一页</a>
   {% endif %}
 </div>
+
+<script>
+  (function () {
+    const picker = document.getElementById("material-picker");
+    const input  = document.getElementById("material-code-input");
+    if (!picker || !input) return;
+    picker.addEventListener("change", function () {
+      input.value = this.value;   // 回填到 material_code
+    });
+  })();
+</script>
 {% endblock %}

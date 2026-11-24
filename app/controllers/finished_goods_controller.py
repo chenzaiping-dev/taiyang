@@ -324,11 +324,7 @@ def warehouses_page():
     page_size = 50
 
     rows, total, summary = FinishedGoodsQueryService.list_warehouse_stock(
-        warehouse_id=warehouse_id,
-        batch_keyword=keyword,
-        page=page,
-        page_size=page_size,
-        include_summary=True,
+        params=request.args, page=page, page_size=page_size, include_summary=True
     )
     can_view_cost = can_view_finished_goods_cost()
     if not can_view_cost:
@@ -364,15 +360,7 @@ def transactions_page():
     page_size = 50
 
     rows, total, summary = FinishedGoodsQueryService.list_transactions(
-        warehouse_id=warehouse_id,
-        batch_keyword=keyword,
-        tx_type=tx_type,
-        document_no=document_no,
-        date_from=util_parse_date(date_from_raw),
-        date_to=util_parse_date_end(date_to_raw),
-        page=page,
-        page_size=page_size,
-        include_summary=True,
+        params=request.args, page=page, page_size=page_size, include_summary=True
     )
     can_view_cost = can_view_finished_goods_cost()
     if not can_view_cost:

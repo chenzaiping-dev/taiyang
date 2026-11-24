@@ -1,12 +1,9 @@
 """Business query layer shared by HTML list pages and XLSX exports."""
 
-from app.utils.datetime_utils import util_parse_date, util_parse_date_end
 from app.services.inventory_query_service import InventoryQueryService
 from app.services.finished_goods_query_service import FinishedGoodsQueryService
 from app.services.sales_performance_service import SalesPerformanceService
 from app.services.shipment_plan_service import ShipmentPlanService
-from app.services.permission_service import has_role
-
 
 EXPORT_PAGE_SIZE = 2_000
 
@@ -71,56 +68,36 @@ def _pagination(params):
 
 def material_stock_layers(params):
     page, page_size = _pagination(params)
-    material_code = (params.get("material_code") or "").strip() or None
-    warehouse_id = _positive_int(params.get("warehouse_id"))
-    group_by_warehouse = params.get("group_by_warehouse") == "1" or warehouse_id is not None
     return InventoryQueryService.query_material_stock_with_cost_layers(
-        material_code=material_code, warehouse_id=warehouse_id,
-        group_by_warehouse=group_by_warehouse, page=page, page_size=page_size,
+        params=params, page=page, page_size=page_size,
     )
 
 
 def material_transactions(params):
     page, page_size = _pagination(params)
     return InventoryQueryService.list_transactions(
-        material_code=(params.get("material_code") or "").strip() or None,
-        warehouse_id=_positive_int(params.get("warehouse_id")),
-        transaction_type=(params.get("transaction_type") or "").strip() or None,
-        document_no=(params.get("document_no") or "").strip() or None,
-        date_from=util_parse_date(params.get("date_from")),
-        date_to=util_parse_date_end(params.get("date_to")),
-        page=page, page_size=page_size,
+        params=params, page=page, page_size=page_size,
     )
 
 
 def finished_goods_stock(params):
     page, page_size = _pagination(params)
     return FinishedGoodsQueryService.list_warehouse_stock(
-        warehouse_id=_positive_int(params.get("warehouse_id")),
-        batch_keyword=(params.get("batch_keyword") or "").strip() or None,
-        page=page, page_size=page_size,
+        params=params, page=page, page_size=page_size,
     )
 
 
 def finished_goods_transactions(params):
     page, page_size = _pagination(params)
     return FinishedGoodsQueryService.list_transactions(
-        warehouse_id=_positive_int(params.get("warehouse_id")),
-        batch_keyword=(params.get("batch_keyword") or "").strip() or None,
-        tx_type=(params.get("transaction_type") or "").strip() or None,
-        document_no=(params.get("document_no") or "").strip() or None,
-        date_from=util_parse_date(params.get("date_from")),
-        date_to=util_parse_date_end(params.get("date_to")),
-        page=page, page_size=page_size,
+        params=params, page=page, page_size=page_size,
     )
 
 
 def shipment_plans(params):
     page, page_size = _pagination(params)
     return ShipmentPlanService.list_plans_query(
-        params=params,
-        page=page,
-        page_size=page_size,
+        params=params, page=page, page_size=page_size,
     )
 
 
@@ -134,19 +111,7 @@ def shipment_plan_details(params):
 def sales_performances(params):
     page, page_size = _pagination(params)
     return SalesPerformanceService.list_performances(
-        performance_no=(params.get("performance_no") or "").strip() or None,
-        company_name=(params.get("company_name") or "").strip() or None,
-        product_name=(params.get("product_name") or "").strip() or None,
-        status=(params.get("status") or "").strip() or None,
-        payment_status=(params.get("payment_status") or "").strip() or None,
-        date_from=util_parse_date(params.get("date_from")),
-        date_to=util_parse_date_end(params.get("date_to")),
-        salesperson_id=_positive_int(params.get("salesperson_id")),
-        doc_type=(params.get("doc_type") or "").strip() or None,
-        # 跟单员可能同时拥有其他角色；只要包含 order_followup 角色，
-        # 就不展示业务员尚未提交的草稿业绩单。该规则同时作用于列表和 Excel。
-        exclude_drafts=has_role("order_followup"),
-        page=page, page_size=page_size,
+        params=params, page=page, page_size=page_size,
     )
 
 

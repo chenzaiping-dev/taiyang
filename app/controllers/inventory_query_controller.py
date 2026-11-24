@@ -139,7 +139,6 @@ def material_stock_page():
 
 @bp.get("/material-stock-with-cost-layers")
 def material_stock_with_cost_layers_page():
-    print("here")
     material_code = request.args.get("material_code", "").strip() or None
     wh_raw = request.args.get("warehouse_id", "").strip()
     warehouse_id = int(wh_raw) if wh_raw.isdigit() else None
@@ -153,12 +152,7 @@ def material_stock_with_cost_layers_page():
     page_size = 50
 
     rows, total, summary = InventoryQueryService.query_material_stock_with_cost_layers(
-        material_code=material_code,
-        warehouse_id=warehouse_id,
-        group_by_warehouse=group_by_warehouse,
-        page=page,
-        page_size=page_size,
-        include_summary=True,
+        params=request.args, page=page, page_size=page_size, include_summary=True
     )
     can_view_cost = can_view_inventory_cost()
     if not can_view_cost:
@@ -263,15 +257,7 @@ def material_transactions_page():
     page_size = 50
 
     rows, total, summary = InventoryQueryService.list_transactions(
-        material_code=material_code,
-        warehouse_id=warehouse_id,
-        transaction_type=transaction_type,
-        document_no=document_no,
-        date_from=util_parse_date(date_from_raw),
-        date_to=util_parse_date_end(date_to_raw),
-        page=page,
-        page_size=page_size,
-        include_summary=True,
+        params=request.args, page=page, page_size=page_size, include_summary=True
     )
     can_view_cost = can_view_inventory_cost()
     if not can_view_cost:
