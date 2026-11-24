@@ -1,10 +1,39 @@
 {% extends "inventory/base.html" %}
-{% block title %}业绩单列表{% endblock %}
+{% block title %}业绩单列表</div>
+{% endblock %}
 {% block content %}
+<style>
+@media(max-width:768px){body{margin:10px!important;overflow-x:hidden}}
+.sales-return-list{min-width:0}
+.sales-return-list .return-list-filter{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.sales-return-list .return-list-filter input,.sales-return-list .return-list-filter select{max-width:100%;min-height:38px;box-sizing:border-box}
+.sales-return-list .return-summary{display:flex;gap:10px;flex-wrap:wrap}
+.sales-return-list .return-summary>div{flex:1 1 145px;min-width:0}
+.sales-return-list .return-table-scroll{width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #eee;border-radius:6px}
+.sales-return-list .return-table-scroll table{min-width:1180px;margin:0}
+.sales-return-list .return-table-scroll th,.sales-return-list .return-table-scroll td{white-space:nowrap}
+.sales-return-list .return-pagination{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+@media(max-width:768px){
+.sales-return-list h2{font-size:20px;margin:8px 0 14px}
+.sales-return-list .return-list-filter{display:grid!important;grid-template-columns:1fr 1fr;align-items:stretch!important}
+.sales-return-list .return-list-filter input,.sales-return-list .return-list-filter select{width:100%!important;min-width:0;font-size:14px}
+.sales-return-list .return-list-filter label{grid-column:1/-1;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.sales-return-list .return-list-filter label input{flex:1 1 120px}
+.sales-return-list .return-list-filter button,.sales-return-list .return-list-filter .btn{min-height:40px}
+.sales-return-list .return-list-filter button[type=submit]{grid-column:1/-1}
+.sales-return-list .return-summary>div{flex:1 1 calc(50% - 10px);padding:9px 10px!important}
+.sales-return-list .return-table-scroll{margin-left:-2px;width:calc(100% + 4px)}
+.sales-return-list .return-table-scroll table{min-width:1180px;font-size:12px!important}
+.sales-return-list .return-pagination{font-size:13px}
+.sales-return-list .return-pagination .btn{min-height:38px;display:inline-flex;align-items:center}
+}
+@media(max-width:380px){.sales-return-list .return-list-filter{grid-template-columns:1fr}.sales-return-list .return-summary>div{flex-basis:100%}}
+</style>
+<div class="sales-return-list">
 <h2>业绩单列表</h2>
 
-<form method="get" action="{{ url_for('sales_performance.list_page') }}"
-      style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+<form class="return-list-filter" method="get" action="{{ url_for('sales_performance.list_page') }}"
+      style="margin-bottom:16px;">
   <input type="text" name="performance_no" value="{{ performance_no }}"
          placeholder="业绩表单号" maxlength="100">
   <input type="text" name="company_name" value="{{ company_name }}"
@@ -53,16 +82,16 @@
 <a class="btn" href="{{ url_for('exports.download', export_name='sales-performances', **request.args.to_dict()) }}">导出 Excel</a>
 
 
-<div class="list-summary" style="display:flex;gap:12px;flex-wrap:wrap;margin:14px 0;">
+<div class="list-summary return-summary" style="display:flex;gap:12px;flex-wrap:wrap;margin:14px 0;">
   {% if can_view_money %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">净销售额（全量）</div><strong style="font-size:18px;">{{ (summary.amount or 0)|format_cost }}</strong></div>{% endif %}
   {% if can_view_cost %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">净成本（全量）</div><strong style="font-size:18px;">{{ (summary.cost or 0)|format_cost }}</strong></div>
   <div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">净利润（全量）</div><strong style="font-size:18px;">{{ (summary.profit or 0)|format_cost }}</strong></div>{% endif %}
   <div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">净归属数量（全量）</div><strong style="font-size:18px;">{{ (summary.attributed_quantity or 0)|format_qty }}</strong></div>
   {% if can_view_money %}<div style="border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:135px;"><div style="font-size:12px;color:#666;">归属净销售额（全量）</div><strong style="font-size:18px;">{{ (summary.attributed_amount or 0)|format_cost }}</strong></div>{% endif %}
-  <span style="align-self:center;font-size:12px;color:#888;">当前筛选条件下全部业绩单，排除草稿和已取消业绩单；不受分页影响</span>
+  <span style="align-self:center;font-size:12px;color:#888;">当前筛选条件下全部业绩单，排除草稿和已取消；不受分页影响</span>
 </div>
 
-<table style="width:100%;border-collapse:collapse;font-size:13px;">
+<div class="return-table-scroll"><table style="width:100%;border-collapse:collapse;font-size:13px;">
   <thead>
     <tr style="background:#f5f5f5;">
       <th style="width:20px;">ID</th>
@@ -90,7 +119,7 @@
       <th style="width:60px;text-align:right;">副销售</th>
       <th style="min-width:30px;text-align:right;">常州工厂</th>
       <th style="min-width:30px;text-align:right;">期待发货</th>
-      <th style="min-width:30px;">收款状态/原单状态</th>
+      <th style="min-width:30px;">收款状态</th>
       <th style="width:100px;">创建于</th>
       {% if not is_sales_role %}
       <th style="width:100px;">创建计划</th>
@@ -312,9 +341,9 @@
       <td></td>
     </tr>
   </tfoot>
-</table>
+</table></div>
 
-<div style="margin-top:16px;display:flex;gap:8px;align-items:center;">
+<div class="return-pagination" style="margin-top:16px;">
   <span>共 {{ total }} 条，第 {{ page }}/{{ total_pages }} 页</span>
   {% if page > 1 %}
     <a class="btn" href="{{ url_for('sales_performance.list_page',

@@ -1,20 +1,46 @@
 {% extends "inventory/base.html" %}
-{% block title %}{{ '编辑退货单' if mode == 'edit' else '新建退货单' }}{% endblock %}
+{% block title %}{{ '编辑退货单' if mode == 'edit' else '新建退货单' }}</div>
+{% endblock %}
 {% block content %}
+<style>
+@media(max-width:768px){body{margin:10px!important;overflow-x:hidden}}
+.sales-return-form{min-width:0}
+.sales-return-form .return-source-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 18px}
+.sales-return-form .return-form-grid{display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:12px;max-width:900px}
+.sales-return-form .return-form-grid label{display:block;min-width:0;font-size:14px}
+.sales-return-form input,.sales-return-form textarea{box-sizing:border-box;max-width:100%}
+.sales-return-form .return-form-grid input{width:100%;min-height:40px;margin-top:5px}
+.sales-return-form textarea{width:100%}
+.sales-return-form .return-form-actions{display:flex;gap:10px;flex-wrap:wrap}
+@media(max-width:768px){
+.sales-return-form h2{font-size:20px;margin:8px 0 14px}
+.sales-return-form fieldset{padding:10px;margin-bottom:12px}
+.sales-return-form .return-source-grid,.sales-return-form .return-form-grid{grid-template-columns:1fr!important}
+.sales-return-form .return-source-grid p{margin:4px 0;overflow-wrap:anywhere}
+.sales-return-form .return-form-grid{max-width:none!important;gap:12px}
+.sales-return-form .return-form-grid input{width:100%;font-size:16px}
+.sales-return-form textarea{min-height:90px;font-size:16px}
+.sales-return-form .return-form-actions{display:grid!important;grid-template-columns:1fr 1fr}
+.sales-return-form .return-form-actions .btn{min-height:44px;display:flex;align-items:center;justify-content:center}
+}
+</style>
+<div class="sales-return-form">
 <h2>{{ '编辑退货单' if mode == 'edit' else '新建退货单' }}</h2>
 {% for error in errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
 <fieldset>
   <legend>原销售单信息</legend>
+  <div class="return-source-grid">
   <p>原销售单：<a href="{{ url_for('sales_performance.detail_page', perf_id=original.id) }}">{{ original.performance_no }}</a></p>
   <p>客户：{{ original.company_name }}　产品：{{ original.product_name }}</p>
   <p>原销售数量：{{ original.quantity|format_qty }}　剩余可退数量：<strong>{{ context.available_quantity|format_qty }}</strong></p>
   {% if can_view_money %}<p>原销售金额：{{ original.amount }}　剩余可冲减金额：<strong>{{ context.available_amount }}</strong></p>{% endif %}
+</div>
 </fieldset>
 <form method="post" action="{% if mode == 'edit' %}{{ url_for('sales_performance.update_return_submit', return_id=ret.id) }}{% else %}{{ url_for('sales_performance.create_return_submit', perf_id=original.id) }}{% endif %}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <fieldset>
     <legend>退货信息</legend>
-    <div style="display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:12px;max-width:900px;">
+    <div class="return-form-grid">
       <label>退货日期<br><input type="date" name="performance_date" value="{{ form_data.performance_date }}" required></label>
       <label>退货数量（填写正数）<br><input type="number" name="quantity" min="0.0001" step="0.0001" value="{{ form_data.quantity }}" required></label>
       {% if can_view_money %}
@@ -27,7 +53,7 @@
     <p style="color:#777;font-size:12px;">退货数量录入正数，保存后系统以负数入账。退款金额和退货成本必须为负数；允许退款金额与退货数量不成比例，但累计冲减不能超过原销售单额度。</p>
     <label>退货原因 / 备注<br><textarea name="remark" rows="3" style="width:100%;max-width:900px;">{{ form_data.remark }}</textarea></label>
   </fieldset>
-  <div style="margin-top:16px;display:flex;gap:10px;">
+  <div class="return-form-actions" style="margin-top:16px;">
     <button type="submit" class="btn btn-primary">保存草稿</button>
     <a class="btn" href="{{ url_for('sales_performance.detail_page', perf_id=ret.id if ret else original.id) }}">返回</a>
   </div>
