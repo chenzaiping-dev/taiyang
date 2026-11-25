@@ -626,7 +626,8 @@ class ProcessOrderService:
         """
         from app.services.inventory_service import (
             StockOutService, InventoryError,
-        )        
+        )
+
         # 1. 幂等/状态校验
         order = db.session.get(ProcessOrder, order_id)
         if not order:
@@ -636,6 +637,10 @@ class ProcessOrderService:
                 f"当前状态【{PO_STATUS_LABELS.get(order.status, order.status)}】"
                 f"不允许下单"
             )
+        try:
+            batch_no = BatchValidationService.ensure_batch_no_unique(order.batch_no, exclude_order_id=order_id)
+        except BatchNoDuplicateError as exc:
+            raise ProcessOrderError(str(exc))
 
         # 1.5 如果有业绩表, 需要对应生产计划状态为已确认才可以下单
         if order.performance_id:
@@ -789,6 +794,10 @@ class ProcessOrderService:
                 f"当前状态【{PO_STATUS_LABELS.get(order.status, order.status)}】"
                 f"不允许入库，仅【已下单】状态可入库"
             )
+        try:
+            batch_no = BatchValidationService.ensure_batch_no_unique(order.batch_no, exclude_order_id=order_id)
+        except BatchNoDuplicateError as exc:
+            raise ProcessOrderError(str(exc))
 
         # 数量：优先实际完工数，否则回退到计划数
         qty = _q6(order.completed_quantity or 0)
